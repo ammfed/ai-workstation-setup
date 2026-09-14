@@ -1,0 +1,7 @@
+# Restricted material never enters the vault's history, at any depth.
+restricted/
+**/restricted/
+
+# Obsidian's per-device editor settings (themes, hotkeys, plugins, layout) and trash.
+.obsidian/
+.trash/
