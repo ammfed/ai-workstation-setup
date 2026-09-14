@@ -1,0 +1,52 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: shellcheck
+        run: shellcheck install.sh scripts/*.sh
+      - name: node syntax
+        run: for f in lib/*.mjs modules/*/*.mjs; do node --check "$f"; done
+      - name: simulated dry runs for every platform
+        run: |
+          for os in linux macos wsl windows; do
+            node lib/installer.mjs --dry-run --yes --modules all --answers answers.example.env --platform "$os"
+          done
+
+  dry-run:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: dry run (install.sh)
+        if: runner.os != 'Windows'
+        run: |
+          ./install.sh --list
+          ./install.sh --dry-run --yes --modules all --answers answers.example.env
+      - name: dry run (install.ps1, PowerShell 7)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./install.ps1 --list
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./install.ps1 --dry-run --yes --modules all --answers answers.example.env
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: dry run (install.ps1, Windows PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 --dry-run --yes --modules all --answers answers.example.env
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

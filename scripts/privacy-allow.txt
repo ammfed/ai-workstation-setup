@@ -1,0 +1,4 @@
+# Exact strings the private denylist may match but that are allowed in this repo.
+# Each is removed from a line (case-insensitively) before the denylist is checked.
+# Keep this list tiny; every entry is a deliberate public exception.
+github.com/ammfed/ai-workstation-setup

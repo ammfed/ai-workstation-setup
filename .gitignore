@@ -1,0 +1,20 @@
+# Local answers files: they hold your own paths and preferences.
+answers.env
+*.answers.env
+answers.local.*
+
+# Secrets and machine-local config. The installer never writes these into the repo,
+# but keep them out of git if you create one here by hand.
+.env
+.env.*
+*.local.json
+.claude/settings.local.json
+
+# The privacy denylist holds the private terms the scan looks for; never commit it.
+.privacy-denylist.txt
+
+# Generated output.
+generated/
+*.bak-*
+node_modules/
+.DS_Store
