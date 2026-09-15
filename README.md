@@ -76,3 +76,7 @@ a local, gitignored denylist; CI runs it and gitleaks on every pull request.
 ## Contributing
 
 See [AGENTS.md](AGENTS.md) for the module contract and how to add a module.
+
+## License
+
+[MIT](LICENSE)
