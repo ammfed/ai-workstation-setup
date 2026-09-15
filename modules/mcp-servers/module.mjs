@@ -25,12 +25,19 @@ const SERVERS = [
           : 'claude mcp add chrome-devtools --scope user npx chrome-devtools-mcp@latest',
     }),
   },
+  {
+    value: 'ticktick',
+    label: 'ticktick - official TickTick tasks server (hosted; sign in with /mcp)',
+    // help.ticktick.com "TickTick MCP": remote Streamable HTTP server, OAuth sign-in from the client.
+    command: () => ({ cmd: 'claude mcp add --scope user --transport http ticktick https://mcp.ticktick.com/' }),
+    signIn: 'in Claude Code, run /mcp and sign in to ticktick',
+  },
 ];
 
 export default {
   name: 'mcp-servers',
   title: 'MCP servers',
-  description: 'MCP servers for Claude Code (context7, chrome-devtools)',
+  description: 'MCP servers for Claude Code (context7, chrome-devtools, ticktick)',
   order: 40,
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['claude-code'],
@@ -60,6 +67,7 @@ export default {
         if (ctx.capture(`claude mcp get ${server.value}`) !== null) return ctx.ok(`${server.value} already configured`);
         const { cmd, redact } = server.command(ctx);
         ctx.run(cmd, { redact });
+        if (server.signIn) ctx.todo(server.signIn);
       });
     }
     ctx.info('claude.ai connectors (Google Drive, Notion, Canva, ...) are account-level: enable them at claude.ai → Settings → Connectors');

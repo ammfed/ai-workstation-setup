@@ -44,6 +44,13 @@ export default {
       choices: [keep, { value: 'dark' }, { value: 'light' }],
     },
     {
+      key: 'CLAUDE_THINKING_SUMMARIES',
+      type: 'choice',
+      message: 'Thinking summaries in the transcript',
+      default: 'keep',
+      choices: [keep, { value: 'hide', label: 'hide - a collapsed stub, for calmer output' }, { value: 'show', label: 'show - summaries of Claude\'s thinking' }],
+    },
+    {
       key: 'CLAUDE_STATUSLINE',
       type: 'choice',
       message: 'Status line',
@@ -84,8 +91,10 @@ export default {
             const v = ctx.get(answer);
             if (v && v !== 'keep') s[key] = v;
           }
+          const thinking = ctx.get('CLAUDE_THINKING_SUMMARIES');
+          if (thinking && thinking !== 'keep') s.showThinkingSummaries = thinking === 'show';
         },
-        'model, effort and theme',
+        'model, effort, theme and thinking summaries',
       ),
     );
 

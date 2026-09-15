@@ -6,10 +6,12 @@ const npm = (pkg) => ({ default: { npm: pkg } });
 export const TOOLS = {
   'gh-axi': { name: 'gh-axi', install: npm('gh-axi'), about: 'GitHub for agents (uses your gh sign-in)', hook: true },
   'chrome-devtools-axi': { name: 'chrome-devtools-axi', install: npm('chrome-devtools-axi'), about: 'browser automation for agents (needs Chrome)', hook: true },
-  'lavish-axi': { name: 'lavish-axi', install: npm('lavish-axi'), about: 'review rich HTML artifacts with your agent', hook: true },
+  'lavish-axi': { name: 'lavish-axi', install: npm('lavish-axi'), about: 'review rich HTML artifacts and decision pages (Node 22+)', hook: true, minNode: [22, 0] },
   'tasks-axi': { name: 'tasks-axi', install: npm('tasks-axi'), about: 'task/backlog CLI (firstmate needs it)' },
   'quota-axi': { name: 'quota-axi', install: npm('quota-axi'), about: 'agent-provider quota windows (firstmate needs it; Node 22.19+)', minNode: [22, 19] },
   ctx7: { name: 'ctx7', install: npm('ctx7'), about: 'Context7 CLI: current library docs for agents' },
+  'notion-axi': { name: 'notion-axi', install: npm('notion-axi'), about: 'Notion for agents (github.com/maximebrmd/notion-axi)' },
+  'gws-axi': { name: 'gws-axi', install: npm('gws-axi'), about: 'Google Workspace for agents: Gmail, Calendar, Docs, Drive (github.com/JarvusInnovations/gws-axi)' },
   'no-mistakes': {
     name: 'no-mistakes',
     about: 'validation pipeline: review, test, push, PR (firstmate needs it)',

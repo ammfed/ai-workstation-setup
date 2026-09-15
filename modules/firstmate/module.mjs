@@ -46,6 +46,19 @@ function starterDispatch(harness) {
   };
 }
 
+// Schema: "Watched tool updates" in firstmate's docs/configuration.md. The axi tools
+// announce a newer release through their own `update --check`.
+function watchedTools(dir, clis) {
+  const announcing = (name) => ({ name, command: name, version_args: ['--version'], announce_args: ['update', '--check'], announce_pattern: 'available: true' });
+  return {
+    tools: [
+      { name: 'firstmate', git: { repo: dir, remote: 'origin' } },
+      announcing('quota-axi'),
+      ...(clis.includes('lavish-axi') ? [announcing('lavish-axi')] : []),
+    ],
+  };
+}
+
 export default {
   name: 'firstmate',
   title: 'Firstmate',
@@ -115,6 +128,12 @@ export default {
       choices: [...HARNESSES, ...CREW_ONLY_HARNESSES].map((value) => ({ value })),
       when: (ctx) => ctx.get('FIRSTMATE_DISPATCH') === 'starter',
     },
+    {
+      key: 'FIRSTMATE_WATCH_UPDATES',
+      type: 'confirm',
+      message: 'Watch for updates to firstmate, quota-axi and lavish-axi (config/watched-tools.json)?',
+      default: true,
+    },
   ],
 
   async install(ctx) {
@@ -164,6 +183,14 @@ export default {
           onConflict: 'ask',
         }),
       );
+    }
+    if (ctx.get('FIRSTMATE_WATCH_UPDATES')) {
+      await ctx.step('config/watched-tools.json', async () => {
+        const written = await ctx.writeFile(config('watched-tools.json'), `${JSON.stringify(watchedTools(dir, ctx.get('AGENT_CLIS') || []), null, 2)}\n`, {
+          onConflict: 'ask',
+        });
+        if (written) ctx.todo(`arm the update check once: cd "${dir}" && bin/fm-tool-update-check.sh arm`);
+      });
     }
     ctx.todo(`start firstmate: cd "${dir}" && claude   (or your harness; its AGENTS.md takes over)`);
   },
