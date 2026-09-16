@@ -11,7 +11,7 @@ updated: YYYY-MM-DD
 # Week of YYYY-MM-DD
 
 ## Per life area (what moved, what stalled)
-{{PILLAR_BULLETS}}
+{{PILLAR_PROMPTS}}
 
 ## Projects
 - Promote, hold or close: <[[project]] stage change and why> (captured by <who>, YYYY-MM-DD)

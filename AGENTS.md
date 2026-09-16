@@ -33,11 +33,12 @@ To add a module: copy a small one (`modules/skills`), take install commands from
 tool's official docs (never vendor binaries or copy upstream source), add its keys to
 `answers.example.env`, its row to `README.md`, then run the checks below.
 
-Anything under `templates/` is content the installer writes into the user's machine, not
-code this repo runs: `ctx.template` substitutes `{{UPPER_CASE}}` placeholders only, so
-lowercase braces pass through untouched. Template-shipped scripts (`templates/*/bin/*.mjs`)
-still have to pass `node --check`. They run on the user's machine, not here, so keep them
-free of dependencies and cross-platform.
+Anything under `templates/` is content the installer writes onto the user's machine, not
+code this repo runs. `ctx.template` replaces `{{UPPER_CASE}}` placeholders it has a value
+for and leaves every other one untouched, which is how a shipped file can keep placeholders
+of its own that are filled in later at run time (`templates/second-brain/prompts/ingest.md`).
+Template-shipped scripts (`templates/*/bin/*.mjs`) still have to pass `node --check`. They
+run on the user's machine, not here, so keep them free of dependencies and cross-platform.
 
 ## Checks
 

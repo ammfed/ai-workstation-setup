@@ -57,6 +57,7 @@ export default {
     const today = new Date().toISOString().slice(0, 10);
     const vars = {
       PILLAR_BULLETS: pillars.map((p) => `- \`${p}/\``).join('\n'),
+      PILLAR_PROMPTS: pillars.map((p) => `- ${p}:`).join('\n'),
       PILLARS_INLINE: pillars.join('|'),
       ALL_PILLARS_LIST: pillars.join(', '),
       DEFAULT_PILLAR: pillars[0],
