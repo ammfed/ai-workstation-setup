@@ -21,8 +21,8 @@ Workspace: <Your Workspace>
 - **Statuses** (per list): `to do` → `in progress` → `review` → `done`. Keep the
   closed status named `done` so `clickup-axi tasks close` lands on it.
 - **Tasks are the queue; the vault is the knowledge.** A project note in the vault
-  (`30-projects/<slug>.md`) links to its ClickUp folder or list through `tracker:`
-  and never copies its tasks.
+  (`projects/<name>.md`) names its next action and where it is tracked, and never
+  copies the task list.
 - **One default list** for quick capture: `clickup-axi config set default_list "<list>"`.
   A repository can pin its own with `--project` (writes `.clickup-axi.toml` at the git root).
 - **Agent sessions** start with a compact dashboard from `clickup-axi setup --global`.
