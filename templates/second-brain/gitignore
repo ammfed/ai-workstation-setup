@@ -5,3 +5,7 @@ restricted/
 # Obsidian's per-device editor settings (themes, hotkeys, plugins, layout) and trash.
 .obsidian/
 .trash/
+
+# Ingestion scratch. The ledger itself is provenance and IS committed.
+.ingest/lock
+.ingest/tmp/

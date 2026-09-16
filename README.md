@@ -48,7 +48,7 @@ without asking (a timestamped `.bak-*` copy is kept when it is).
 | `mcp-servers` | Optional context7 and chrome-devtools MCP servers for Claude Code | ✓ | ✓ | ✓ | ✓ |
 | `skills` | Claude Code skills: kun, grill-me, grilling, teach, to-questionnaire, find-docs | ✓ | ✓ | ✓ | ✓ |
 | `firstmate` | Upstream Firstmate clone plus its local config: backend, harnesses, permission mode, backlog, dispatch profiles | ✓ | ✓ | ✓ | – (use WSL) |
-| `second-brain` | Obsidian vault skeleton, note templates, agent contract (`AGENTS.md`), obsidian-axi wiring | ✓ | ✓ | ✓ | ✓ |
+| `second-brain` | Markdown vault: life-area and fixed-type entity folders, note contract, provenance rules, eight note templates, map/checker/ingest/housekeeping scripts, obsidian-axi wiring; [design notes](docs/second-brain.md) | ✓ | ✓ | ✓ | ✓ |
 | `clickup` | clickup-axi (checksum-verified release binary), skill, session hook, default list; [structure guide](docs/clickup-structure.md) | ✓ | ✓ | ✓ | ✓ |
 | `terminal` | Optional WezTerm and a translucent theme in `~/.wezterm.lua` | ✓ | ✓ | config only | ✓ |
 
