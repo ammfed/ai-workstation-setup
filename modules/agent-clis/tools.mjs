@@ -3,6 +3,55 @@
 
 const npm = (pkg) => ({ default: { npm: pkg } });
 
+// mermaid-ascii publishes release archives and a checksums file per version
+// (github.com/AlexanderGrooff/mermaid-ascii, README "Installation").
+const MERMAID_REPO = 'https://github.com/AlexanderGrooff/mermaid-ascii';
+
+function installMermaidAscii(ctx) {
+  const arch = { x64: 'x86_64', arm64: 'arm64' }[ctx.platform.arch];
+  const os = { linux: 'Linux', wsl: 'Linux', macos: 'Darwin', windows: 'Windows' }[ctx.os];
+  if (!arch) throw new Error(`mermaid-ascii publishes no build for ${ctx.os}/${ctx.platform.arch}`);
+  if (ctx.os === 'windows') {
+    const asset = `mermaid-ascii_${os}_${arch}.zip`;
+    ctx.run(
+      [
+        `$tag = (Invoke-RestMethod 'https://api.github.com/repos/AlexanderGrooff/mermaid-ascii/releases/latest').tag_name`,
+        `$tmp = Join-Path $env:TEMP ('mermaid-ascii-' + [guid]::NewGuid())`,
+        `New-Item -ItemType Directory -Force $tmp | Out-Null`,
+        `$zip = Join-Path $tmp '${asset}'`,
+        `Invoke-WebRequest "${MERMAID_REPO}/releases/download/$tag/${asset}" -OutFile $zip -UseBasicParsing`,
+        `$sums = (Invoke-WebRequest "${MERMAID_REPO}/releases/download/$tag/mermaid-ascii_$($tag)_checksums.txt" -UseBasicParsing).Content`,
+        `if ($sums -is [byte[]]) { $sums = [Text.Encoding]::UTF8.GetString($sums) }`,
+        `$want = (($sums -split "\`n") | Where-Object { $_ -match ' ${asset.replace(/\./g, '\\.')}\\s*$' } | Select-Object -First 1) -replace '\\s.*$', ''`,
+        `if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne $want.ToUpper()) { throw 'mermaid-ascii checksum mismatch' }`,
+        `Expand-Archive $zip -DestinationPath $tmp -Force`,
+        `$dir = Join-Path $HOME '.local\\bin'; New-Item -ItemType Directory -Force $dir | Out-Null`,
+        `Copy-Item (Join-Path $tmp 'mermaid-ascii.exe') (Join-Path $dir 'mermaid-ascii.exe') -Force`,
+        `Remove-Item $tmp -Recurse -Force`,
+        `$p = [Environment]::GetEnvironmentVariable('Path', 'User'); if (($p -split ';') -notcontains $dir) { [Environment]::SetEnvironmentVariable('Path', "$p;$dir", 'User') }`,
+      ].join('; '),
+    );
+    return;
+  }
+  const asset = `mermaid-ascii_${os}_${arch}.tar.gz`;
+  ctx.run(
+    [
+      'set -e',
+      `tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' ${MERMAID_REPO}/releases/latest | sed 's#.*/tag/##')`,
+      'tmp=$(mktemp -d)',
+      'cd "$tmp"',
+      `curl -fsSL -o ${asset} "${MERMAID_REPO}/releases/download/$tag/${asset}"`,
+      `curl -fsSL -o sums "${MERMAID_REPO}/releases/download/$tag/mermaid-ascii_\${tag}_checksums.txt"`,
+      `grep -E " \\*?${asset}$" sums > want`,
+      'if command -v sha256sum >/dev/null; then sha256sum -c want; else shasum -a 256 -c want; fi',
+      `tar xzf ${asset} mermaid-ascii`,
+      'mkdir -p "$HOME/.local/bin"',
+      'install -m 755 mermaid-ascii "$HOME/.local/bin/mermaid-ascii"',
+      'cd / && rm -rf "$tmp"',
+    ].join('; '),
+  );
+}
+
 export const TOOLS = {
   'gh-axi': { name: 'gh-axi', install: npm('gh-axi'), about: 'GitHub for agents (uses your gh sign-in)', hook: true },
   'chrome-devtools-axi': { name: 'chrome-devtools-axi', install: npm('chrome-devtools-axi'), about: 'browser automation for agents (needs Chrome)', hook: true },
@@ -60,6 +109,18 @@ export const TOOLS = {
     },
     pathHints: ['~/.local/bin'],
     signIn: 'run `agy` and sign in with Google',
+  },
+  'mermaid-ascii': {
+    name: 'mermaid-ascii',
+    about: 'draws Mermaid diagrams as plain-text boxes for chat, terminals and READMEs',
+    install: { default: installMermaidAscii },
+    pathHints: ['~/.local/bin'],
+  },
+  'pixel-agents': {
+    name: 'pixel-agents',
+    about: 'live view of what each Claude Code agent is doing, in the browser (github.com/pixel-agents-hq/pixel-agents)',
+    install: npm('pixel-agents'),
+    signIn: 'pixel-agents   (run it in a project; it asks before adding its Claude Code hooks)',
   },
   composio: {
     name: 'composio',

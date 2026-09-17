@@ -13,6 +13,20 @@ const PLUGINS = [
 ];
 
 const keep = { value: 'keep', label: 'keep (Claude Code default, or what you already set)' };
+const EFFORTS = ['low', 'medium', 'high', 'xhigh'];
+
+// "claude-opus-5=medium, claude-sonnet-5=low" -> { 'claude-opus-5': 'medium', ... }
+export function parseModelEfforts(text) {
+  const out = {};
+  for (const pair of String(text || '').split(',').map((s) => s.trim()).filter(Boolean)) {
+    const [model, level] = pair.split('=').map((s) => s.trim());
+    if (!model || !EFFORTS.includes(level)) {
+      throw new Error(`CLAUDE_MODEL_EFFORTS: "${pair}" should look like model=level, with level one of ${EFFORTS.join(', ')}`);
+    }
+    out[model] = level;
+  }
+  return out;
+}
 
 export default {
   name: 'claude-code',
@@ -58,8 +72,35 @@ export default {
       default: 'ccstatusline',
       choices: [
         { value: 'ccstatusline', label: 'ccstatusline - model, git branch, context and usage gauges (customizable)' },
+        { value: 'gauges', label: 'gauges - model, cost, branch, then bars for context, the 5-hour and the weekly limit with reset times' },
         { value: 'none', label: 'none - leave the status line alone' },
       ],
+    },
+    {
+      key: 'CLAUDE_MODEL_EFFORTS',
+      type: 'text',
+      message: 'Default effort per model, like "claude-opus-5=medium, claude-sonnet-5=low" (levels: low, medium, high, xhigh; empty to keep)',
+      default: '',
+    },
+    {
+      key: 'CLAUDE_REMOTE_CONTROL',
+      type: 'choice',
+      message: 'Remote Control (follow and steer sessions from the Claude app) at the start of every session',
+      default: 'keep',
+      choices: [keep, { value: 'on', label: 'on - connect automatically' }, { value: 'off', label: 'off - only when you run /remote-control' }],
+    },
+    {
+      key: 'CLAUDE_TUI',
+      type: 'choice',
+      message: 'Terminal view',
+      default: 'keep',
+      choices: [keep, { value: 'fullscreen', label: 'fullscreen - flicker-free, with its own scrollback' }, { value: 'default', label: 'default - the classic view' }],
+    },
+    {
+      key: 'CLAUDE_AUTOCOMPACT_WINDOW',
+      type: 'text',
+      message: 'Compact the conversation automatically at how many tokens (100000 to 1000000; empty to keep)',
+      default: '',
     },
     {
       key: 'CLAUDE_PLUGINS',
@@ -79,6 +120,13 @@ export default {
       type: 'text',
       message: 'Remind once the context passes how many tokens (set it well below your model\'s window)',
       default: '150000',
+      when: (ctx) => ctx.get('CLAUDE_CONTEXT_REMINDER'),
+    },
+    {
+      key: 'CLAUDE_COMPACT_REMINDER',
+      type: 'confirm',
+      message: 'Also remind the agent right after a compaction to recover and save anything that mattered?',
+      default: true,
       when: (ctx) => ctx.get('CLAUDE_CONTEXT_REMINDER'),
     },
   ],
@@ -107,10 +155,45 @@ export default {
           }
           const thinking = ctx.get('CLAUDE_THINKING_SUMMARIES');
           if (thinking && thinking !== 'keep') s.showThinkingSummaries = thinking === 'show';
+          for (const [model, effortLevel] of Object.entries(parseModelEfforts(ctx.get('CLAUDE_MODEL_EFFORTS')))) {
+            s.modelSettings ??= {};
+            s.modelSettings[model] = { ...s.modelSettings[model], effortLevel };
+          }
+          const remote = ctx.get('CLAUDE_REMOTE_CONTROL');
+          if (remote && remote !== 'keep') s.remoteControlAtStartup = remote === 'on';
+          const tui = ctx.get('CLAUDE_TUI');
+          if (tui && tui !== 'keep') s.tui = tui;
+          const window = String(ctx.get('CLAUDE_AUTOCOMPACT_WINDOW') || '').trim();
+          if (window) {
+            const tokens = Number(window);
+            if (!Number.isInteger(tokens) || tokens < 100000 || tokens > 1000000) {
+              throw new Error('CLAUDE_AUTOCOMPACT_WINDOW must be a whole number from 100000 to 1000000');
+            }
+            s.autoCompactWindow = tokens;
+          }
         },
-        'model, effort, theme and thinking summaries',
+        'model, effort, theme, thinking summaries, Remote Control, view and auto-compact',
       ),
     );
+
+    if (ctx.get('CLAUDE_STATUSLINE') === 'gauges') {
+      await ctx.step('status line', async () => {
+        const script = path.join(claudeDir(ctx), 'statusline-gauges.mjs');
+        const command = `node "${script}"`;
+        const current = readSettings(ctx).statusLine;
+        if (current && current.command !== command) {
+          throw new Skip(`a status line is already configured (${current.command}); left untouched`);
+        }
+        await ctx.writeFile(script, ctx.template('claude-code/bin/statusline-gauges.mjs'), { onConflict: 'ask' });
+        ctx.updateJson(
+          settingsPath(ctx),
+          (s) => {
+            s.statusLine = { type: 'command', command, padding: 0 };
+          },
+          'status line',
+        );
+      });
+    }
 
     if (ctx.get('CLAUDE_STATUSLINE') === 'ccstatusline') {
       await ctx.step('status line', () => {
@@ -146,6 +229,7 @@ export default {
         const script = path.join(claudeDir(ctx), 'hooks', 'context-reminder.mjs');
         await ctx.writeFile(script, ctx.template('claude-code/bin/context-reminder.mjs'), { onConflict: 'ask' });
         setHook(ctx, 'UserPromptSubmit', 'context-reminder.mjs', `node "${script}" ${tokens}`);
+        if (ctx.get('CLAUDE_COMPACT_REMINDER')) setHook(ctx, 'SessionStart', 'context-reminder.mjs', `node "${script}" ${tokens}`);
       });
     }
   },
