@@ -29,9 +29,9 @@ const TARGETS = {
 export default {
   name: 'preferences',
   title: 'Working preferences',
-  description: 'How your agents work: status format, tone, decisions, away mode, merges, research, quota',
+  description: 'How your agents work: language and tone, reporting, decisions, model use, research, safety',
   // After firstmate, so its clone directory is known and exists.
-  order: 70,
+  order: 65,
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   default: true,
   questions: [
@@ -42,24 +42,41 @@ export default {
       default: (ctx) => ['claude', ...((ctx.values.MODULES || []).includes('firstmate') ? ['firstmate'] : [])],
       choices: Object.entries(TARGETS).map(([value, t]) => ({ value, label: t.label })),
     },
+
+    // Language and tone
+    yes('PREFS_PLAIN_LANGUAGE', 'Tone: plain, natural, friendly language with no jargon?'),
+    yes('PREFS_NO_NARRATION', 'Tone: give the result, not a commentary on the agent\'s own steps?'),
+    yes('PREFS_NO_EM_DASHES', 'Tone: avoid em dashes in everything written for you?'),
+    yes('PREFS_OUTWARD_AS_USER', 'Tone: write content for other people as you, with no agent or tooling labels?'),
+
+    // Reporting and status
     {
       key: 'PREFS_STATUS',
       type: 'choice',
-      message: 'How status replies look',
+      message: 'Reporting: how status replies open',
       default: 'board',
       choices: [
-        { value: 'board', label: 'board - open with a TODO / DOING / DONE table, then brief action items' },
+        { value: 'board', label: 'board - a TODO / DOING / DONE table, then brief action items' },
         { value: 'brief', label: 'brief - the answer in a sentence or two, then brief action items' },
         { value: 'none', label: 'none - no rule' },
       ],
     },
-    yes('PREFS_PLAIN_LANGUAGE', 'Plain, friendly, jargon-free language?'),
-    yes('PREFS_NO_EM_DASHES', 'Avoid em dashes in everything written for you?'),
-    yes('PREFS_CALM', 'Calm replies: no narration between steps, just the result?'),
+    yes('PREFS_LINK_DELIVERABLES', 'Reporting: always link the finished deliverable (URL or file path)?'),
+    yes('PREFS_DAILY_CHECK', 'Reporting: a daily nothing-forgotten check (uncollected answers, long waits, rules that never ran)?'),
+    {
+      key: 'PREFS_STALE_DAYS',
+      type: 'text',
+      message: 'Reporting: flag anything waiting on you for more than how many days',
+      default: '2',
+      when: (ctx) => ctx.get('PREFS_DAILY_CHECK'),
+    },
+    yes('PREFS_AWAY_MODE', 'Reporting: away mode, holding decisions while you are away and briefing you on return?'),
+
+    // Decisions
     {
       key: 'PREFS_DECISIONS',
       type: 'choice',
-      message: 'How decisions are put to you',
+      message: 'Decisions: how they are put to you',
       default: 'cards',
       choices: [
         { value: 'cards', label: 'cards - one at a time on a Lavish decision-card page, with a preview for every option (needs lavish-axi)' },
@@ -67,42 +84,51 @@ export default {
         { value: 'chat', label: 'chat - in plain chat, one at a time, recommendation first' },
       ],
     },
-    yes('PREFS_YES_NO_IN_CHAT', 'Ask simple yes-or-no questions in plain chat?', { when: (ctx) => ctx.get('PREFS_DECISIONS') !== 'chat' }),
-    yes('PREFS_AWAY_MODE', 'Away mode: when you say you are away, hold decisions and give a short brief when you return?'),
-    yes('PREFS_ASK_BEFORE_CLOSING', 'Ask before closing finished agents, sessions and tabs?'),
-    {
-      key: 'PREFS_MERGE',
-      type: 'choice',
-      message: 'Who merges pull requests',
-      default: 'explicit',
-      choices: [
-        { value: 'explicit', label: 'explicit - only when you say to merge that pull request' },
-        { value: 'green', label: 'green - the agent may merge its own pull requests once every check passes' },
-      ],
-    },
-    yes('PREFS_OUTWARD_AS_USER', 'Write content for other people as you, with no agent or tooling labels?'),
+    yes('PREFS_YES_NO_IN_CHAT', 'Decisions: ask simple yes-or-no questions in plain chat?', { when: (ctx) => ctx.get('PREFS_DECISIONS') !== 'chat' }),
+    yes('PREFS_PREVIEW_BEFORE_BUILD', 'Decisions: show look-and-feel changes on a review page before they are built?'),
+    yes('PREFS_CHECK_ANSWERS_FIRST', 'Decisions: check whether you already answered before calling a question open?'),
+    yes('PREFS_ASK_BEFORE_CLOSING', 'Decisions: ask before closing finished agents, sessions and tabs?'),
+
+    // AI and model use
     {
       key: 'PREFS_MODEL_ROUTING',
       type: 'choice',
-      message: 'Model and effort routing',
+      message: 'Models: effort and model routing',
       default: 'economical',
       choices: [
-        { value: 'economical', label: 'economical - low effort by default, more for planning and design, the strongest model for building' },
-        { value: 'balanced', label: 'balanced - medium effort by default, high for planning, design and building' },
+        { value: 'economical', label: 'economical - low effort by default, more for planning, design and hard reasoning, the strongest model for building' },
+        { value: 'balanced', label: 'balanced - medium effort by default, high for planning, design, hard reasoning and building' },
         { value: 'none', label: 'none - no rule' },
       ],
     },
+    yes('PREFS_QUOTA', 'Models: check subscription limits before heavy work and take the cheapest path?'),
+
+    // Research
     {
       key: 'PREFS_RESEARCH_BROWSER',
       type: 'choice',
-      message: 'Where agents do web research',
+      message: 'Research: where agents browse the web',
       default: 'separate',
       choices: [
         { value: 'separate', label: "separate - a visible browser of the agent's own, never your browser (agent-clis offers a launcher)" },
         { value: 'none', label: 'none - no rule' },
       ],
     },
-    yes('PREFS_QUOTA', 'Quota awareness: check subscription limits before heavy work and take the cheapest path?'),
+    yes('PREFS_SOURCE_QUALITY', 'Research: name each source\'s type and skip low-quality sources?'),
+    yes('PREFS_FINDINGS_TO_CHANGE', 'Research: findings must end in a visible change or a decision, not just a report?'),
+
+    // Safety
+    {
+      key: 'PREFS_MERGE',
+      type: 'choice',
+      message: 'Safety: who merges pull requests',
+      default: 'explicit',
+      choices: [
+        { value: 'explicit', label: 'explicit - only when you say to merge that pull request' },
+        { value: 'green', label: 'green - the agent may merge its own pull requests once every check passes' },
+      ],
+    },
+    yes('PREFS_VERIFY_CAUSE', 'Safety: never guess the cause of a failure; say "cause unknown" unless it was checked?'),
   ],
 
   async install(ctx) {
