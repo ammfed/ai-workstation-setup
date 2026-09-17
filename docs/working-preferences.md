@@ -24,12 +24,14 @@ changed file and keeps a timestamped backup.
 | `PREFS_NO_NARRATION` | yes | Give the result, not a commentary on the agent's own steps. |
 | `PREFS_NO_EM_DASHES` | yes | No em dashes: periods, commas or plain conjunctions instead. |
 | `PREFS_OUTWARD_AS_USER` | yes | Content for other people is written as you, with no agent or tooling labels, internal ids or tags. |
+| `PREFS_NATURAL_TRANSLATION` | yes | Other languages are written the way a native speaker in that field would write them, never translated literally. |
 
 ### Reporting and status
 
 | Key | Default | Rule |
 | --- | --- | --- |
-| `PREFS_STATUS` | `board` | Status replies open with a TODO / DOING / DONE table, then brief action items grouped by who acts. `brief` opens with a one-line answer instead. |
+| `PREFS_STATUS` | `board` | Status replies open with one table whose three columns, TODO, DOING and DONE, sit side by side (never three stacked lists or rows), then brief action items grouped by who acts. `brief` opens with a one-line answer instead. |
+| `PREFS_HONEST_NUMBERS` | yes | Uncertain numbers are ranges or "not yet known"; charts are plain bars or small multiples, never radar or gauges. |
 | `PREFS_LINK_DELIVERABLES` | yes | Every finished item links to its output: a URL, or an absolute path for a local file. |
 | `PREFS_DAILY_CHECK` | yes | Once a day, a nothing-forgotten check: uncollected review answers, anything waiting longer than `PREFS_STALE_DAYS` (default 2), and standing rules with no evidence they ran. Each item is verified before it is called dropped. |
 | `PREFS_AWAY_MODE` | yes | When you say you are away, approved work continues, new decisions wait, and you get a short return brief. |
@@ -43,6 +45,24 @@ changed file and keeps a timestamped backup.
 | `PREFS_PREVIEW_BEFORE_BUILD` | yes | A change to how something looks or feels is shown on a review page before it is built. |
 | `PREFS_CHECK_ANSWERS_FIRST` | yes | The agent checks for your answer before calling a page or question open. |
 | `PREFS_ASK_BEFORE_CLOSING` | yes | The agent asks before closing finished agents, sessions and tabs. |
+
+### Review pages
+
+The first two apply with `PREFS_DECISIONS=cards`; the starter page already follows all four.
+
+| Key | Default | Rule |
+| --- | --- | --- |
+| `PREFS_PAGE_SIDE_BY_SIDE` | yes | The decision card sits on one side and a canvas showing the current decision on the other, horizontally, never stacked. |
+| `PREFS_PAGE_FLIP_PREVIEWS` | yes | Every option of a visual choice has a preview, and you can flip between all of them; never only the recommended one. |
+| `PREFS_PAGE_MINIMAL_TEXT` | yes | A title, the question and short option labels: no fluff, no helper text, no explaining the obvious. Visuals carry the meaning. |
+| `PREFS_PAGE_WIDE_HEADER` | yes | A large title and intro spread across the full page width. |
+
+### Ideas and priorities
+
+| Key | Default | Rule |
+| --- | --- | --- |
+| `PREFS_CAPTURE_IDEAS` | yes | Every idea you share is captured, folded into current work or parked with a trigger, and you get one line on where it landed. |
+| `PREFS_RESEQUENCE` | yes | The agent reorders queued work by what blocks what without asking, then tells you the new order and why. |
 
 ### AI and model use
 
@@ -73,7 +93,9 @@ to you, and saying plainly when something was reasoned about rather than tested.
 
 - **Decision cards**: with `PREFS_DECISIONS=cards` the module installs a starter page at
   `~/.config/ai-workstation-setup/decision-cards.html`. It needs `lavish-axi` (agent-clis).
-  Agents copy it, replace the example cards, and open it with `lavish-axi --no-open`.
+  Agents copy it, replace the example cards, and open it with `lavish-axi --no-open`. It shows
+  the review-page rules: a full-width header, the card beside a canvas, and buttons to flip
+  between every option's preview.
 - **No surprise tabs**: agent-clis sets `LAVISH_AXI_NO_OPEN=1` (`LAVISH_NO_OPEN`), so review
   pages never open browser tabs on their own; links are shared in chat.
 - **Research browser**: agent-clis installs `research-browser` (`RESEARCH_BROWSER`, Linux,
