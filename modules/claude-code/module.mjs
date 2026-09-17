@@ -1,5 +1,6 @@
 import { Skip } from '../../lib/context.mjs';
-import { readSettings, settingsPath } from '../../lib/claude.mjs';
+import path from 'node:path';
+import { claudeDir, readSettings, setHook, settingsPath } from '../../lib/claude.mjs';
 
 const PLUGINS = [
   {
@@ -44,6 +45,13 @@ export default {
       choices: [keep, { value: 'dark' }, { value: 'light' }],
     },
     {
+      key: 'CLAUDE_THINKING_SUMMARIES',
+      type: 'choice',
+      message: 'Thinking summaries in the transcript',
+      default: 'keep',
+      choices: [keep, { value: 'hide', label: 'hide - a collapsed stub, for calmer output' }, { value: 'show', label: 'show - summaries of Claude\'s thinking' }],
+    },
+    {
       key: 'CLAUDE_STATUSLINE',
       type: 'choice',
       message: 'Status line',
@@ -59,6 +67,19 @@ export default {
       message: 'Plugins to install',
       default: ['diagram-design'],
       choices: PLUGINS,
+    },
+    {
+      key: 'CLAUDE_CONTEXT_REMINDER',
+      type: 'confirm',
+      message: 'Add a hook that reminds the agent to save its notes once the context gets large?',
+      default: false,
+    },
+    {
+      key: 'CLAUDE_CONTEXT_REMINDER_TOKENS',
+      type: 'text',
+      message: 'Remind once the context passes how many tokens (set it well below your model\'s window)',
+      default: '150000',
+      when: (ctx) => ctx.get('CLAUDE_CONTEXT_REMINDER'),
     },
   ],
 
@@ -84,8 +105,10 @@ export default {
             const v = ctx.get(answer);
             if (v && v !== 'keep') s[key] = v;
           }
+          const thinking = ctx.get('CLAUDE_THINKING_SUMMARIES');
+          if (thinking && thinking !== 'keep') s.showThinkingSummaries = thinking === 'show';
         },
-        'model, effort and theme',
+        'model, effort, theme and thinking summaries',
       ),
     );
 
@@ -113,6 +136,16 @@ export default {
         const marketplaces = ctx.capture('claude plugin marketplace list') || '';
         if (!marketplaces.includes(p.marketplaceName)) ctx.run(`claude plugin marketplace add ${p.marketplace}`);
         ctx.run(`claude plugin install ${p.id}`);
+      });
+    }
+
+    if (ctx.get('CLAUDE_CONTEXT_REMINDER')) {
+      await ctx.step('context reminder hook', async () => {
+        const tokens = Number(ctx.get('CLAUDE_CONTEXT_REMINDER_TOKENS'));
+        if (!Number.isInteger(tokens) || tokens <= 0) throw new Error('CLAUDE_CONTEXT_REMINDER_TOKENS must be a whole number of tokens');
+        const script = path.join(claudeDir(ctx), 'hooks', 'context-reminder.mjs');
+        await ctx.writeFile(script, ctx.template('claude-code/bin/context-reminder.mjs'), { onConflict: 'ask' });
+        setHook(ctx, 'UserPromptSubmit', 'context-reminder.mjs', `node "${script}" ${tokens}`);
       });
     }
   },

@@ -3,7 +3,8 @@
 One command that sets up an AI-assisted development workstation: Claude Code and
 its settings, agent-ergonomic CLIs, MCP servers, skills, the
 [Firstmate](https://github.com/kunchenguid/firstmate) agent-fleet workflow, an
-Obsidian second brain, ClickUp, and an optional terminal theme.
+Obsidian second brain, ClickUp, an optional terminal theme, and your working
+preferences (how agents report, ask, merge and research) as a rules file.
 
 It is a template: it installs tools and writes starter configuration, and asks you
 for everything personal (paths, preferences, tokens). It contains no one's data.
@@ -43,11 +44,12 @@ without asking (a timestamped `.bak-*` copy is kept when it is).
 | Module | What it sets up | Linux | macOS | WSL | Windows |
 | --- | --- | :-: | :-: | :-: | :-: |
 | `core` | git, Node.js check, GitHub CLI (and sign-in), jq | ✓ | ✓ | ✓ | ✓ |
-| `claude-code` | Claude Code; model, effort, theme; ccstatusline status line; diagram-design plugin | ✓ | ✓ | ✓ | ✓ |
-| `agent-clis` | gh-axi, chrome-devtools-axi, lavish-axi, tasks-axi, quota-axi, ctx7, no-mistakes, treehouse; optional herdr, Codex, Antigravity, Composio (not native Windows); session hooks | ✓ | ✓ | ✓ | ✓ |
-| `mcp-servers` | Optional context7 and chrome-devtools MCP servers for Claude Code | ✓ | ✓ | ✓ | ✓ |
+| `claude-code` | Claude Code; model, effort, theme, thinking summaries; ccstatusline status line; diagram-design plugin | ✓ | ✓ | ✓ | ✓ |
+| `agent-clis` | gh-axi, chrome-devtools-axi, lavish-axi, tasks-axi, quota-axi, ctx7, no-mistakes, treehouse; optional notion-axi, gws-axi, herdr, Codex, Antigravity, Composio (not native Windows); session hooks; `research-browser` launcher (not native Windows) | ✓ | ✓ | ✓ | ✓ |
+| `mcp-servers` | Optional context7, chrome-devtools and TickTick MCP servers for Claude Code | ✓ | ✓ | ✓ | ✓ |
 | `skills` | Claude Code skills: kun, grill-me, grilling, teach, to-questionnaire, find-docs | ✓ | ✓ | ✓ | ✓ |
-| `firstmate` | Upstream Firstmate clone plus its local config: backend, harnesses, permission mode, backlog, dispatch profiles | ✓ | ✓ | ✓ | – (use WSL) |
+| `firstmate` | Upstream Firstmate clone plus its local config: backend, harnesses, permission mode, backlog, dispatch profiles, tool update watch | ✓ | ✓ | ✓ | – (use WSL) |
+| `preferences` | How your agents work, as a rules file: language and tone, reporting, decisions, model use, research, safety; [guide](docs/working-preferences.md) | ✓ | ✓ | ✓ | ✓ |
 | `second-brain` | Markdown vault: life-area and fixed-type entity folders, note contract, provenance rules, eight note templates, map/checker/ingest/housekeeping scripts, obsidian-axi wiring; [design notes](docs/second-brain.md) | ✓ | ✓ | ✓ | ✓ |
 | `clickup` | clickup-axi (checksum-verified release binary), skill, session hook, default list; [structure guide](docs/clickup-structure.md) | ✓ | ✓ | ✓ | ✓ |
 | `terminal` | Optional WezTerm and a translucent theme in `~/.wezterm.lua` | ✓ | ✓ | config only | ✓ |

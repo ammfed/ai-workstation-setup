@@ -53,6 +53,20 @@ export default {
       default: true,
       when: (ctx) => ctx.get('AGENT_CLIS').includes('herdr'),
     },
+    {
+      key: 'LAVISH_NO_OPEN',
+      type: 'confirm',
+      message: 'Stop lavish-axi opening a browser tab on every page open (sets LAVISH_AXI_NO_OPEN=1; links are shared in chat)?',
+      default: true,
+      when: (ctx) => ctx.get('AGENT_CLIS').includes('lavish-axi'),
+    },
+    {
+      key: 'RESEARCH_BROWSER',
+      type: 'confirm',
+      message: "Install `research-browser`: a visible Chrome window with its own profile for agent research, separate from your browser?",
+      default: true,
+      when: (ctx) => ctx.os !== 'windows' && ctx.get('AGENT_CLIS').includes('chrome-devtools-axi'),
+    },
   ],
 
   async install(ctx) {
@@ -86,6 +100,20 @@ export default {
     if (chosen.includes('herdr') && ctx.get('HERDR_CLAUDE_INTEGRATION')) {
       // herdr manages this hook file itself; reinstalling just refreshes it.
       await ctx.step('herdr integration', () => ctx.run('herdr integration install claude'));
+    }
+
+    if (chosen.includes('lavish-axi') && ctx.get('LAVISH_NO_OPEN')) {
+      await ctx.step('LAVISH_AXI_NO_OPEN', () => ctx.setUserEnv('LAVISH_AXI_NO_OPEN', '1'));
+    }
+
+    if (chosen.includes('chrome-devtools-axi') && ctx.get('RESEARCH_BROWSER')) {
+      await ctx.step('research-browser', async () => {
+        const target = ctx.path('~/.local/bin/research-browser');
+        const written = await ctx.writeFile(target, ctx.template('research-browser/research-browser.sh'), { onConflict: 'ask', mode: 0o755 });
+        const onPath = (process.env.PATH || '').split(path.delimiter).includes(path.dirname(target));
+        if (!onPath && !ctx.platform.simulated) ctx.warn(`${path.dirname(target)} is not on PATH; add it to use research-browser`);
+        if (written) ctx.todo('research-browser   (opens its window; sign in there to the sites your agents research)');
+      });
     }
 
     if (chosen.includes('gh-axi') && !ctx.has('gh')) ctx.info('gh-axi needs the GitHub CLI signed in (core module)');

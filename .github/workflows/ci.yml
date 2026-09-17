@@ -14,9 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: shellcheck
-        run: shellcheck install.sh scripts/*.sh
+        run: shellcheck install.sh scripts/*.sh templates/*/*.sh
       - name: node syntax
-        run: for f in lib/*.mjs modules/*/*.mjs; do node --check "$f"; done
+        run: for f in lib/*.mjs modules/*/*.mjs templates/*/bin/*.mjs; do node --check "$f"; done
       - name: simulated dry runs for every platform
         run: |
           for os in linux macos wsl windows; do
