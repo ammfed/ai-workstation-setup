@@ -44,14 +44,16 @@ without asking (a timestamped `.bak-*` copy is kept when it is).
 | Module | What it sets up | Linux | macOS | WSL | Windows |
 | --- | --- | :-: | :-: | :-: | :-: |
 | `core` | git, Node.js check, GitHub CLI (and sign-in), jq | ✓ | ✓ | ✓ | ✓ |
-| `claude-code` | Claude Code; model, effort, theme, thinking summaries; ccstatusline status line; diagram-design plugin | ✓ | ✓ | ✓ | ✓ |
-| `agent-clis` | gh-axi, chrome-devtools-axi, lavish-axi, tasks-axi, quota-axi, ctx7, no-mistakes, treehouse; optional notion-axi, gws-axi, herdr, Codex, Antigravity, Composio (not native Windows); session hooks; `research-browser` launcher (not native Windows) | ✓ | ✓ | ✓ | ✓ |
+| `claude-code` | Claude Code; model, effort (also per model), theme, thinking summaries, Remote Control, view, auto-compact; ccstatusline or usage-gauges status line; diagram-design plugin; context and after-compaction reminders | ✓ | ✓ | ✓ | ✓ |
+| `agent-clis` | gh-axi, chrome-devtools-axi, lavish-axi, tasks-axi, quota-axi, ctx7, no-mistakes, treehouse; optional notion-axi, gws-axi, herdr, Codex, Antigravity, Composio (not native Windows), mermaid-ascii, pixel-agents; session hooks; `research-browser` launcher (not native Windows) | ✓ | ✓ | ✓ | ✓ |
 | `mcp-servers` | Optional context7, chrome-devtools and TickTick MCP servers for Claude Code | ✓ | ✓ | ✓ | ✓ |
-| `skills` | Claude Code skills: kun, grill-me, grilling, teach, to-questionnaire, find-docs | ✓ | ✓ | ✓ | ✓ |
+| `skills` | Claude Code skills: kun, grill-me, grilling, teach, to-questionnaire, find-docs; optional no-mistakes, composio-cli | ✓ | ✓ | ✓ | ✓ |
+| `backpass` | Opt-in [backpass](https://github.com/kunchenguid/backpass) behind a privacy gate: project allowlist, denylist check before any model call, one pinned model, never auto-applies; optional schedule (cron) | ✓ | ✓ | ✓ | ✓ |
 | `firstmate` | Upstream Firstmate clone plus its local config: backend, harnesses, permission mode, backlog, dispatch profiles, tool update watch | ✓ | ✓ | ✓ | – (use WSL) |
-| `preferences` | How your agents work, as a rules file: language and tone, reporting, decisions, review pages, ideas, model use, research, safety; [guide](docs/working-preferences.md) | ✓ | ✓ | ✓ | ✓ |
+| `preferences` | How your agents work, as a rules file: language and tone, reporting, decisions, review pages, ideas, model use, research, safety; [guide](docs/working-preferences.md), [review pages](docs/review-pages.md) | ✓ | ✓ | ✓ | ✓ |
 | `second-brain` | Markdown vault: life-area and fixed-type entity folders, note contract, provenance rules, eight note templates, map/checker/ingest/housekeeping scripts, obsidian-axi wiring; [design notes](docs/second-brain.md) | ✓ | ✓ | ✓ | ✓ |
 | `clickup` | clickup-axi (checksum-verified release binary), skill, session hook, default list; [structure guide](docs/clickup-structure.md) | ✓ | ✓ | ✓ | ✓ |
+| `extras` | Optional docling (documents to markdown) and OpenWhispr (voice dictation) | ✓ | ✓ | app on Windows side | ✓ |
 | `terminal` | Optional WezTerm and a translucent theme in `~/.wezterm.lua` | ✓ | ✓ | config only | ✓ |
 
 `./install.sh --list` prints the same from the modules themselves. A module that

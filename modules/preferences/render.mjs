@@ -2,7 +2,7 @@
 // an answer, so the same text is written for Claude Code and for firstmate.
 // Sections follow the question groups in module.mjs and docs/working-preferences.md.
 
-export function renderPreferences(get, { cardsPath } = {}) {
+export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
   const sections = [];
   const section = (title, lines) => {
     const kept = lines.filter(Boolean);
@@ -20,6 +20,16 @@ export function renderPreferences(get, { cardsPath } = {}) {
       'Anything that goes to other people (documents, emails, pull request text, published pages) is written as the user, in their professional voice. Leave out agent and tooling labels, internal ids, source-type tags and speaker notes.',
     get('PREFS_NATURAL_TRANSLATION') &&
       'When writing in another language, write it the way a native speaker in that field would, with the terms they actually use. Never translate literally from English.',
+    get('PREFS_WRITING_PRINCIPLES') &&
+      'Writing for other people leads with the real point, gives each strong claim its reason or evidence, and states uncertainty plainly. No corporate filler, no hedging that hides the actual view.',
+    get('PREFS_WRITING_PRINCIPLES') &&
+      'Before building a deck or document, agree its one-sentence point with the user, draft it as plain paragraphs, then add a visual only where it is the evidence.',
+    get('PREFS_ONE_DESIGN_SYSTEM') &&
+      'When several design systems are available, use the one that matches the artifact type (for example documents, app screens, websites). Never mix two in one artifact.',
+    get('PREFS_COPY_SECOND_OPINION') &&
+      'For copywriting and translation, get a refinement pass from a second AI model. Send only the text being refined, never secrets, credentials or whole documents. Decide the final wording yourself against these rules.',
+    get('PREFS_CALM_WORD') &&
+      `When the user says "${get('PREFS_CALM_WORD')}", switch to a calm mode: batch tool calls, stop in-between updates, and give only the answer.`,
   ]);
 
   const status = get('PREFS_STATUS');
@@ -54,8 +64,21 @@ export function renderPreferences(get, { cardsPath } = {}) {
       'When the user asks for a change to how something looks or feels, show it on a review page before building it, the same way as a decision.',
     get('PREFS_CHECK_ANSWERS_FIRST') &&
       'Before describing a review page or question as still open, check whether the user already answered it. Never assume a page is unanswered.',
+    decisions === 'cards' && get('PREFS_CHECK_ANSWERS_FIRST') &&
+      'For a review page, check its real state first: `lavish-axi` lists every session with its status and pending answers, and `lavish-axi poll <file>` collects answers (leave it running; answers stay queued until collected). Never reopen a page the user ended unless they ask.',
     get('PREFS_ASK_BEFORE_CLOSING') &&
       'When work finishes, ask whether to close the finished or idle agents, sessions and browser tabs. Never close one unasked, and never leave a finished one open silently.',
+    get('PREFS_AUTONOMY') === 'act' &&
+      'For ordinary judgment calls within a direction the user already set (a library, a helper tool, an implementation detail), decide and report the outcome instead of asking first. When unsure whether a call is the user\'s, act and flag it.',
+    get('PREFS_AUTONOMY') === 'act' &&
+      'Always ask first for a decision only the user can make, a credential or access only they hold, or anything destructive, irreversible or security-sensitive.',
+    get('PREFS_AUTONOMY') === 'ask' && 'Ask before acting on judgment calls, including small implementation choices.',
+    decisionsPath &&
+      `Keep the user's decisions in \`${decisionsPath}\`: record each ruling the moment it is made, with its date. If it is not in the file, it is not decided, and the newest ruling wins.`,
+    decisionsPath &&
+      'List what the user ruled out in the same file and never offer it again. Record a "not yet" as the condition that brings it back (for example "when real data exists"), not as a date, and check that condition before raising it again.',
+    get('PREFS_GRILL_ON_GAPS') &&
+      'Question the user hard about a plan only when it has a real gap: an underspecified instruction, an untested premise, or something irreversible whose reasoning was never tested. Never as the default way to ask.',
   ]);
 
   const cards = decisions === 'cards';
@@ -75,6 +98,12 @@ export function renderPreferences(get, { cardsPath } = {}) {
       'When the user shares an idea, capture it and weigh it against the current priorities. Fold it into current work when it fits, otherwise park it somewhere it will come back with a clear trigger, and say in one line where it landed. When asked for an opinion on it, give a real one with the reasoning.',
     get('PREFS_RESEQUENCE') &&
       'Reorder queued work by what blocks what and what unblocks the nearest deadline, without asking first. Then tell the user the new order and why. Still ask about anything only they can decide.',
+    get('PREFS_ORIENT') &&
+      'When work piles up or the user seems unsure what comes next, orient them in two short lines: the current phase and the next concrete deliverable, with where to find it.',
+    get('PREFS_FINISH_FIRST') &&
+      'Prefer finishing over expanding. Once something works, stop instead of proposing the next improvement, and suggest cutting scope at most once.',
+    get('PREFS_FINISH_FIRST') &&
+      'State the case against a risky choice once, with the consequence named. If the user keeps it, go ahead and do not raise it again.',
   ]);
 
   const routing = get('PREFS_MODEL_ROUTING');
@@ -86,6 +115,8 @@ export function renderPreferences(get, { cardsPath } = {}) {
     routing !== 'none' && 'Use a premium model outside these rules only when the user names it for a task.',
     get('PREFS_QUOTA') &&
       'Treat subscription limits as scarce. Check them with `quota-axi` before heavy or parallel work, take the cheapest path that still answers, and pause heavy work near a limit and say so.',
+    get('PREFS_DELEGATE_RETRIEVAL') &&
+      `Hand retrieval-heavy work (large document sweeps, broad web reading, bulk page reads) to \`${get('PREFS_DELEGATE_RETRIEVAL')}\` and reason over what it returns. Keep decisions and code changes with the main agent.`,
   ]);
 
   const browser = get('PREFS_RESEARCH_BROWSER') === 'separate';
@@ -96,6 +127,10 @@ export function renderPreferences(get, { cardsPath } = {}) {
       'Give each research task its own tab, fill specific page elements instead of typing with global keyboard input, and close each tab as soon as that research is done. Report a site that needs the user to sign in; do not wait on it.',
     get('PREFS_SOURCE_QUALITY') &&
       'Name the type of every source next to its link (official documentation, standards body, peer-reviewed or government report, vendor page, forum post). Skip content farms and unsourced blog posts. Look for real, existing software before general write-ups.',
+    get('PREFS_VERIFY_USER_CLAIMS') &&
+      'Treat tools, names and facts the user mentions in passing as leads to verify with independent research, not as settled truth.',
+    get('PREFS_VERIFY_USER_CLAIMS') &&
+      'When asked to set something up, compare the options and confirm the pick before large downloads or config changes.',
     get('PREFS_FINDINGS_TO_CHANGE') &&
       'Research is not finished as a report. It ends in a change the user can see, or a decision they can make that leads to one. If nothing changes because of it, say so plainly.',
   ]);
@@ -109,6 +144,10 @@ export function renderPreferences(get, { cardsPath } = {}) {
       'You may merge your own pull requests once every check passes. Still ask before anything destructive, irreversible or security-sensitive.',
     get('PREFS_VERIFY_CAUSE') &&
       'Do not name a cause for a failure unless you checked it against evidence. Otherwise report the failure and say the cause is unknown.',
+    get('PREFS_STOP_DIGGING') &&
+      'A request to investigate is not proof that something is broken. Confirm the problem from real evidence first, or ask what the user saw. If about two checks turn up nothing, stop and report what is known.',
+    get('PREFS_PAUSE_WORD') &&
+      `When the user says "${get('PREFS_PAUSE_WORD')}", stop every running agent in place, confirm each one stopped, and hold until the user says to resume. A new full task request right after a pause counts as the resume.`,
     'Say plainly when something was reasoned about rather than tested.',
   ]);
 

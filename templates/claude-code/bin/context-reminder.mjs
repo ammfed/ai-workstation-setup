@@ -1,10 +1,16 @@
 #!/usr/bin/env node
-// context-reminder - a Claude Code UserPromptSubmit hook.
+// context-reminder - a Claude Code UserPromptSubmit and SessionStart hook.
 //
-// Once a session's context passes a token threshold, it adds one reminder to the
-// next prompt: save what matters (for example a memory save pass) before
-// the context gets compacted. It fires once per crossing and re-arms after the
+// UserPromptSubmit: once a session's context passes a token threshold, it adds one
+// reminder to the next prompt: save what matters (for example a memory save pass)
+// before the context gets compacted. It fires once per crossing and re-arms after the
 // context drops back below 90% of the threshold (after a compaction or /clear).
+//
+// SessionStart with source "compact": right after a compaction, it tells the agent
+// where the full pre-compaction transcript is, so anything the summary dropped can be
+// recovered and saved. This is the dependable backstop: a PreCompact hook cannot
+// speak to the agent (Claude Code discards its messages), but the session that
+// resumes after compaction can.
 //
 // Usage, as the hook command:  node context-reminder.mjs <tokens> ["reminder text"]
 // Context size is read from the session transcript: the latest main-thread
@@ -50,7 +56,18 @@ function contextTokens(transcript) {
 try {
   const input = JSON.parse(fs.readFileSync(0, 'utf8') || '{}');
   const sid = String(input.session_id || '');
-  if (/^[A-Za-z0-9_-]+$/.test(sid) && input.transcript_path && fs.existsSync(input.transcript_path)) {
+  if (input.hook_event_name === 'SessionStart') {
+    if (input.source === 'compact' && input.transcript_path) {
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: 'SessionStart',
+            additionalContext: `The conversation was just compacted. The full history before compaction is still in ${input.transcript_path}. Before continuing, check that everything worth keeping from it was saved (notes, decisions, open work) and save anything the summary dropped.`,
+          },
+        }),
+      );
+    }
+  } else if (/^[A-Za-z0-9_-]+$/.test(sid) && input.transcript_path && fs.existsSync(input.transcript_path)) {
     const tokens = contextTokens(input.transcript_path);
     const dir = path.join(os.tmpdir(), 'claude-context-reminder');
     const mark = path.join(dir, sid);

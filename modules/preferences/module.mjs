@@ -51,6 +51,15 @@ export default {
     yes('PREFS_NO_EM_DASHES', 'Tone: avoid em dashes in everything written for you?'),
     yes('PREFS_OUTWARD_AS_USER', 'Tone: write content for other people as you, with no agent or tooling labels?'),
     yes('PREFS_NATURAL_TRANSLATION', 'Tone: write other languages the way native speakers do, never as a literal translation?'),
+    yes('PREFS_WRITING_PRINCIPLES', 'Tone: writing for other people leads with the point, backs claims with evidence, and agrees the point before building a deck or document?'),
+    yes('PREFS_ONE_DESIGN_SYSTEM', 'Tone: if you use several design systems, pick the one matching the artifact type and never mix them?', { default: false }),
+    yes('PREFS_COPY_SECOND_OPINION', 'Tone: get a second AI model to refine copywriting and translations (only the text being polished is sent)?', { default: false }),
+    {
+      key: 'PREFS_CALM_WORD',
+      type: 'text',
+      message: 'Tone: a word you can say to ask for a calmer, quieter mode (empty for none)',
+      default: 'calm',
+    },
 
     // Reporting and status
     {
@@ -92,6 +101,24 @@ export default {
     yes('PREFS_PREVIEW_BEFORE_BUILD', 'Decisions: show look-and-feel changes on a review page before they are built?'),
     yes('PREFS_CHECK_ANSWERS_FIRST', 'Decisions: check whether you already answered before calling a question open?'),
     yes('PREFS_ASK_BEFORE_CLOSING', 'Decisions: ask before closing finished agents, sessions and tabs?'),
+    {
+      key: 'PREFS_AUTONOMY',
+      type: 'choice',
+      message: 'Decisions: everyday judgment calls within a direction you already set',
+      default: 'act',
+      choices: [
+        { value: 'act', label: 'act - the agent decides and reports the outcome; it still asks about credentials, anything destructive, and choices only you can make' },
+        { value: 'ask', label: 'ask - the agent asks before each one' },
+      ],
+    },
+    {
+      key: 'PREFS_DECISIONS_LOG',
+      type: 'text',
+      path: true,
+      message: 'Decisions: a file where the agent keeps your decisions, what you ruled out, and what waits for later (empty for none)',
+      default: '',
+    },
+    yes('PREFS_GRILL_ON_GAPS', 'Decisions: question you hard about a plan only when it has a real gap, never as the default way to ask?'),
 
     // Review pages
     yes('PREFS_PAGE_SIDE_BY_SIDE', 'Review pages: decision card on one side and a canvas of the current decision on the other, never stacked?', { when: cardsOn }),
@@ -102,6 +129,8 @@ export default {
     // Ideas and priorities
     yes('PREFS_CAPTURE_IDEAS', 'Ideas: capture every idea you share, fold it in or park it, and say in one line where it landed?'),
     yes('PREFS_RESEQUENCE', 'Ideas: let the agent reorder queued work by what blocks what, then tell you the new order?'),
+    yes('PREFS_ORIENT', 'Ideas: when you seem lost, a two-line "where we are": the current phase, the next deliverable, where to find it?'),
+    yes('PREFS_FINISH_FIRST', 'Ideas: once something works, stop instead of proposing the next improvement, and raise a risk once, not repeatedly?'),
 
     // AI and model use
     {
@@ -116,6 +145,12 @@ export default {
       ],
     },
     yes('PREFS_QUOTA', 'Models: check subscription limits before heavy work and take the cheapest path?'),
+    {
+      key: 'PREFS_DELEGATE_RETRIEVAL',
+      type: 'text',
+      message: 'Models: a secondary agent CLI to hand bulk reading and fetching to, such as agy (empty for none)',
+      default: (ctx) => ((ctx.values.AGENT_CLIS || []).includes('agy') ? 'agy' : ''),
+    },
 
     // Research
     {
@@ -129,6 +164,7 @@ export default {
       ],
     },
     yes('PREFS_SOURCE_QUALITY', 'Research: name each source\'s type and skip low-quality sources?'),
+    yes('PREFS_VERIFY_USER_CLAIMS', 'Research: check tools and facts you mention before relying on them, and compare options before large installs?'),
     yes('PREFS_FINDINGS_TO_CHANGE', 'Research: findings must end in a visible change or a decision, not just a report?'),
 
     // Safety
@@ -143,6 +179,13 @@ export default {
       ],
     },
     yes('PREFS_VERIFY_CAUSE', 'Safety: never guess the cause of a failure; say "cause unknown" unless it was checked?'),
+    {
+      key: 'PREFS_PAUSE_WORD',
+      type: 'text',
+      message: 'Safety: a word that pauses every running agent until you say resume (empty for none)',
+      default: 'pause',
+    },
+    yes('PREFS_STOP_DIGGING', 'Safety: confirm a problem is real before hunting its cause, and stop after a couple of checks that find nothing?'),
   ],
 
   async install(ctx) {
@@ -154,7 +197,8 @@ export default {
       await ctx.step('decision-card template', () => ctx.writeFile(cards, ctx.template('preferences/decision-cards.html'), { onConflict: 'ask' }));
     }
 
-    const text = renderPreferences((key) => ctx.get(key), { cardsPath: cards });
+    const log = ctx.get('PREFS_DECISIONS_LOG');
+    const text = renderPreferences((key) => ctx.get(key), { cardsPath: cards, decisionsPath: log ? ctx.path(log) : null });
     for (const name of targets) {
       const target = TARGETS[name];
       await ctx.step(name, () => {

@@ -16,9 +16,19 @@
     every option's preview, and the canvas follows the option you select;
   - a short "why" stays closed until opened;
   - answers are queued, shown in a one-screen recap, then sent together;
-  - a banner says when no agent is listening (the page was opened without lavish-axi).
+  - a banner says when no agent is listening (the page was opened without lavish-axi);
+  - what is already decided sits below, collapsed.
   Keep text minimal: a title, one question, short option labels. No helper text, nothing obvious
   explained. Give every option a preview and let the previews carry the detail.
+
+  Visual rules for whoever fills in the cards:
+  - Charts are bars or dots on one shared scale, never radar or gauges.
+  - A rate reads as a natural frequency first ("3 of 10"), a percentage second if at all.
+  - Every count toward a goal gets a visible fill, not bare text.
+  - At most one headline number per card, read before the detail.
+  - Meaning never rides on colour alone; a word or position carries it too.
+  - No points, badges or leaderboards comparing people.
+  - A range is stated in words, not left to a shaded band.
 -->
 <style>
 :root{
@@ -63,6 +73,13 @@ textarea{width:100%;font:inherit;font-size:14px;border:1px solid var(--line);bor
 button.primary{font:inherit;font-weight:600;background:var(--accent);color:#fff;border:0;border-radius:10px;padding:10px 18px;margin-top:12px;cursor:pointer}
 button.primary:disabled{opacity:.4;cursor:not-allowed}
 .recap li{margin:4px 0}
+.headline{display:flex;align-items:baseline;gap:10px;margin:6px 0}
+.headline .num{font-size:40px;font-weight:800;line-height:1}
+.headline .cap{color:var(--muted)}
+.evidence{background:var(--accent-soft);border-radius:10px;padding:8px 12px;margin:10px 0 0;font-size:15px}
+.decided{margin-top:22px}
+.decided table{width:100%;border-collapse:collapse;margin-top:10px;font-size:15px}
+.decided td{padding:6px 8px;border-top:1px solid var(--line);color:var(--ink)}
 </style>
 </head>
 <body>
@@ -78,10 +95,13 @@ button.primary:disabled{opacity:.4;cursor:not-allowed}
     <section class="panel canvas" id="canvas" aria-live="polite"></section>
     <aside class="panel card" id="card"></aside>
   </div>
+  <details class="decided" id="decided" hidden><summary>Decided so far</summary><table id="decided-rows"></table></details>
 </div>
 <script>
 // Each card: id, title, question, options [[value, label]], optional rec (recommended value),
-// optional why (short HTML, shown closed), previews { value: HTML or inline SVG }, one per option.
+// optional why (short HTML, shown closed), previews { value: HTML or inline SVG }, one per option,
+// optional headline { num: '3 of 5', cap: 'checks passing' } shown before the options,
+// optional evidence: one sentence shown above "Why".
 const lines = (x, y, n, w) => Array.from({ length: n }, (_, i) => `<rect x="${x}" y="${y + i * 22}" width="${w}" height="8" rx="4" fill="currentColor" opacity=".25"/>`).join('');
 const onePage = `<svg viewBox="0 0 320 220" role="img" aria-label="One page with a summary table">
   <rect x="1" y="1" width="318" height="218" rx="10" fill="none" stroke="currentColor" opacity=".3"/>
@@ -100,6 +120,8 @@ const CARDS = [
     id: 'layout', title: 'Report layout', question: 'Which layout should the weekly report use?',
     options: [['one-page', 'One page with a summary table'], ['sections', 'A section per area']],
     rec: 'one-page',
+    headline: { num: '2 of 3', cap: 'readers stop after the first screen' },
+    evidence: 'The summary table answers the first question without scrolling.',
     why: 'Most readers stop after the first screen, so the summary goes first.',
     previews: { 'one-page': onePage, sections },
   },
@@ -117,13 +139,26 @@ const CARDS = [
   },
 ];
 
+// Already decided, shown collapsed under the cards: [topic, decision, date].
+const DECIDED = [
+  ['Report cadence', 'Weekly, sent on Friday', '1 Sep'],
+];
+
 const answers = [];
 let index = 0;
 let shown = {};
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-if (!window.lavish) $('banner').hidden = false;
+// lavish-axi injects window.lavish after the page script can already have run, so decide the
+// banner once the page has settled, and again whenever answers are sent.
+const checkListening = () => { $('banner').hidden = Boolean(window.lavish); };
+window.addEventListener('load', () => setTimeout(checkListening, 1500));
+
+if (DECIDED.length) {
+  $('decided').hidden = false;
+  $('decided-rows').innerHTML = DECIDED.map((row) => `<tr>${row.map((cell) => `<td>${esc(cell)}</td>`).join('')}</tr>`).join('');
+}
 
 function picked() {
   return document.querySelector('#card input[type=radio]:checked')?.value;
@@ -148,7 +183,9 @@ function drawCard() {
   const c = CARDS[index];
   if (!c) return drawRecap();
   $('card').innerHTML = `<h2>${esc(c.question)}</h2>
+    ${c.headline ? `<div class="headline"><span class="num">${esc(c.headline.num)}</span><span class="cap">${esc(c.headline.cap)}</span></div>` : ''}
     <div class="opts">${c.options.map(([v, l]) => `<label><input type="radio" name="opt" value="${esc(v)}"><span>${esc(l)}</span>${v === c.rec ? '<span class="rec">Recommended</span>' : ''}</label>`).join('')}</div>
+    ${c.evidence ? `<p class="evidence">${esc(c.evidence)}</p>` : ''}
     ${c.why ? `<details><summary>Why</summary><p>${c.why}</p></details>` : ''}
     <textarea id="note" rows="2" placeholder="Note"></textarea>
     <button type="button" class="primary" id="next" disabled>Next</button>`;
@@ -174,6 +211,7 @@ function drawRecap() {
     <button type="button" class="primary" id="send">Send answers</button>`;
   $('back').addEventListener('click', () => { answers.pop(); index -= 1; drawCard(); });
   $('send').addEventListener('click', () => {
+    checkListening();
     for (const a of answers) {
       window.lavish?.queuePrompt?.(`${a.title}: ${a.label}.${a.note ? ` Note: ${a.note}` : ''}`, { tag: 'decision', queueKey: a.id, data: a });
     }
