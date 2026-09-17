@@ -18,16 +18,20 @@ export function renderPreferences(get, { cardsPath } = {}) {
     get('PREFS_NO_EM_DASHES') && 'Do not use em dashes. Use a period, a comma, or a plain conjunction instead.',
     get('PREFS_OUTWARD_AS_USER') &&
       'Anything that goes to other people (documents, emails, pull request text, published pages) is written as the user, in their professional voice. Leave out agent and tooling labels, internal ids, source-type tags and speaker notes.',
+    get('PREFS_NATURAL_TRANSLATION') &&
+      'When writing in another language, write it the way a native speaker in that field would, with the terms they actually use. Never translate literally from English.',
   ]);
 
   const status = get('PREFS_STATUS');
   const days = get('PREFS_STALE_DAYS') || '2';
   section('Reporting and status', [
     status === 'board' &&
-      'Open every status reply with a table of the current work in three columns: TODO, DOING, DONE. One short line per item.',
+      'Open every status reply with the current work as one table whose three columns sit side by side: TODO, DOING, DONE. Each column lists its own items, one short line each. Never three stacked lists or three separate rows.',
     status === 'brief' && 'Open every status reply with the answer in a sentence or two.',
     status !== 'none' && 'Then give brief action items, grouped by who acts: the user first, then the agent.',
     status !== 'none' && 'Show progress as counts like "3 of 5". A word always carries the state, never colour alone.',
+    get('PREFS_HONEST_NUMBERS') &&
+      'When a number is uncertain, give a range or say "not yet known" instead of a single made-up figure. Charts are plain bars or small multiples on a shared scale, never radar or gauge charts.',
     get('PREFS_LINK_DELIVERABLES') &&
       'Every finished item that produced something carries a link to it: a full https URL for anything online, an absolute path for a local file.',
     get('PREFS_DAILY_CHECK') &&
@@ -40,7 +44,7 @@ export function renderPreferences(get, { cardsPath } = {}) {
   section('Decisions', [
     'Bring the user genuine decisions only, never tool permissions or command mechanics.',
     decisions === 'cards' &&
-      'Put decisions on a Lavish decision-card page (lavish-axi): one decision at a time with "1 of N", a visual preview for every option that follows the selected option, a short "why" kept closed, and every answer sent together after a one-screen recap. Keep the text minimal.',
+      'Put decisions on a Lavish decision-card page (lavish-axi): one decision at a time with "1 of N" and a progress fill, a visual preview for every option, a short "why" kept closed, and every answer sent together after a one-screen recap.',
     decisions === 'cards' && cardsPath && `Start each decision page from the template at \`${cardsPath}\`.`,
     decisions === 'cards' && 'Open review pages without launching a browser tab (`--no-open`, or `LAVISH_AXI_NO_OPEN=1`) and share the link in chat.',
     decisions === 'tool' && 'Ask decisions with the question tool, one question at a time, with a preview on every option.',
@@ -52,6 +56,25 @@ export function renderPreferences(get, { cardsPath } = {}) {
       'Before describing a review page or question as still open, check whether the user already answered it. Never assume a page is unanswered.',
     get('PREFS_ASK_BEFORE_CLOSING') &&
       'When work finishes, ask whether to close the finished or idle agents, sessions and browser tabs. Never close one unasked, and never leave a finished one open silently.',
+  ]);
+
+  const cards = decisions === 'cards';
+  section('Review pages', [
+    cards && get('PREFS_PAGE_SIDE_BY_SIDE') &&
+      'Lay a decision page out horizontally: the decision card on one side and a canvas showing the current decision visually on the other. Never stack them vertically.',
+    cards && get('PREFS_PAGE_FLIP_PREVIEWS') &&
+      "For any visual choice, give every option its own preview and let the user flip between all of them (buttons or a dropdown). The canvas follows the option they select. Never show only the recommended option's visual.",
+    get('PREFS_PAGE_MINIMAL_TEXT') &&
+      'Keep page text to the minimum: a title, the question, short option labels. No fluff, no small helper text, no explaining the obvious. Let visuals carry the meaning, and use a visual only where it shows the point better than a sentence, preferring real screenshots and worked examples over drawn mock-ups.',
+    get('PREFS_PAGE_WIDE_HEADER') &&
+      'Give review pages a generous header: a large title and intro text spread across the full page width, not squeezed into a narrow column.',
+  ]);
+
+  section('Ideas and priorities', [
+    get('PREFS_CAPTURE_IDEAS') &&
+      'When the user shares an idea, capture it and weigh it against the current priorities. Fold it into current work when it fits, otherwise park it somewhere it will come back with a clear trigger, and say in one line where it landed. When asked for an opinion on it, give a real one with the reasoning.',
+    get('PREFS_RESEQUENCE') &&
+      'Reorder queued work by what blocks what and what unblocks the nearest deadline, without asking first. Then tell the user the new order and why. Still ask about anything only they can decide.',
   ]);
 
   const routing = get('PREFS_MODEL_ROUTING');

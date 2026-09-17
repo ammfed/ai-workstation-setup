@@ -3,12 +3,14 @@ import { Skip } from '../../lib/context.mjs';
 import { claudeDir } from '../../lib/claude.mjs';
 import { renderPreferences } from './render.mjs';
 
-// Writes how you want your agents to work (status format, tone, decisions,
-// away mode, merges, research, quota) as a plain rules file your agents load.
+// Writes how you want your agents to work (status format, tone, decisions, review
+// pages, ideas, away mode, merges, research, quota) as a plain rules file your agents load.
 // Every rule is a generic default you answer for; nothing here is anyone's record.
 // docs/working-preferences.md describes each question and the rule it writes.
 
 const yes = (key, message, extra = {}) => ({ key, type: 'confirm', message, default: true, ...extra });
+
+const cardsOn = (ctx) => ctx.get('PREFS_DECISIONS') === 'cards';
 
 function cardsPath(ctx) {
   return path.join(ctx.home, '.config', 'ai-workstation-setup', 'decision-cards.html');
@@ -29,7 +31,7 @@ const TARGETS = {
 export default {
   name: 'preferences',
   title: 'Working preferences',
-  description: 'How your agents work: language and tone, reporting, decisions, model use, research, safety',
+  description: 'How your agents work: language and tone, reporting, decisions, review pages, ideas, model use, research, safety',
   // After firstmate, so its clone directory is known and exists.
   order: 65,
   platforms: ['linux', 'macos', 'wsl', 'windows'],
@@ -48,6 +50,7 @@ export default {
     yes('PREFS_NO_NARRATION', 'Tone: give the result, not a commentary on the agent\'s own steps?'),
     yes('PREFS_NO_EM_DASHES', 'Tone: avoid em dashes in everything written for you?'),
     yes('PREFS_OUTWARD_AS_USER', 'Tone: write content for other people as you, with no agent or tooling labels?'),
+    yes('PREFS_NATURAL_TRANSLATION', 'Tone: write other languages the way native speakers do, never as a literal translation?'),
 
     // Reporting and status
     {
@@ -56,11 +59,12 @@ export default {
       message: 'Reporting: how status replies open',
       default: 'board',
       choices: [
-        { value: 'board', label: 'board - a TODO / DOING / DONE table, then brief action items' },
+        { value: 'board', label: 'board - one table with TODO, DOING and DONE as three side-by-side columns, then brief action items' },
         { value: 'brief', label: 'brief - the answer in a sentence or two, then brief action items' },
         { value: 'none', label: 'none - no rule' },
       ],
     },
+    yes('PREFS_HONEST_NUMBERS', 'Reporting: uncertain numbers as ranges or "not yet known", and charts as plain bars (never radar or gauges)?'),
     yes('PREFS_LINK_DELIVERABLES', 'Reporting: always link the finished deliverable (URL or file path)?'),
     yes('PREFS_DAILY_CHECK', 'Reporting: a daily nothing-forgotten check (uncollected answers, long waits, rules that never ran)?'),
     {
@@ -88,6 +92,16 @@ export default {
     yes('PREFS_PREVIEW_BEFORE_BUILD', 'Decisions: show look-and-feel changes on a review page before they are built?'),
     yes('PREFS_CHECK_ANSWERS_FIRST', 'Decisions: check whether you already answered before calling a question open?'),
     yes('PREFS_ASK_BEFORE_CLOSING', 'Decisions: ask before closing finished agents, sessions and tabs?'),
+
+    // Review pages
+    yes('PREFS_PAGE_SIDE_BY_SIDE', 'Review pages: decision card on one side and a canvas of the current decision on the other, never stacked?', { when: cardsOn }),
+    yes('PREFS_PAGE_FLIP_PREVIEWS', "Review pages: let you flip between every option's preview, not only the recommended one?", { when: cardsOn }),
+    yes('PREFS_PAGE_MINIMAL_TEXT', 'Review pages: minimal text, no fluff or helper text, visuals carry the meaning?'),
+    yes('PREFS_PAGE_WIDE_HEADER', 'Review pages: a large title and intro spread across the full page width?'),
+
+    // Ideas and priorities
+    yes('PREFS_CAPTURE_IDEAS', 'Ideas: capture every idea you share, fold it in or park it, and say in one line where it landed?'),
+    yes('PREFS_RESEQUENCE', 'Ideas: let the agent reorder queued work by what blocks what, then tell you the new order?'),
 
     // AI and model use
     {
@@ -135,7 +149,7 @@ export default {
     const targets = ctx.get('PREFS_TARGETS');
     if (!targets.length) throw new Skip('no targets selected');
 
-    const cards = ctx.get('PREFS_DECISIONS') === 'cards' ? cardsPath(ctx) : null;
+    const cards = cardsOn(ctx) ? cardsPath(ctx) : null;
     if (cards) {
       await ctx.step('decision-card template', () => ctx.writeFile(cards, ctx.template('preferences/decision-cards.html'), { onConflict: 'ask' }));
     }
