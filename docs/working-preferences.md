@@ -64,6 +64,14 @@ The first two apply with `PREFS_DECISIONS=cards`; the starter page already follo
 | `PREFS_PAGE_MINIMAL_TEXT` | yes | A title, the question and short option labels: no fluff, no helper text, no explaining the obvious. Visuals carry the meaning. |
 | `PREFS_PAGE_WIDE_HEADER` | yes | A large title and intro spread across the full page width. |
 
+### Review page delivery and workflow
+
+| Key | Default | Rule |
+| --- | --- | --- |
+| `PREFS_PAGE_CHECK_BEFORE_SEND` | yes | A page is opened in the agent's own browser and checked by screenshot before its link is sent, and the link is always sent. |
+| `PREFS_PAGE_FIRST` | yes | When a decision waits on a page, the page is built and checked first, the link is sent, and the agent stands by until you answer. |
+| `PREFS_FLEET_WORKFLOW` | yes | Supervising agents brief workers with a goal, branch and definition of done; workers report only at phase changes and land through a pull request with green checks; review pages are for real decisions and look-and-feel changes, never status or routine choices; permission prompts and command mechanics are never escalated. |
+
 ### Ideas and priorities
 
 | Key | Default | Rule |
