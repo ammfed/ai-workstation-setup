@@ -11,24 +11,29 @@ installs a decision-card template for this (`decision-cards.html`) when you pick
 1. **Build the page.** Copy the template next to the work, replace `CARDS` (and `DECIDED`,
    what is already settled), and give every option a preview. Keep text to a title, one
    question and short option labels.
-2. **Serve it without opening a tab.** The agent shares the link in chat; you open it when
-   you are ready.
+2. **Serve it without opening a tab.** The agent shares the link in chat every time; you open
+   it when you are ready. It never opens a tab itself and never re-runs the open command just
+   to refresh the page.
 
    ```sh
    LAVISH_AXI_NO_OPEN=1 lavish-axi review.html --no-open
    ```
 
    The `agent-clis` module can set `LAVISH_AXI_NO_OPEN=1` for your user (`LAVISH_NO_OPEN`).
-3. **Wait for answers.** `lavish-axi poll review.html` waits until you press send. Leave it
+3. **Check the page by screenshot before sending the link.** Open it in the agent's own
+   browser and confirm the content shows. A page can load and still be stuck or blank.
+4. **Wait for answers.** `lavish-axi poll review.html` waits until you press send. Leave it
    running; if it is interrupted, run it again. Answers stay queued until they are collected.
-4. **Check the real state before saying anything about it.** Running `lavish-axi` with no
+5. **Check the real state before saying anything about it.** Running `lavish-axi` with no
    arguments lists every session with its status and the number of answers waiting to be
    collected. An agent looks there (or polls) before it ever tells you a page is still open
    or a question is unanswered.
-5. **Record and link.** Each answer is recorded where your decisions live (see
+6. **Record and link.** Each answer is recorded where your decisions live (see
    `PREFS_DECISIONS_LOG`), and the finished result is linked.
-6. **Respect an ended page.** If you end the session from the browser, the agent does not
-   reopen it unless you ask for another review.
+7. **Respect an ended page.** If you end the session from the browser, the agent does not
+   reopen it unless you ask for another review. A page that reads "ended" does not mean the
+   answers were lost: the agent reads the session status and pending answers, and still collects
+   them, before saying a page is open, answered or unanswered.
 
 ## Card fields
 

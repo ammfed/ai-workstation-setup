@@ -50,7 +50,7 @@ without asking (a timestamped `.bak-*` copy is kept when it is).
 | `skills` | Claude Code skills: kun, grill-me, grilling, teach, to-questionnaire, find-docs; optional no-mistakes, composio-cli | ✓ | ✓ | ✓ | ✓ |
 | `backpass` | Opt-in [backpass](https://github.com/kunchenguid/backpass) behind a privacy gate: project allowlist, denylist check before any model call, one pinned model, never auto-applies; optional schedule (cron) | ✓ | ✓ | ✓ | ✓ |
 | `firstmate` | Upstream Firstmate clone plus its local config: backend, harnesses, permission mode, backlog, dispatch profiles, tool update watch | ✓ | ✓ | ✓ | – (use WSL) |
-| `preferences` | How your agents work, as a rules file: language and tone, reporting, decisions, review pages, ideas, model use, research, safety; [guide](docs/working-preferences.md), [review pages](docs/review-pages.md) | ✓ | ✓ | ✓ | ✓ |
+| `preferences` | How your agents work, as a rules file: language and tone, reporting, decisions, review pages, fleet workflow, ideas, model use, research, safety; [guide](docs/working-preferences.md), [review pages](docs/review-pages.md) | ✓ | ✓ | ✓ | ✓ |
 | `second-brain` | Markdown vault: life-area and fixed-type entity folders, note contract, provenance rules, eight note templates, map/checker/ingest/housekeeping scripts, obsidian-axi wiring; [design notes](docs/second-brain.md) | ✓ | ✓ | ✓ | ✓ |
 | `clickup` | clickup-axi (checksum-verified release binary), skill, session hook, default list; [structure guide](docs/clickup-structure.md) | ✓ | ✓ | ✓ | ✓ |
 | `extras` | Optional docling (documents to markdown) and OpenWhispr (voice dictation) | ✓ | ✓ | app on Windows side | ✓ |

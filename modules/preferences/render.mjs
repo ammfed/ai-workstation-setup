@@ -56,7 +56,7 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     decisions === 'cards' &&
       'Put decisions on a Lavish decision-card page (lavish-axi): one decision at a time with "1 of N" and a progress fill, a visual preview for every option, a short "why" kept closed, and every answer sent together after a one-screen recap.',
     decisions === 'cards' && cardsPath && `Start each decision page from the template at \`${cardsPath}\`.`,
-    decisions === 'cards' && 'Open review pages without launching a browser tab (`--no-open`, or `LAVISH_AXI_NO_OPEN=1`) and share the link in chat.',
+    decisions === 'cards' && 'Open review pages without launching a browser tab (`--no-open`, or `LAVISH_AXI_NO_OPEN=1`), never open one automatically, and never re-run the open command just to refresh a page; the running page already updates. Share the page link in chat every time.',
     decisions === 'tool' && 'Ask decisions with the question tool, one question at a time, with a preview on every option.',
     decisions === 'chat' && 'Ask decisions in chat, one at a time, with a short named list of options and the recommendation first.',
     decisions !== 'chat' && get('PREFS_YES_NO_IN_CHAT') && 'Ask a simple yes-or-no question in plain chat instead.',
@@ -65,7 +65,7 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     get('PREFS_CHECK_ANSWERS_FIRST') &&
       'Before describing a review page or question as still open, check whether the user already answered it. Never assume a page is unanswered.',
     decisions === 'cards' && get('PREFS_CHECK_ANSWERS_FIRST') &&
-      'For a review page, check its real state first: `lavish-axi` lists every session with its status and pending answers, and `lavish-axi poll <file>` collects answers (leave it running; answers stay queued until collected). Never reopen a page the user ended unless they ask.',
+      'For a review page, check its real state first: `lavish-axi` lists every session with its status and pending answers, and `lavish-axi poll <file>` collects answers (leave it running; answers stay queued until collected). Never reopen a page the user ended unless they ask. A page that says it ended, or a link that loads, does not mean answers were lost: read the session status and pending answers, and collect them with `lavish-axi poll <file>` before claiming a page is open, answered or unanswered.',
     get('PREFS_ASK_BEFORE_CLOSING') &&
       'When work finishes, ask whether to close the finished or idle agents, sessions and browser tabs. Never close one unasked, and never leave a finished one open silently.',
     get('PREFS_AUTONOMY') === 'act' &&
@@ -92,6 +92,22 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     get('PREFS_PAGE_WIDE_HEADER') &&
       'Give review pages a generous header: a large title and intro text spread across the full page width, not squeezed into a narrow column.',
   ]);
+
+  section('Review page delivery', [
+    cards && get('PREFS_PAGE_CHECK_BEFORE_SEND') &&
+      "Before sending a page link, open the page in the agent's own browser and confirm by screenshot that its content actually shows: a page can load and still be stuck, blank or washed out. Fix it first, then send the link.",
+    get('PREFS_PAGE_CHECK_BEFORE_SEND') && 'Always give the user the page link in chat, as a full URL.',
+    get('PREFS_PAGE_FIRST') &&
+      'When a decision waits on a page, build and check the page first, send the link, then stand by quietly until the user answers. Do not ask the question anywhere else before the page is in front of them.',
+  ]);
+
+  section('Working with a fleet', get('PREFS_FLEET_WORKFLOW') ? [
+    'Dispatch: give each worker a brief that names the goal, the branch, where it reports and what done means. Work that can run in parallel goes to separate workers in separate worktrees.',
+    'Supervise: workers report a status line only at phase changes and when finished, blocked or in need of a decision. Read the live state (status files, session lists) before reporting on it, and never guess.',
+    'Land: each worker opens a pull request and watches its checks until they are green. Merging follows the safety rule below.',
+    'A review page is for a genuine decision, a look-and-feel change, or a plan the user should judge from the artifact. Status, yes-or-no questions and routine implementation choices do not get one.',
+    'Decisions go to the user only at genuine forks. Act on work that nothing blocks. A permission prompt, a refused tool call or a command that needs running by hand is never escalated as a decision: state the blocker once in one line and stop.',
+  ] : []);
 
   section('Ideas and priorities', [
     get('PREFS_CAPTURE_IDEAS') &&
