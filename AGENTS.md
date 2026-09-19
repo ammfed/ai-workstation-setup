@@ -13,6 +13,28 @@ A public, cross-platform installer template. `install.sh` (Linux, macOS, WSL) an
 - Secrets come only from environment variables (`CLICKUP_TOKEN`, `CONTEXT7_API_KEY`)
   or hidden prompts, never answers files.
 - Exit status: 0 ok, 1 a step failed (see the summary), 2 usage or config error.
+- Without `--answers`, `answers.env` (gitignored) is read and, on a real run, saved back
+  merged: earlier answers kept, new questions added, keys no question uses dropped.
+
+## Tracked vs private
+
+Tracked files are the shared template. A person's own material is gitignored (see
+`.gitignore`: `answers.env`, `local/`, secrets) and everything the installer writes lives
+outside the clone; `ctx.normalize` refuses a `path` answer inside it. Keep it that way:
+never make a module write into the repo or read personal data from a tracked file.
+
+## Updating a person's clone (agents)
+
+1. `./update.sh --dry-run --yes` (Windows `update.ps1`). It picks `upstream`, else `origin`
+   when origin is the template, and fetches that remote's default branch.
+2. Exit 0: run `./update.sh --yes`, then `./install.sh --dry-run --yes` and show the plan
+   (new questions are listed with their defaults) before a real install.
+3. Exit 1 is a refusal (dirty, diverged, wrong branch, fork without upstream, upstream
+   adding a path the person already has). Relay the reason and the options it printed; the
+   person decides. For a fork, add the template as `upstream` only with their consent
+   (`--add-upstream`).
+4. Never force, reset, stash, merge, rebase, delete or move the person's files or
+   commits to make an update go through, and never edit or commit `answers.env`.
 
 ## Module contract
 
@@ -43,8 +65,9 @@ run on the user's machine, not here, so keep them free of dependencies and cross
 ## Checks
 
 ```sh
-shellcheck install.sh scripts/*.sh templates/*/*.sh
+shellcheck install.sh update.sh scripts/*.sh templates/*/*.sh
 for f in lib/*.mjs modules/*/*.mjs templates/*/bin/*.mjs; do node --check "$f"; done
+node --test test/update.test.mjs test/answers.test.mjs
 for os in linux macos wsl windows; do node lib/installer.mjs --dry-run --yes --modules all --answers answers.example.env --platform "$os"; done
 scripts/privacy-scan.sh --denylist <local denylist>
 ```

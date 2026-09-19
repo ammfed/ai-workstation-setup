@@ -14,9 +14,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: shellcheck
-        run: shellcheck install.sh scripts/*.sh templates/*/*.sh
+        run: shellcheck install.sh update.sh scripts/*.sh templates/*/*.sh
       - name: node syntax
         run: for f in lib/*.mjs modules/*/*.mjs templates/*/bin/*.mjs; do node --check "$f"; done
+      - name: update and saved-answers tests
+        run: node --test test/update.test.mjs test/answers.test.mjs
       - name: simulated dry runs for every platform
         run: |
           for os in linux macos wsl windows; do
@@ -31,15 +33,20 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
+      - name: update and saved-answers tests
+        run: node --test test/update.test.mjs test/answers.test.mjs
       - name: dry run (install.sh)
         if: runner.os != 'Windows'
         run: |
+          ./update.sh --help
           ./install.sh --list
           ./install.sh --dry-run --yes --modules all --answers answers.example.env
       - name: dry run (install.ps1, PowerShell 7)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          ./update.ps1 --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ./install.ps1 --list
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ./install.ps1 --dry-run --yes --modules all --answers answers.example.env

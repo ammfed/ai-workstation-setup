@@ -1,7 +1,11 @@
-# Local answers files: they hold your own paths and preferences.
+# Everything below is yours alone: never committed, and never touched by ./update.sh.
+# Local answers files: they hold your own paths and preferences. The installer saves
+# your answers to answers.env and reuses them on every re-run.
 answers.env
 *.answers.env
 answers.local.*
+# A folder for any other file of your own you want to keep next to the clone.
+local/
 
 # Secrets and machine-local config. The installer never writes these into the repo,
 # but keep them out of git if you create one here by hand.
