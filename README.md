@@ -37,7 +37,21 @@ was done, skipped, failed, and what is left for you (such as signing in).
 
 Re-running is safe: installed tools are detected and skipped, config edits only
 happen when something differs, and a changed file you own is never replaced
-without asking (a timestamped `.bak-*` copy is kept when it is).
+without asking (a timestamped `.bak-*` copy is kept when it is). Your answers are
+saved to `answers.env` (gitignored), so a re-run asks only questions you have not
+answered yet.
+
+## Getting updates
+
+```sh
+./update.sh     # Windows: .\update.ps1
+./install.sh    # re-run: only new questions are asked
+```
+
+`update` fast-forwards your clone (or fork) to the template's latest version and never
+touches your answers or other gitignored files. If your clone has local changes or has
+diverged, it stops, explains, and changes nothing. See
+[how to get updates without losing your setup](docs/updating.md).
 
 ## Modules
 
@@ -66,7 +80,8 @@ cp answers.example.env answers.env        # gitignored; edit it
 ./install.sh --yes --answers answers.env  # no prompts
 ```
 
-`--save-answers FILE` records an interactive run's answers for reuse. Secrets are
+Without `--answers`, a run reads and saves `answers.env` itself; `--save-answers FILE`
+also records a run's answers elsewhere. Secrets are
 never read from or written to answers files: export `CLICKUP_TOKEN` or
 `CONTEXT7_API_KEY`, or sign in afterwards. See `./install.sh --help`.
 
