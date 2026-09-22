@@ -48,6 +48,26 @@ test('--dry-run names the check without running it', async () => {
   assert.deepEqual(rec.failures, []);
 });
 
+// A dry run is the plan people are told to read first, so it has to name the checks of the
+// tools it would install too, not only of the ones already on PATH.
+test('--dry-run names the check of a tool that is not installed yet', async () => {
+  const { ctx, rec } = context({ dryRun: true });
+  const printed = [];
+  const log = console.log;
+  console.log = (line) => printed.push(line);
+  try {
+    const tool = { ...nodeTool(/never matches/), name: 'absent-tool' };
+    assert.equal(await ctx.step('absent-tool', () => ctx.ensureTool(tool)), 'installed');
+  } finally {
+    console.log = log;
+  }
+  assert.deepEqual(rec.failures, []);
+  assert.ok(
+    printed.some((line) => line.includes('would check absent-tool: adds two numbers')),
+    printed.join('\n'),
+  );
+});
+
 // The quota-axi hold: 0.1.50 reports the share used as the share left, so its own check has to
 // reject that version wherever it is already installed and name the version to go back to.
 // Runs the real check spec with node standing in for the tool's `--version`.
@@ -60,7 +80,9 @@ const quotaCheck = (version) => ({
 test('the quota-axi check fails on 0.1.50 with the command that puts the held version back', async () => {
   const { ctx, rec } = context();
   assert.equal(await ctx.step('quota-axi', () => ctx.ensureTool(quotaCheck('0.1.50'))), undefined);
-  assert.deepEqual(rec.failures, ['quota-axi: 0.1.50 misreports used/remaining; run: npm install -g quota-axi@0.1.49']);
+  assert.deepEqual(rec.failures, [
+    "quota-axi: quota-axi's version check failed; 0.1.50 misreports used/remaining, so if that is the installed version run: npm install -g quota-axi@0.1.49",
+  ]);
 });
 
 test('the quota-axi check passes on the held version and on later releases', async () => {

@@ -3,6 +3,9 @@
 
 const npm = (pkg) => ({ default: { npm: pkg } });
 
+// Smallest offline proof a CLI is runnable, not only a name on PATH: it prints its own version.
+const versionCheck = (bin) => ({ about: 'reports its version', cmd: `${bin} --version`, expect: /\d+\.\d+\.\d+/ });
+
 // mermaid-ascii publishes release archives and a checksums file per version
 // (github.com/AlexanderGrooff/mermaid-ascii, README "Installation").
 const MERMAID_REPO = 'https://github.com/AlexanderGrooff/mermaid-ascii';
@@ -53,9 +56,9 @@ function installMermaidAscii(ctx) {
 }
 
 export const TOOLS = {
-  'gh-axi': { name: 'gh-axi', install: npm('gh-axi'), about: 'GitHub for agents (uses your gh sign-in)', hook: true },
-  'chrome-devtools-axi': { name: 'chrome-devtools-axi', install: npm('chrome-devtools-axi'), about: 'browser automation for agents (needs Chrome)', hook: true },
-  'lavish-axi': { name: 'lavish-axi', install: npm('lavish-axi'), about: 'review rich HTML artifacts and decision pages (Node 22+)', hook: true, minNode: [22, 0] },
+  'gh-axi': { name: 'gh-axi', install: npm('gh-axi'), about: 'GitHub for agents (uses your gh sign-in)', hook: true, check: versionCheck('gh-axi') },
+  'chrome-devtools-axi': { name: 'chrome-devtools-axi', install: npm('chrome-devtools-axi'), about: 'browser automation for agents (needs Chrome)', hook: true, check: versionCheck('chrome-devtools-axi') },
+  'lavish-axi': { name: 'lavish-axi', install: npm('lavish-axi'), about: 'review rich HTML artifacts and decision pages (Node 22+)', hook: true, minNode: [22, 0], check: versionCheck('lavish-axi') },
   'tasks-axi': {
     name: 'tasks-axi',
     install: npm('tasks-axi'),
@@ -80,10 +83,10 @@ export const TOOLS = {
       about: 'reports a version other than the held-back 0.1.50',
       cmd: 'quota-axi --version',
       expect: /^(?![\s\S]*\b0\.1\.50\b)[\s\S]*\d+\.\d+\.\d+/,
-      fail: '0.1.50 misreports used/remaining; run: npm install -g quota-axi@0.1.49',
+      fail: "quota-axi's version check failed; 0.1.50 misreports used/remaining, so if that is the installed version run: npm install -g quota-axi@0.1.49",
     },
   },
-  ctx7: { name: 'ctx7', install: npm('ctx7'), about: 'Context7 CLI: current library docs for agents' },
+  ctx7: { name: 'ctx7', install: npm('ctx7'), about: 'Context7 CLI: current library docs for agents', check: versionCheck('ctx7') },
   'notion-axi': { name: 'notion-axi', install: npm('notion-axi'), about: 'Notion for agents (github.com/maximebrmd/notion-axi)' },
   'gws-axi': { name: 'gws-axi', install: npm('gws-axi'), about: 'Google Workspace for agents: Gmail, Calendar, Docs, Drive (github.com/JarvusInnovations/gws-axi)' },
   'no-mistakes': {
@@ -94,6 +97,7 @@ export const TOOLS = {
       windows: 'irm https://raw.githubusercontent.com/kunchenguid/no-mistakes/main/docs/install.ps1 | iex',
     },
     pathHints: ['~/.local/bin', '~/.no-mistakes/bin'],
+    check: versionCheck('no-mistakes'),
   },
   treehouse: {
     name: 'treehouse',
@@ -103,6 +107,7 @@ export const TOOLS = {
       windows: 'irm https://kunchenguid.github.io/treehouse/install.ps1 | iex',
     },
     pathHints: ['~/.local/bin'],
+    check: versionCheck('treehouse'),
   },
   herdr: {
     name: 'herdr',
