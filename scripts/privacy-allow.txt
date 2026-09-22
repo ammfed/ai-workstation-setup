@@ -2,5 +2,7 @@
 # Each is removed from a line (case-insensitively) before the denylist is checked.
 # Keep this list tiny; every entry is a deliberate public exception.
 github.com/ammfed/ai-workstation-setup
+# LICENSE names the repo owner, already public as the owner of the repo URL above.
+Copyright (c) 2026 ammfed
 # firstmate reads preferences from this upstream file name (preferences module).
 data/captain.md
