@@ -9,6 +9,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Context, detectPlatform } from '../lib/context.mjs';
+import { TOOLS } from '../modules/agent-clis/tools.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -45,4 +46,27 @@ test('--dry-run names the check without running it', async () => {
   const { ctx, rec } = context({ dryRun: true });
   assert.equal(await ctx.step('node', () => ctx.ensureTool(nodeTool(/never matches/))), 'present');
   assert.deepEqual(rec.failures, []);
+});
+
+// The quota-axi hold: 0.1.50 reports the share used as the share left, so its own check has to
+// reject that version wherever it is already installed and name the version to go back to.
+// Runs the real check spec with node standing in for the tool's `--version`.
+const quotaCheck = (version) => ({
+  name: 'node',
+  install: { default: 'true' },
+  check: { ...TOOLS['quota-axi'].check, files: { 'version.js': `console.log(${JSON.stringify(version)})` }, cmd: 'node "{tmp}/version.js"' },
+});
+
+test('the quota-axi check fails on 0.1.50 with the command that puts the held version back', async () => {
+  const { ctx, rec } = context();
+  assert.equal(await ctx.step('quota-axi', () => ctx.ensureTool(quotaCheck('0.1.50'))), undefined);
+  assert.deepEqual(rec.failures, ['quota-axi: 0.1.50 misreports used/remaining; run: npm install -g quota-axi@0.1.49']);
+});
+
+test('the quota-axi check passes on the held version and on later releases', async () => {
+  for (const version of ['0.1.49', '0.1.51', 'quota-axi 1.0.0']) {
+    const { ctx, rec } = context();
+    assert.equal(await ctx.step('quota-axi', () => ctx.ensureTool(quotaCheck(version))), 'present');
+    assert.deepEqual(rec.failures, [], `version ${version} should pass`);
+  }
 });

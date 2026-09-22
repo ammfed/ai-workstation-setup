@@ -123,7 +123,13 @@ to you, and saying plainly when something was reasoned about rather than tested.
 - **Research browser**: agent-clis installs `research-browser` (`RESEARCH_BROWSER`, Linux,
   macOS, WSL): a visible Chrome window with its own profile. Sign in to research sites
   there once; agents drive it with `research-browser axi <command>`.
-- **Quota**: `quota-axi` (agent-clis) reads your subscription windows.
+- **Quota**: `quota-axi` (agent-clis) reads your subscription windows. It is held at 0.1.49:
+  0.1.50 reads Claude's usage `utilization` as headroom, so it reports the share you have used
+  as the share you have left, and the quota rule above would then act on the wrong number.
+  Firstmate's tool update watch (`FIRSTMATE_WATCH_UPDATES`, `config/watched-tools.json`) still
+  announces newer quota-axi releases; do not take that one until a release after 0.1.50 is
+  confirmed fixed. Re-running the installer fails the `quota-axi` step while 0.1.50 is the
+  installed version and prints the command that puts 0.1.49 back.
 - **Context reminder**: the claude-code module can add a hook (`CLAUDE_CONTEXT_REMINDER`)
   that reminds the agent once, when the context passes `CLAUDE_CONTEXT_REMINDER_TOKENS`,
   to save its notes before the context is compacted, and (`CLAUDE_COMPACT_REMINDER`) once more
