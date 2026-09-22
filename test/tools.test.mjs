@@ -92,3 +92,28 @@ test('the quota-axi check passes on the held version and on later releases', asy
     assert.deepEqual(rec.failures, [], `version ${version} should pass`);
   }
 });
+
+// The tasks-axi check has to prove the listing, not only the add: `add` echoes the id it was
+// given, so an expectation that only looks for the id passes even when the queued list comes
+// back empty — the regression (add filing the task elsewhere, or --state filtering breaking)
+// the check exists to catch. Replays the real command's combined output through the real spec.
+const tasksAxiCheck = (output) => ({
+  name: 'node',
+  install: { default: 'true' },
+  check: { ...TOOLS['tasks-axi'].check, files: { 'out.js': `process.stdout.write(${JSON.stringify(output)})` }, cmd: 'node "{tmp}/out.js"' },
+});
+
+const ADD_ECHO = 'ok: added installer-check -> Queued\ntask:\n  id: installer-check\n  state: queued\nhelp[2]:\n  - Run `tasks-axi start installer-check --file=./backlog.md` to move it to in flight\n';
+
+test('the tasks-axi check passes when the queued list holds the task it added', async () => {
+  const { ctx, rec } = context();
+  assert.equal(await ctx.step('tasks-axi', () => ctx.ensureTool(tasksAxiCheck(ADD_ECHO + 'count: 1\ntasks[1]{id,state,kind,repo,title}:\n  installer-check,queued,task,\"-\",installer check\n'))), 'present');
+  assert.deepEqual(rec.failures, []);
+});
+
+test('the tasks-axi check fails when the add echoes the id but the queued list is empty', async () => {
+  const { ctx, rec } = context();
+  assert.equal(await ctx.step('tasks-axi', () => ctx.ensureTool(tasksAxiCheck(ADD_ECHO + 'count: 0\ntasks: 0 queued tasks in this backlog\n'))), undefined);
+  assert.equal(rec.failures.length, 1);
+  assert.match(rec.failures[0], /tasks-axi: installed, but its check failed \(adds and lists a task in a scratch backlog\)/);
+});

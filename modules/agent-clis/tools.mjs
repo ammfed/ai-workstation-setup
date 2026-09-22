@@ -66,7 +66,7 @@ export const TOOLS = {
     check: {
       about: 'adds and lists a task in a scratch backlog',
       cmd: 'tasks-axi add installer-check "installer check" --file "{tmp}/backlog.md"; tasks-axi list --state queued --file "{tmp}/backlog.md"',
-      expect: /installer-check/,
+      expect: /count: 1/,
     },
   },
   // Pinned: 0.1.50 (quota-axi PR #248) reads Claude's usage `utilization` as headroom, so it
