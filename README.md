@@ -35,7 +35,8 @@ The only prerequisite is Node.js 20+; the entry script offers to install it
 question is asked up front, then the install runs and ends with a summary of what
 was done, skipped, failed, and what is left for you (such as signing in).
 
-Re-running is safe: installed tools are detected and skipped, config edits only
+Re-running is safe: installed tools are detected and skipped (tools that can prove
+they work without a sign-in are also given a quick real check), config edits only
 happen when something differs, and a changed file you own is never replaced
 without asking (a timestamped `.bak-*` copy is kept when it is). Your answers are
 saved to `answers.env` (gitignored), so a re-run asks only questions you have not

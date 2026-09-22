@@ -76,6 +76,7 @@ export default {
         install: {
           default: { pkg: { apt: 'jq', dnf: 'jq', pacman: 'jq', zypper: 'jq', apk: 'jq', brew: 'jq', winget: 'jqlang.jq', scoop: 'jq', choco: 'jq' } },
         },
+        check: { about: 'evaluates an expression', cmd: 'jq -n 1+1', expect: /^2$/ },
       }),
     );
 

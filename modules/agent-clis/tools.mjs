@@ -56,8 +56,20 @@ export const TOOLS = {
   'gh-axi': { name: 'gh-axi', install: npm('gh-axi'), about: 'GitHub for agents (uses your gh sign-in)', hook: true },
   'chrome-devtools-axi': { name: 'chrome-devtools-axi', install: npm('chrome-devtools-axi'), about: 'browser automation for agents (needs Chrome)', hook: true },
   'lavish-axi': { name: 'lavish-axi', install: npm('lavish-axi'), about: 'review rich HTML artifacts and decision pages (Node 22+)', hook: true, minNode: [22, 0] },
-  'tasks-axi': { name: 'tasks-axi', install: npm('tasks-axi'), about: 'task/backlog CLI (firstmate needs it)' },
-  'quota-axi': { name: 'quota-axi', install: npm('quota-axi'), about: 'agent-provider quota windows (firstmate needs it; Node 22.19+)', minNode: [22, 19] },
+  'tasks-axi': {
+    name: 'tasks-axi',
+    install: npm('tasks-axi'),
+    about: 'task/backlog CLI (firstmate needs it)',
+    check: {
+      about: 'adds and lists a task in a scratch backlog',
+      cmd: 'tasks-axi add installer-check "installer check" --file "{tmp}/backlog.md"; tasks-axi list --file "{tmp}/backlog.md"',
+      expect: /installer-check,queued/,
+    },
+  },
+  // Pinned: 0.1.50 (quota-axi PR #248) reads Claude's usage `utilization` as headroom, so it
+  // reports the share used as the share left; Claude Code's own status line and 0.1.49 agree
+  // it is the share used. Move to @latest once a release reverts that.
+  'quota-axi': { name: 'quota-axi', install: npm('quota-axi@0.1.49'), about: 'agent-provider quota windows (firstmate needs it; Node 22.19+)', minNode: [22, 19] },
   ctx7: { name: 'ctx7', install: npm('ctx7'), about: 'Context7 CLI: current library docs for agents' },
   'notion-axi': { name: 'notion-axi', install: npm('notion-axi'), about: 'Notion for agents (github.com/maximebrmd/notion-axi)' },
   'gws-axi': { name: 'gws-axi', install: npm('gws-axi'), about: 'Google Workspace for agents: Gmail, Calendar, Docs, Drive (github.com/JarvusInnovations/gws-axi)' },
@@ -115,6 +127,12 @@ export const TOOLS = {
     about: 'draws Mermaid diagrams as plain-text boxes for chat, terminals and READMEs',
     install: { default: installMermaidAscii },
     pathHints: ['~/.local/bin'],
+    check: {
+      about: 'draws a two-box diagram',
+      files: { 'check.mmd': 'graph LR\nInstall --> Check\n' },
+      cmd: 'mermaid-ascii -f "{tmp}/check.mmd"',
+      expect: /Install[\s\S]*Check/,
+    },
   },
   'pixel-agents': {
     name: 'pixel-agents',
