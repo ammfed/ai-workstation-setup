@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Skip } from '../../lib/context.mjs';
 import { installSkill } from '../../lib/claude.mjs';
+import { versionCheck } from '../agent-clis/tools.mjs';
 
 // clickup-axi: github.com/JanSuthacheeva/clickup-axi. Its README documents the
 // agent skill; the binary comes from the same project's GitHub releases, with
@@ -72,7 +73,7 @@ export default {
 
   async install(ctx) {
     await ctx.step('clickup-axi', () =>
-      ctx.ensureTool({ name: 'clickup-axi', install: { default: installBinary }, pathHints: ['~/.local/bin'] }),
+      ctx.ensureTool({ name: 'clickup-axi', install: { default: installBinary }, pathHints: ['~/.local/bin'], check: versionCheck('clickup-axi') }),
     );
 
     if (ctx.get('CLICKUP_SKILL')) await ctx.step('skill', () => installSkill(ctx, REPO, 'clickup-axi'));

@@ -1,6 +1,7 @@
 import { Skip } from '../../lib/context.mjs';
 import path from 'node:path';
 import { claudeDir, readSettings, setHook, settingsPath } from '../../lib/claude.mjs';
+import { versionCheck } from '../agent-clis/tools.mjs';
 
 const PLUGINS = [
   {
@@ -141,6 +142,7 @@ export default {
           windows: 'irm https://claude.ai/install.ps1 | iex',
         },
         pathHints: ['~/.local/bin'],
+        check: versionCheck('claude'),
       }),
     );
     if (state === 'installed') ctx.todo('run `claude` once and sign in');

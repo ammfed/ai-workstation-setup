@@ -49,7 +49,9 @@ idempotency and backups hold: `ctx.ensureTool`, `ctx.run`, `ctx.pkgInstall`,
 `ctx.npmGlobal`, `ctx.writeFile`, `ctx.updateJson`, `ctx.setUserEnv`, and
 `lib/claude.mjs` for Claude Code settings, hooks and skills. Wrap each unit in
 `ctx.step` so one failure does not stop the module; throw `Skip` for a reasoned skip;
-use `ctx.todo` for anything the user must do by hand.
+use `ctx.todo` for anything the user must do by hand. Where a tool can prove it works
+offline without signing in, give its `ensureTool` spec a `check` (see `checkTool` in
+`lib/context.mjs`); it runs on every run, so a tool on PATH that is broken fails its step.
 
 To add a module: copy a small one (`modules/skills`), take install commands from the
 tool's official docs (never vendor binaries or copy upstream source), add its keys to
@@ -67,7 +69,7 @@ run on the user's machine, not here, so keep them free of dependencies and cross
 ```sh
 shellcheck install.sh update.sh scripts/*.sh templates/*/*.sh
 for f in lib/*.mjs modules/*/*.mjs templates/*/bin/*.mjs; do node --check "$f"; done
-node --test test/update.test.mjs test/answers.test.mjs
+node --test test/update.test.mjs test/answers.test.mjs test/tools.test.mjs test/privacy.test.mjs
 for os in linux macos wsl windows; do node lib/installer.mjs --dry-run --yes --modules all --answers answers.example.env --platform "$os"; done
 scripts/privacy-scan.sh --denylist <local denylist>
 ```
@@ -81,7 +83,7 @@ CI (`.github/workflows/`) runs these plus real dry runs on Ubuntu, macOS and Win
 - Run `scripts/privacy-scan.sh` over the tree and history before every push; any hit
   blocks the push. The denylist file is local and gitignored; never commit its terms.
   Deliberate public exceptions live in `scripts/privacy-allow.txt`.
-- Commit with a GitHub noreply identity.
+- Commit with a GitHub noreply identity; the scan checks every commit's author and committer.
 
 ## Maintaining this file
 

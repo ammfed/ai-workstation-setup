@@ -3,6 +3,15 @@
 
 const npm = (pkg) => ({ default: { npm: pkg } });
 
+// Smallest offline proof a CLI is runnable, not only a name on PATH: it prints its own version.
+// Exported because the other modules register tools that prove themselves the same way.
+export const versionCheck = (bin) => ({ about: 'reports its version', cmd: `${bin} --version`, expect: /\d+\.\d+\.\d+/ });
+
+// Every tool the setup registers through ensureTool gets a check except these four, on purpose:
+// pixel-agents (`--version` is not a version flag, it starts the app), agy and composio (out of
+// scope for checks for now), and OpenWhispr in modules/extras (a desktop app, not installed
+// through ensureTool, with no offline command-line check).
+
 // mermaid-ascii publishes release archives and a checksums file per version
 // (github.com/AlexanderGrooff/mermaid-ascii, README "Installation").
 const MERMAID_REPO = 'https://github.com/AlexanderGrooff/mermaid-ascii';
@@ -53,14 +62,23 @@ function installMermaidAscii(ctx) {
 }
 
 export const TOOLS = {
-  'gh-axi': { name: 'gh-axi', install: npm('gh-axi'), about: 'GitHub for agents (uses your gh sign-in)', hook: true },
-  'chrome-devtools-axi': { name: 'chrome-devtools-axi', install: npm('chrome-devtools-axi'), about: 'browser automation for agents (needs Chrome)', hook: true },
-  'lavish-axi': { name: 'lavish-axi', install: npm('lavish-axi'), about: 'review rich HTML artifacts and decision pages (Node 22+)', hook: true, minNode: [22, 0] },
-  'tasks-axi': { name: 'tasks-axi', install: npm('tasks-axi'), about: 'task/backlog CLI (firstmate needs it)' },
-  'quota-axi': { name: 'quota-axi', install: npm('quota-axi'), about: 'agent-provider quota windows (firstmate needs it; Node 22.19+)', minNode: [22, 19] },
-  ctx7: { name: 'ctx7', install: npm('ctx7'), about: 'Context7 CLI: current library docs for agents' },
-  'notion-axi': { name: 'notion-axi', install: npm('notion-axi'), about: 'Notion for agents (github.com/maximebrmd/notion-axi)' },
-  'gws-axi': { name: 'gws-axi', install: npm('gws-axi'), about: 'Google Workspace for agents: Gmail, Calendar, Docs, Drive (github.com/JarvusInnovations/gws-axi)' },
+  'gh-axi': { name: 'gh-axi', install: npm('gh-axi'), about: 'GitHub for agents (uses your gh sign-in)', hook: true, check: versionCheck('gh-axi') },
+  'chrome-devtools-axi': { name: 'chrome-devtools-axi', install: npm('chrome-devtools-axi'), about: 'browser automation for agents (needs Chrome)', hook: true, check: versionCheck('chrome-devtools-axi') },
+  'lavish-axi': { name: 'lavish-axi', install: npm('lavish-axi'), about: 'review rich HTML artifacts and decision pages (Node 22+)', hook: true, minNode: [22, 0], check: versionCheck('lavish-axi') },
+  'tasks-axi': {
+    name: 'tasks-axi',
+    install: npm('tasks-axi'),
+    about: 'task/backlog CLI (firstmate needs it)',
+    check: {
+      about: 'adds and lists a task in a scratch backlog',
+      cmd: 'tasks-axi add installer-check "installer check" --file "{tmp}/backlog.md"; tasks-axi list --state queued --file "{tmp}/backlog.md"',
+      expect: /^count: 1\r?$/m,
+    },
+  },
+  'quota-axi': { name: 'quota-axi', install: npm('quota-axi'), about: 'agent-provider quota windows (firstmate needs it; Node 22.19+)', minNode: [22, 19], check: versionCheck('quota-axi') },
+  ctx7: { name: 'ctx7', install: npm('ctx7'), about: 'Context7 CLI: current library docs for agents', check: versionCheck('ctx7') },
+  'notion-axi': { name: 'notion-axi', install: npm('notion-axi'), about: 'Notion for agents (github.com/maximebrmd/notion-axi)', check: versionCheck('notion-axi') },
+  'gws-axi': { name: 'gws-axi', install: npm('gws-axi'), about: 'Google Workspace for agents: Gmail, Calendar, Docs, Drive (github.com/JarvusInnovations/gws-axi)', check: versionCheck('gws-axi') },
   'no-mistakes': {
     name: 'no-mistakes',
     about: 'validation pipeline: review, test, push, PR (firstmate needs it)',
@@ -69,6 +87,7 @@ export const TOOLS = {
       windows: 'irm https://raw.githubusercontent.com/kunchenguid/no-mistakes/main/docs/install.ps1 | iex',
     },
     pathHints: ['~/.local/bin', '~/.no-mistakes/bin'],
+    check: versionCheck('no-mistakes'),
   },
   treehouse: {
     name: 'treehouse',
@@ -78,6 +97,7 @@ export const TOOLS = {
       windows: 'irm https://kunchenguid.github.io/treehouse/install.ps1 | iex',
     },
     pathHints: ['~/.local/bin'],
+    check: versionCheck('treehouse'),
   },
   herdr: {
     name: 'herdr',
@@ -87,6 +107,7 @@ export const TOOLS = {
       windows: 'irm https://herdr.dev/install.ps1 | iex',
     },
     pathHints: ['~/.local/bin'],
+    check: versionCheck('herdr'),
   },
   codex: {
     name: 'Codex CLI',
@@ -98,6 +119,7 @@ export const TOOLS = {
     },
     pathHints: ['~/.local/bin'],
     signIn: 'run `codex` and sign in',
+    check: versionCheck('codex'),
   },
   agy: {
     name: 'Antigravity CLI',
@@ -115,12 +137,19 @@ export const TOOLS = {
     about: 'draws Mermaid diagrams as plain-text boxes for chat, terminals and READMEs',
     install: { default: installMermaidAscii },
     pathHints: ['~/.local/bin'],
+    check: {
+      about: 'draws a two-box diagram',
+      files: { 'check.mmd': 'graph LR\nInstall --> Check\n' },
+      cmd: 'mermaid-ascii -f "{tmp}/check.mmd"',
+      expect: /Install[\s\S]*Check/,
+    },
   },
   'pixel-agents': {
     name: 'pixel-agents',
     about: 'live view of what each Claude Code agent is doing, in the browser (github.com/pixel-agents-hq/pixel-agents)',
     install: npm('pixel-agents'),
     signIn: 'pixel-agents   (run it in a project; it asks before adding its Claude Code hooks)',
+    // No check: see the list next to versionCheck.
   },
   composio: {
     name: 'composio',

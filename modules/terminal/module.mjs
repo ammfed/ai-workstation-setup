@@ -43,6 +43,8 @@ export default {
               c.run('flatpak install -y flathub org.wezfurlong.wezterm');
             },
           },
+          // Its version is a date-style build id, not x.y.z, so it does not take the shared versionCheck.
+          check: { about: 'reports its build', cmd: 'wezterm --version', expect: /^wezterm \S+/m },
         }),
       );
     }
