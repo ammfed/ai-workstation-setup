@@ -69,23 +69,7 @@ export const TOOLS = {
       expect: /count: 1/,
     },
   },
-  // Pinned: 0.1.50 (quota-axi PR #248) reads Claude's usage `utilization` as headroom, so it
-  // reports the share used as the share left; Claude Code's own status line and 0.1.49 agree
-  // it is the share used. Move to @latest once a release reverts that.
-  // The check keeps the pin on machines that already have quota-axi, where ensureTool never
-  // reaches the install route, and on any that took firstmate's watched-tools update notice.
-  'quota-axi': {
-    name: 'quota-axi',
-    install: npm('quota-axi@0.1.49'),
-    about: 'agent-provider quota windows (firstmate needs it; Node 22.19+)',
-    minNode: [22, 19],
-    check: {
-      about: 'reports a version other than the held-back 0.1.50',
-      cmd: 'quota-axi --version',
-      expect: /^(?![\s\S]*\b0\.1\.50\b)[\s\S]*\d+\.\d+\.\d+/,
-      fail: "quota-axi's version check failed; 0.1.50 misreports used/remaining, so if that is the installed version run: npm install -g quota-axi@0.1.49",
-    },
-  },
+  'quota-axi': { name: 'quota-axi', install: npm('quota-axi'), about: 'agent-provider quota windows (firstmate needs it; Node 22.19+)', minNode: [22, 19], check: versionCheck('quota-axi') },
   ctx7: { name: 'ctx7', install: npm('ctx7'), about: 'Context7 CLI: current library docs for agents', check: versionCheck('ctx7') },
   'notion-axi': { name: 'notion-axi', install: npm('notion-axi'), about: 'Notion for agents (github.com/maximebrmd/notion-axi)' },
   'gws-axi': { name: 'gws-axi', install: npm('gws-axi'), about: 'Google Workspace for agents: Gmail, Calendar, Docs, Drive (github.com/JarvusInnovations/gws-axi)' },
