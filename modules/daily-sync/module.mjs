@@ -21,7 +21,7 @@ const dir = (ctx) => path.join(ctx.home, '.config', 'ai-workstation-setup', NAME
 // thousand tokens per drift item explained.
 const DEFAULT_MODEL =
   'claude -p --model haiku --tools "" --strict-mcp-config --no-session-persistence --setting-sources "" ' +
-  '--system-prompt "Answer in at most three short lines, from the evidence given only."';
+  '--system-prompt "Answer in at most three short lines of plain text, from the evidence given only."';
 
 const list = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
 const titleCase = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -73,7 +73,11 @@ function buildConfig(ctx, base) {
     ];
   }
   if (surfaces.includes('clickup')) {
-    config.clickup = { space: ctx.get('DAILY_SYNC_CLICKUP_SPACE'), lists: list(ctx.get('DAILY_SYNC_CLICKUP_LISTS')) };
+    config.clickup = {
+      workspace: ctx.get('DAILY_SYNC_CLICKUP_WORKSPACE'),
+      space: ctx.get('DAILY_SYNC_CLICKUP_SPACE'),
+      lists: list(ctx.get('DAILY_SYNC_CLICKUP_LISTS')),
+    };
   }
   if (surfaces.includes('ticktick')) {
     config.ticktick = { command: ctx.get('DAILY_SYNC_TICKTICK_COMMAND'), lists: list(ctx.get('DAILY_SYNC_TICKTICK_LISTS')) };
@@ -242,6 +246,13 @@ export default {
       message: 'Firstmate clone that holds bin/fm-tool-update-check.sh',
       default: (ctx) => ctx.values.FIRSTMATE_DIR || '~/firstmate',
       when: (ctx) => ctx.get('DAILY_SYNC_SURFACES').includes('tool-updates'),
+    },
+    {
+      key: 'DAILY_SYNC_CLICKUP_WORKSPACE',
+      type: 'text',
+      message: 'ClickUp workspace id, needed when your token sees more than one (a schedule does not read your shell profile)',
+      default: '',
+      when: (ctx) => ctx.get('DAILY_SYNC_SURFACES').includes('clickup'),
     },
     { key: 'DAILY_SYNC_CLICKUP_SPACE', type: 'text', message: 'ClickUp space to check (name or id)', default: '', when: (ctx) => ctx.get('DAILY_SYNC_SURFACES').includes('clickup') },
     {

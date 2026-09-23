@@ -341,7 +341,10 @@ function command(c) {
   if (dryRun) return log(`dry  ${c.name}: would run ${c.run}`);
   const r = sh(c.run, { cwd: c.cwd ? expandHome(c.cwd) : undefined, env: expandEnv(c.env), timeoutSec: Number(c.timeoutSec) || 300 });
   if (r.code !== 0) return add('failed', `cmd:${c.name}:failed`, `${c.name}: ${exitText(r)}: ${clip(lastLine(r.err || r.out))}`);
-  const out = lines(r.out).join('; ');
+  const prefix = `${c.name}:`.toLowerCase();
+  const out = lines(r.out)
+    .map((l) => (l.toLowerCase().startsWith(prefix) ? l.slice(prefix.length).trim() : l))
+    .join('; ');
   if (!out) return log(`ok   ${c.name}: nothing to report`);
   add('attention', `cmd:${c.name}`, `${c.name}: ${clip(out, 600)}`, { track: 'text' });
 }
@@ -421,7 +424,9 @@ function parseClickupLists(out) {
 
 function clickup(c) {
   const expected = expectedLists(c.lists);
-  const r = retry(() => sh(`${c.command || 'clickup-axi'} lists --space "${c.space}"`, { timeoutSec: 120 }));
+  // A scheduled run does not see your shell profile, so the workspace is passed explicitly.
+  const env = c.workspace ? { CLICKUP_AXI_WORKSPACE: String(c.workspace) } : {};
+  const r = retry(() => sh(`${c.command || 'clickup-axi'} lists --space "${c.space}"`, { env, timeoutSec: 120 }));
   if (r.code !== 0) return add('failed', 'clickup:read', `clickup: could not read the lists of space ${c.space} (${exitText(r)}): ${clip(lastLine(r.err || r.out))}`);
   const live = parseClickupLists(r.out);
   if (!live.size) return add('failed', 'clickup:parse', `clickup: read no list from space ${c.space}; is the space right, and did clickup-axi's output change?`);
@@ -472,7 +477,7 @@ function ticktick(t) {
 function explain(model, item) {
   const prompt = [
     'A daily alignment check found one item it could not settle mechanically.',
-    'In at most three short lines, say what most likely happened and the one next step for the owner.',
+    'In at most three short lines of plain text (no markdown), say what most likely happened and the one next step for the owner.',
     'Use only the evidence below; if it is not enough, say what to look at.',
     '',
     `Item: ${item.text}`,
@@ -483,7 +488,7 @@ function explain(model, item) {
   modelCalls.explain += 1;
   const r = sh(model.command, { input: prompt, timeoutSec: Number(model.timeoutSec) || 180 });
   if (r.code !== 0) return `(model call failed: ${exitText(r)})`;
-  return lines(r.out).slice(0, 3).join(' / ') || '(model gave no answer)';
+  return lines(r.out.replace(/\*\*|__|^#+\s*/gm, '')).slice(0, 3).join(' / ') || '(model gave no answer)';
 }
 
 // ---------------------------------------------------------------- report and delivery

@@ -232,10 +232,11 @@ test('a command that prints a finding is reported once per distinct finding', ()
   j.run();
   j.run();
   assert.equal(j.notified().length, 1);
-  j.write({ commands: [{ name: 'tool updates', run: node('print.cjs', 'y update available') }] });
+  j.write({ commands: [{ name: 'tool updates', run: node('print.cjs', 'tool updates: y update available') }] });
   j.run();
   assert.equal(j.notified().length, 2);
-  assert.match(j.notified()[1], /tool updates: y update available/);
+  assert.match(j.notified()[1], /- tool updates: y update available/);
+  assert.doesNotMatch(j.notified()[1], /tool updates: tool updates/);
 });
 
 test('a recorded version behind the folder that holds it is drift', () => {

@@ -97,7 +97,7 @@ Paths may start with `~`.
       "evidence": "~/design-systems/CHANGELOG.md"
     }
   ],
-  "clickup": { "space": "<space name or id>", "lists": ["<list id>", "<list id>"] },
+  "clickup": { "workspace": "<workspace id>", "space": "<space name or id>", "lists": ["<list id>", "<list id>"] },
   "ticktick": { "command": "ticktick --format json projects list", "authCommand": "", "lists": ["Work", "Personal"] }
 }
 ```
@@ -109,6 +109,8 @@ Paths may start with `~`.
   pattern's first group matches on each side is compared.
 - `clickup.lists` can also point at a JSON file you already keep:
   `{ "file": "~/notes/board.json", "key": "lists" }` (an object or list of `{ "id", "name" }`).
+- `clickup.workspace` is passed to clickup-axi as `CLICKUP_AXI_WORKSPACE`; set it when your
+  token sees more than one workspace, since a scheduled run does not read your shell profile.
 - `ticktick.authCommand`, when set, is run first; a non-zero exit is reported as signed out,
   and output such as `expires 86400 seconds` is warned about two weeks ahead.
 - Network reads (git fetch and ls-remote, ClickUp, TickTick) get a second try
