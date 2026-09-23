@@ -68,6 +68,28 @@ test('--dry-run names the check of a tool that is not installed yet', async () =
   );
 });
 
+// A check runs a third-party command, so one that never returns must not wedge the install:
+// it is killed and fails its step like any other failing check. 500ms stands in for the 60s default.
+test('a check that never returns fails its step when it times out', async () => {
+  const { ctx, rec } = context();
+  const tool = {
+    name: 'node',
+    install: { default: 'true' },
+    check: {
+      about: 'never returns',
+      files: { 'hang.js': 'setInterval(() => {}, 1000)' },
+      cmd: 'node "{tmp}/hang.js"',
+      expect: /never matches/,
+      timeoutMs: 500,
+    },
+  };
+  const started = Date.now();
+  assert.equal(await ctx.step('node', () => ctx.ensureTool(tool)), undefined);
+  assert.ok(Date.now() - started < 30_000, 'the check should be killed, not waited out');
+  assert.equal(rec.failures.length, 1);
+  assert.match(rec.failures[0], /node: installed, but its check timed out after 0\.5s \(never returns\)/);
+});
+
 // Replays a tool's real output through its real check spec, with node standing in for the tool.
 const replay = (key, output) => ({
   name: 'node',

@@ -50,18 +50,21 @@ function commit(dir, { author = noreply, committer = author, files = {}, remove 
   return git(dir, ['rev-parse', '--short=12', 'HEAD']);
 }
 
+// `out` is everything the run printed, for assertion messages; the script's own report is
+// on stdout, so tests that match its shape use `stdout` and are not thrown off by a tool it
+// calls (gitleaks logs its scan summary to stderr).
 function runScan(dir, denylist = path.join(tmp, 'no-denylist')) {
   const r = spawnSync('bash', [scan, '--denylist', denylist], { cwd: dir, encoding: 'utf8', env });
-  return { code: r.status, out: r.stdout + r.stderr };
+  return { code: r.status, out: r.stdout + r.stderr, stdout: r.stdout };
 }
 
 test('GitHub noreply identities pass: your own and the one github.com commits merges with', () => {
   const dir = makeRepo();
   commit(dir, { files: { 'README.md': 'hello\n' } });
   commit(dir, { committer: webFlow, message: 'Merge pull request #1 from someone/branch' });
-  const { code, out } = runScan(dir);
+  const { code, out, stdout } = runScan(dir);
   assert.equal(code, 0, out);
-  assert.match(out, /\nclean\n?$/);
+  assert.match(stdout, /\nclean\n?$/, out);
 });
 
 test('a personal author or committer address is reported by commit, without the address', () => {

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { Skip } from '../../lib/context.mjs';
+import { versionCheck } from '../agent-clis/tools.mjs';
 
 // Optional desktop and document tools that sit next to an agent setup. Nothing is
 // selected unless you pick it.
@@ -24,12 +25,14 @@ const EXTRAS = [
           },
         },
         pathHints: ['~/.local/bin'],
+        check: versionCheck('docling'),
       });
     },
   },
   {
     value: 'openwhispr',
     label: 'openwhispr - desktop voice dictation: speak, and the text appears where your cursor is',
+    // No check: a desktop app, not installed through ensureTool, with no offline command-line check.
     async install(ctx) {
       if (ctx.os === 'wsl') throw new Skip('a desktop app; install it on the Windows side (winget install --id OpenWhispr.OpenWhispr -e)');
       if (ctx.os === 'macos') {

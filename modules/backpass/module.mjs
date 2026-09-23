@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { Skip } from '../../lib/context.mjs';
+import { versionCheck } from '../agent-clis/tools.mjs';
 
 // backpass (github.com/kunchenguid/backpass) reads past agent sessions for a project
 // and proposes fixes to its instruction files. Its analysis sends session content to
@@ -72,8 +73,8 @@ export default {
     const projects = String(ctx.get('BACKPASS_PROJECTS') || '').split(',').map((p) => p.trim()).filter(Boolean);
     if (!projects.length) throw new Skip('no projects on the allowlist (BACKPASS_PROJECTS)');
 
-    await ctx.step('acpx', () => ctx.ensureTool({ name: 'acpx', install: { default: { npm: 'acpx@latest' } } }));
-    await ctx.step('backpass', () => ctx.ensureTool({ name: 'backpass', install: { default: { npm: 'backpass' } } }));
+    await ctx.step('acpx', () => ctx.ensureTool({ name: 'acpx', install: { default: { npm: 'acpx@latest' } }, check: versionCheck('acpx') }));
+    await ctx.step('backpass', () => ctx.ensureTool({ name: 'backpass', install: { default: { npm: 'backpass' } }, check: versionCheck('backpass') }));
 
     const base = dir(ctx);
     const runner = path.join(base, 'backpass-gate.mjs');
