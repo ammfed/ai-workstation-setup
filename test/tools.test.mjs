@@ -109,6 +109,14 @@ test('the tasks-axi check passes when the queued list holds the task it added', 
   assert.deepEqual(rec.failures, []);
 });
 
+test('the tasks-axi check fails when the list came from a backlog with other tasks in it', async () => {
+  const { ctx, rec } = context();
+  const other = 'count: 10\ntasks[10]{id,state,kind,repo,title}:\n  something-else,queued,task,"-",someone else\n';
+  assert.equal(await ctx.step('tasks-axi', () => ctx.ensureTool(replay('tasks-axi', ADD_ECHO + other))), undefined);
+  assert.equal(rec.failures.length, 1);
+  assert.match(rec.failures[0], /tasks-axi: installed, but its check failed \(adds and lists a task in a scratch backlog\)/);
+});
+
 test('the tasks-axi check fails when the add echoes the id but the queued list is empty', async () => {
   const { ctx, rec } = context();
   assert.equal(await ctx.step('tasks-axi', () => ctx.ensureTool(replay('tasks-axi', ADD_ECHO + 'count: 0\ntasks: 0 queued tasks in this backlog\n'))), undefined);

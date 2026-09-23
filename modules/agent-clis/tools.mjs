@@ -66,7 +66,7 @@ export const TOOLS = {
     check: {
       about: 'adds and lists a task in a scratch backlog',
       cmd: 'tasks-axi add installer-check "installer check" --file "{tmp}/backlog.md"; tasks-axi list --state queued --file "{tmp}/backlog.md"',
-      expect: /count: 1/,
+      expect: /^count: 1\r?$/m,
     },
   },
   'quota-axi': { name: 'quota-axi', install: npm('quota-axi'), about: 'agent-provider quota windows (firstmate needs it; Node 22.19+)', minNode: [22, 19], check: versionCheck('quota-axi') },
