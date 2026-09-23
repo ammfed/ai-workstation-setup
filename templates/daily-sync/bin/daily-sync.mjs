@@ -587,6 +587,11 @@ function run() {
   if (config.clickup) check('clickup', () => clickup(config.clickup));
   if (config.ticktick) check('ticktick', () => ticktick(config.ticktick));
 
+  // A FAILED report was sent last time, so say it is over, or it looks like it still is.
+  if (state.lastRun?.failed && !items.some((i) => i.level === 'failed')) {
+    add('changed', 'run:recovered', `recovered: the run at ${stamp(state.lastRun.at)} failed; this one did not`);
+  }
+
   // Drift reported before is "still"; only new drift can reach a model, and only a few items.
   const previous = state.attention || {};
   const model = config.model || {};

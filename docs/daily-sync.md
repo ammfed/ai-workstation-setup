@@ -44,7 +44,8 @@ A report starts with `FAILED` when a step failed, when the previous run never fi
 when no run succeeded for `staleHours` (26 by default, so a machine that was off or a timer
 that stopped is noticed at the next run). The run then exits non-zero. The optional Claude
 Code session-start check, `daily-sync.mjs --status`, prints one `FAILED` line in that case
-and when no run has happened for a day at all, and nothing otherwise.
+and when no run has happened for a day at all, and nothing otherwise. The first run that
+passes after a FAILED one sends a short `recovered` note, so the failure does not look ongoing.
 
 ## Scheduling
 

@@ -129,8 +129,15 @@ test('a missing raw folder fails loudly instead of reporting nothing new', () =>
   const [note] = j.notified();
   assert.match(note, /^FAILED daily-sync .*1 failed/);
   assert.match(note, /raw folder .*no-such-raw-folder does not exist, so ingest would read nothing/);
-  const status = spawnSync(process.execPath, [script, '--config', path.join(j.dir, 'config.json'), '--status'], { encoding: 'utf8' });
-  assert.match(status.stdout, /^FAILED daily-sync: the last run .* had 1 failed step/);
+  const status = () => spawnSync(process.execPath, [script, '--config', path.join(j.dir, 'config.json'), '--status'], { encoding: 'utf8' }).stdout;
+  assert.match(status(), /^FAILED daily-sync: the last run .* had 1 failed step/);
+  // Fixed: the next run says so once, and the session check goes quiet.
+  j.write({ vault: vault(rawFolder()) });
+  assert.equal(j.run().code, 0);
+  assert.match(j.notified()[1], /^daily-sync .*1 changed[\s\S]*recovered: the run at .* failed; this one did not/);
+  assert.equal(status(), '');
+  j.run();
+  assert.equal(j.notified().length, 2);
 });
 
 test('an empty raw folder fails too', () => {
@@ -156,9 +163,11 @@ test('a previous run that never finished and a stale last success are both FAILE
   assert.match(note, /^FAILED /);
   assert.match(note, /the previous run \(started .*\) never finished/);
   assert.match(note, /no successful run since .* \(30h ago\)/);
-  // This run's own checks passed, so the next run is quiet again.
+  // This run's own checks passed, so the next run only says it recovered, then all is quiet.
   assert.equal(j.run().code, 0);
-  assert.equal(j.notified().length, 1);
+  assert.match(j.notified()[1], /recovered: the run at .* failed; this one did not/);
+  assert.equal(j.run().code, 0);
+  assert.equal(j.notified().length, 2);
   assert.match(j.latest(), /all quiet/);
 });
 
