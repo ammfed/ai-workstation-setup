@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Skip } from '../../lib/context.mjs';
-import { TOOLS } from '../agent-clis/tools.mjs';
+import { TOOLS, versionCheck } from '../agent-clis/tools.mjs';
 
 // Firstmate is used from an upstream clone (github.com/kunchenguid/firstmate);
 // this module only clones it and writes its local, gitignored config/ files.
@@ -13,7 +13,15 @@ const TREEHOUSE_BACKENDS = ['tmux', 'herdr', 'zellij', 'cmux'];
 const BOOTSTRAP_TOOLS = ['git', 'node', 'gh', 'jq', 'no-mistakes', 'gh-axi', 'chrome-devtools-axi', 'tasks-axi', 'quota-axi'];
 
 const BACKENDS = {
-  tmux: { label: 'tmux - the reference default', tool: { name: 'tmux', install: { unix: { pkg: { apt: 'tmux', dnf: 'tmux', pacman: 'tmux', zypper: 'tmux', apk: 'tmux', brew: 'tmux' } } } } },
+  tmux: {
+    label: 'tmux - the reference default',
+    tool: {
+      name: 'tmux',
+      install: { unix: { pkg: { apt: 'tmux', dnf: 'tmux', pacman: 'tmux', zypper: 'tmux', apk: 'tmux', brew: 'tmux' } } },
+      // `tmux --version` is not a valid option, and its two-part version fails the shared pattern.
+      check: { about: 'reports its version', cmd: 'tmux -V', expect: /^tmux \S+/m },
+    },
+  },
   herdr: { label: 'herdr - terminal workspace manager built for agents', tool: TOOLS.herdr },
   zellij: {
     label: 'zellij',
@@ -21,6 +29,7 @@ const BACKENDS = {
       name: 'zellij',
       install: { macos: { pkg: { brew: 'zellij' } }, linux: { pkg: { pacman: 'zellij', brew: 'zellij' } } },
       unsupported: { default: 'install zellij by hand: https://zellij.dev/documentation/installation' },
+      check: versionCheck('zellij'),
     },
   },
   cmux: { label: 'cmux (macOS)', manual: 'install cmux by hand; see docs/cmux-backend.md in your firstmate clone' },

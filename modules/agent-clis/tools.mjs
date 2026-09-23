@@ -7,6 +7,11 @@ const npm = (pkg) => ({ default: { npm: pkg } });
 // Exported because the other modules register tools that prove themselves the same way.
 export const versionCheck = (bin) => ({ about: 'reports its version', cmd: `${bin} --version`, expect: /\d+\.\d+\.\d+/ });
 
+// Every tool the setup registers through ensureTool gets a check except these four, on purpose:
+// pixel-agents (`--version` is not a version flag, it starts the app), agy and composio (out of
+// scope for checks for now), and OpenWhispr in modules/extras (a desktop app, not installed
+// through ensureTool, with no offline command-line check).
+
 // mermaid-ascii publishes release archives and a checksums file per version
 // (github.com/AlexanderGrooff/mermaid-ascii, README "Installation").
 const MERMAID_REPO = 'https://github.com/AlexanderGrooff/mermaid-ascii';
@@ -144,7 +149,7 @@ export const TOOLS = {
     about: 'live view of what each Claude Code agent is doing, in the browser (github.com/pixel-agents-hq/pixel-agents)',
     install: npm('pixel-agents'),
     signIn: 'pixel-agents   (run it in a project; it asks before adding its Claude Code hooks)',
-    // No check: `pixel-agents --version` is not a version flag, it starts the app.
+    // No check: see the list next to versionCheck.
   },
   composio: {
     name: 'composio',

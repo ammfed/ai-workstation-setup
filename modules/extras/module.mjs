@@ -25,14 +25,15 @@ const EXTRAS = [
           },
         },
         pathHints: ['~/.local/bin'],
-        check: versionCheck('docling'),
+        // The first run after install compiles docling's whole dependency tree: about 19s cold, 8.5s warm.
+        check: { ...versionCheck('docling'), timeoutMs: 180_000 },
       });
     },
   },
   {
     value: 'openwhispr',
     label: 'openwhispr - desktop voice dictation: speak, and the text appears where your cursor is',
-    // No check: a desktop app, not installed through ensureTool, with no offline command-line check.
+    // No check: see the list next to versionCheck in modules/agent-clis/tools.mjs.
     async install(ctx) {
       if (ctx.os === 'wsl') throw new Skip('a desktop app; install it on the Windows side (winget install --id OpenWhispr.OpenWhispr -e)');
       if (ctx.os === 'macos') {
