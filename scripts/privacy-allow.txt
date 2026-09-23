@@ -4,6 +4,8 @@
 github.com/ammfed/ai-workstation-setup
 # LICENSE names the repo owner, already public as the owner of the repo URL above.
 Copyright (c) 2026 ammfed
+# The repo owner's GitHub noreply commit identity, public on every commit.
+ammfed <114851245+ammfed@users.noreply.github.com>
 # Commit message of the first merge on main (history only).
 Merge pull request #1 from ammfed/fm/setup-template-repo
 # firstmate reads preferences from this upstream file name (preferences module).
