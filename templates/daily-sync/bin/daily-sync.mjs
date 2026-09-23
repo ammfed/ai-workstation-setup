@@ -135,6 +135,16 @@ function git(repo, gitArgs, timeoutSec = 60) {
   return { code, out: r.stdout || '', err: r.stderr || '' };
 }
 
+// A network read gets one more try after a pause, so a blip (DNS, Wi-Fi coming back after
+// sleep, a run caught up right after login) is not reported as a failure.
+let retryWaitMs = 20_000;
+function retry(fn) {
+  const first = fn();
+  if (first.code === 0) return first;
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, retryWaitMs);
+  return fn();
+}
+
 function alive(pid) {
   try {
     process.kill(pid, 0);
@@ -208,7 +218,7 @@ function pull(entry) {
   const key = `pull:${p}`;
   if (!isRepo(p)) return add('failed', `${key}:missing`, `${label}: not a git repository`);
   if (!dryRun) {
-    const f = git(p, ['fetch', '--quiet', remote], 120);
+    const f = retry(() => git(p, ['fetch', '--quiet', remote], 120));
     if (f.code !== 0) return add('failed', `${key}:fetch`, `${label}: fetch from ${remote} failed (${exitText(f)}): ${clip(lastLine(f.err))}`);
   }
   const def = defaultBranch(p, remote);
@@ -247,7 +257,7 @@ function watch(entry) {
   if (!isRepo(p)) return add('failed', `${key}:missing`, `${label}: not a git repository`);
   const branch = defaultBranch(p, remote) || git(p, ['symbolic-ref', '--quiet', '--short', 'HEAD']).out.trim();
   if (!branch) return add('attention', `${key}:branch`, `${label}: no default branch known; cannot tell whether it is behind`);
-  const r = git(p, ['ls-remote', remote, `refs/heads/${branch}`], 60);
+  const r = retry(() => git(p, ['ls-remote', remote, `refs/heads/${branch}`], 60));
   if (r.code !== 0) return add('failed', `${key}:remote`, `${label}: ${remote} did not answer (${exitText(r)}): ${clip(lastLine(r.err))}`);
   const sha = r.out.trim().split(/\s+/)[0];
   if (!sha) return add('attention', `${key}:no-branch`, `${label}: ${remote} has no branch ${branch}`);
@@ -402,8 +412,8 @@ function parseClickupLists(out) {
     if (/^lists\[\d+\]/.test(line)) inTable = true;
     else if (!/^\s/.test(line)) inTable = false;
     else if (inTable) {
-      const m = line.match(/^\s+"?(\d+)"?,(.*)$/);
-      if (m) live.set(m[1], m[2].replace(/,\(folderless\)$/, '').replace(/^"|"$/g, ''));
+      const m = line.match(/^\s+"?(\d+)"?,(.*),([^,]*)$/);
+      if (m) live.set(m[1], `${m[3] === '(folderless)' ? '' : `${m[3].replace(/^"|"$/g, '')} / `}${m[2].replace(/^"|"$/g, '')}`);
     }
   }
   return live;
@@ -411,7 +421,7 @@ function parseClickupLists(out) {
 
 function clickup(c) {
   const expected = expectedLists(c.lists);
-  const r = sh(`${c.command || 'clickup-axi'} lists --space "${c.space}"`, { timeoutSec: 120 });
+  const r = retry(() => sh(`${c.command || 'clickup-axi'} lists --space "${c.space}"`, { timeoutSec: 120 }));
   if (r.code !== 0) return add('failed', 'clickup:read', `clickup: could not read the lists of space ${c.space} (${exitText(r)}): ${clip(lastLine(r.err || r.out))}`);
   const live = parseClickupLists(r.out);
   if (!live.size) return add('failed', 'clickup:parse', `clickup: read no list from space ${c.space}; is the space right, and did clickup-axi's output change?`);
@@ -431,14 +441,14 @@ function clickup(c) {
 function ticktick(t) {
   if (!t.command) return add('failed', 'ticktick:config', 'ticktick: no read command configured (ticktick.command)');
   if (t.authCommand) {
-    const a = sh(t.authCommand, { timeoutSec: 60 });
+    const a = retry(() => sh(t.authCommand, { timeoutSec: 60 }));
     if (a.code !== 0 || /not authenticated|unauthenticated|expired/i.test(a.out)) {
       return add('attention', 'ticktick:auth', `ticktick: not signed in (\`${t.authCommand}\`: ${clip(lastLine(a.out + a.err))}); sign in once and it is read without prompts again`);
     }
     const secs = Number((a.out.match(/expires\s+(?:in\s+)?(\d+)\s*s/i) || [])[1]);
     if (secs && secs < 14 * 86_400) add('attention', 'ticktick:expiring', `ticktick: the sign-in expires in ${Math.floor(secs / 86_400)} day(s); renew it before then`);
   }
-  const r = sh(t.command, { timeoutSec: 120 });
+  const r = retry(() => sh(t.command, { timeoutSec: 120 }));
   if (r.code !== 0) return add('failed', 'ticktick:read', `ticktick: read failed (${exitText(r)}): ${clip(lastLine(r.err || r.out))}`);
   let names;
   try {
@@ -550,6 +560,8 @@ function run() {
     }
   }
   log(`start${dryRun ? ' (dry run)' : ''}: ${tilde(configFile)}`);
+
+  if (config.retryWaitSec !== undefined) retryWaitMs = Number(config.retryWaitSec) * 1000;
 
   // The runs before this one: never finished, or none succeeded for too long.
   const staleHours = Number(config.staleHours) || 26;

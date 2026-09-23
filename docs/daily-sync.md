@@ -111,5 +111,7 @@ Paths may start with `~`.
   `{ "file": "~/notes/board.json", "key": "lists" }` (an object or list of `{ "id", "name" }`).
 - `ticktick.authCommand`, when set, is run first; a non-zero exit is reported as signed out,
   and output such as `expires 86400 seconds` is warned about two weeks ahead.
+- Network reads (git fetch and ls-remote, ClickUp, TickTick) get a second try
+  `retryWaitSec` (20) seconds later before they count as failed.
 - `notify` and `model.command` are shell commands that read the report or prompt on stdin.
   An empty `model.command` means no model is ever called.

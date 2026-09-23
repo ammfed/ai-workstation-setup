@@ -35,6 +35,12 @@ fs.mkdirSync(helpers);
 fs.writeFileSync(path.join(helpers, 'notify.cjs'), "require('fs').appendFileSync(process.argv[2], require('fs').readFileSync(0, 'utf8') + '\\n=====\\n');");
 fs.writeFileSync(path.join(helpers, 'model.cjs'), "require('fs').readFileSync(0); require('fs').appendFileSync(process.argv[2], 'call\\n'); console.log('stub explanation');");
 fs.writeFileSync(path.join(helpers, 'print.cjs'), 'console.log(process.argv.slice(2).join(" "));');
+// Stand-ins for clickup-axi and a TickTick CLI, printing the shapes the real ones print.
+fs.writeFileSync(
+  path.join(helpers, 'clickup.cjs'),
+  `console.log(${JSON.stringify('count: 3 active lists in space 9\nlists[3]{id,name,folder}:\n  "101",Milestones,(folderless)\n  "102",Deliverables,Team A\n  "103",Findings,Team B\nhelp[1]:\n  Run `clickup-axi lists --space "<name|id>" --archived` to see archived lists')});`,
+);
+fs.writeFileSync(path.join(helpers, 'ticktick.cjs'), `console.log(JSON.stringify([{ name: 'Work' }, { name: 'Personal' }, { name: 'Errands' }]));`);
 const node = (file, ...rest) => [`"${process.execPath}"`, `"${path.join(helpers, file)}"`, ...rest.map((r) => `"${r}"`)].join(' ');
 
 function git(dir, args) {
@@ -243,6 +249,28 @@ test('a recorded version behind the folder that holds it is drift', () => {
   });
   assert.equal(j.run().code, 0);
   assert.match(j.notified()[0], /widget kit: 1\.0 on record in .*record\.md, but .*holder holds 1\.10/);
+});
+
+test('ClickUp lists are compared with an expected-lists file, read-only', () => {
+  const board = path.join(tmp, 'board.json');
+  fs.writeFileSync(board, JSON.stringify({ lists: { milestones: { id: '101', name: 'Milestones' }, gone: { id: '104', name: 'Old list' }, a: { id: '102' } } }));
+  const j = job({ clickup: { command: node('clickup.cjs'), space: '9', lists: { file: board, key: 'lists' } } });
+  assert.equal(j.run().code, 0);
+  const [note] = j.notified();
+  assert.match(note, /expected list 104 \(Old list\) is no longer active in space 9/);
+  assert.match(note, /list 103 \(Team B \/ Findings\) is active in space 9 but not expected in .*board\.json/);
+  assert.doesNotMatch(note, /list 10[12] /);
+  assert.equal(j.modelCalls(), 2);
+});
+
+test('TickTick lists are compared with the ones you expect, and an expiring sign-in is flagged', () => {
+  const j = job({ ticktick: { command: node('ticktick.cjs'), authCommand: node('print.cjs', 'Token: valid (expires 172800 seconds)'), lists: ['work', 'Personal', 'Health'] } });
+  assert.equal(j.run().code, 0);
+  const [note] = j.notified();
+  assert.match(note, /ticktick: the sign-in expires in 2 day\(s\)/);
+  assert.match(note, /ticktick: expected list "Health" is missing/);
+  assert.match(note, /ticktick: list "Errands" is not one you expect/);
+  assert.doesNotMatch(note, /"Work"|"work"|"Personal"/);
 });
 
 test('--dry-run changes nothing and sends nothing', () => {
