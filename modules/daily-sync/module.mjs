@@ -301,6 +301,8 @@ export default {
     await ctx.step('script and config', async () => {
       await ctx.writeFile(script, ctx.template('daily-sync/bin/daily-sync.mjs'), { onConflict: 'ask', mode: 0o755 });
       await ctx.writeFile(configFile, `${JSON.stringify(buildConfig(ctx, base), null, 2)}\n`, { onConflict: 'ask' });
+      // Where the tool-update check keeps its "already reported" record, instead of firstmate's own state.
+      if (surfaces.includes('tool-updates')) ctx.mkdir(path.join(base, 'firstmate-state'));
     });
 
     if (surfaces.includes('clickup')) {
