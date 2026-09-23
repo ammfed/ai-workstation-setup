@@ -69,6 +69,7 @@ diverged, it stops, explains, and changes nothing. See
 | `second-brain` | Markdown vault: life-area and fixed-type entity folders, note contract, provenance rules, eight note templates, map/checker/ingest/housekeeping scripts, obsidian-axi wiring; [design notes](docs/second-brain.md) | ✓ | ✓ | ✓ | ✓ |
 | `clickup` | clickup-axi (checksum-verified release binary), skill, session hook, default list; [structure guide](docs/clickup-structure.md) | ✓ | ✓ | ✓ | ✓ |
 | `extras` | Optional docling (documents to markdown) and OpenWhispr (voice dictation) | ✓ | ✓ | app on Windows side | ✓ |
+| `daily-sync` | Opt-in daily job: fast-forwards clean repos, runs the vault ingest (failing loudly on a missing raw folder), checks tool updates, reads ClickUp and TickTick for drift; model calls only for new drift; one short report, FAILED when a run fails or is missed; [guide](docs/daily-sync.md) | ✓ | ✓ | ✓ | schedule by hand |
 | `terminal` | Optional WezTerm and a translucent theme in `~/.wezterm.lua` | ✓ | ✓ | config only | ✓ |
 
 `./install.sh --list` prints the same from the modules themselves. A module that

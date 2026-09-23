@@ -10,3 +10,5 @@ ammfed <114851245+ammfed@users.noreply.github.com>
 Merge pull request #1 from ammfed/fm/setup-template-repo
 # firstmate reads preferences from this upstream file name (preferences module).
 data/captain.md
+# launchd's plist key for a job's command line (daily-sync module, macOS).
+<key>ProgramArguments</key>

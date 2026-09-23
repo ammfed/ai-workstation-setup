@@ -118,6 +118,7 @@ function runAgent(item) {
     .replaceAll('{{MODE}}', item.action === 'updated' ? 'revision' : 'new');
   if (!agentCli) die('set $AGENT_CLI to your agent CLI (and $AGENT_CLI_ARGS to its flags)');
   const res = spawnSync(agentCli, agentArgs, { input: prompt, cwd: root, stdio: ['pipe', 'inherit', 'inherit'] });
+  if (res.status !== 0) console.error(`agent failed on: ${item.rel}`);
   return res.status === 0;
 }
 
