@@ -4,7 +4,8 @@
 const npm = (pkg) => ({ default: { npm: pkg } });
 
 // Smallest offline proof a CLI is runnable, not only a name on PATH: it prints its own version.
-const versionCheck = (bin) => ({ about: 'reports its version', cmd: `${bin} --version`, expect: /\d+\.\d+\.\d+/ });
+// Exported because the other modules register tools that prove themselves the same way.
+export const versionCheck = (bin) => ({ about: 'reports its version', cmd: `${bin} --version`, expect: /\d+\.\d+\.\d+/ });
 
 // mermaid-ascii publishes release archives and a checksums file per version
 // (github.com/AlexanderGrooff/mermaid-ascii, README "Installation").
@@ -71,8 +72,8 @@ export const TOOLS = {
   },
   'quota-axi': { name: 'quota-axi', install: npm('quota-axi'), about: 'agent-provider quota windows (firstmate needs it; Node 22.19+)', minNode: [22, 19], check: versionCheck('quota-axi') },
   ctx7: { name: 'ctx7', install: npm('ctx7'), about: 'Context7 CLI: current library docs for agents', check: versionCheck('ctx7') },
-  'notion-axi': { name: 'notion-axi', install: npm('notion-axi'), about: 'Notion for agents (github.com/maximebrmd/notion-axi)' },
-  'gws-axi': { name: 'gws-axi', install: npm('gws-axi'), about: 'Google Workspace for agents: Gmail, Calendar, Docs, Drive (github.com/JarvusInnovations/gws-axi)' },
+  'notion-axi': { name: 'notion-axi', install: npm('notion-axi'), about: 'Notion for agents (github.com/maximebrmd/notion-axi)', check: versionCheck('notion-axi') },
+  'gws-axi': { name: 'gws-axi', install: npm('gws-axi'), about: 'Google Workspace for agents: Gmail, Calendar, Docs, Drive (github.com/JarvusInnovations/gws-axi)', check: versionCheck('gws-axi') },
   'no-mistakes': {
     name: 'no-mistakes',
     about: 'validation pipeline: review, test, push, PR (firstmate needs it)',
@@ -101,6 +102,7 @@ export const TOOLS = {
       windows: 'irm https://herdr.dev/install.ps1 | iex',
     },
     pathHints: ['~/.local/bin'],
+    check: versionCheck('herdr'),
   },
   codex: {
     name: 'Codex CLI',
@@ -112,6 +114,7 @@ export const TOOLS = {
     },
     pathHints: ['~/.local/bin'],
     signIn: 'run `codex` and sign in',
+    check: versionCheck('codex'),
   },
   agy: {
     name: 'Antigravity CLI',
@@ -141,6 +144,7 @@ export const TOOLS = {
     about: 'live view of what each Claude Code agent is doing, in the browser (github.com/pixel-agents-hq/pixel-agents)',
     install: npm('pixel-agents'),
     signIn: 'pixel-agents   (run it in a project; it asks before adding its Claude Code hooks)',
+    // No check: `pixel-agents --version` is not a version flag, it starts the app.
   },
   composio: {
     name: 'composio',

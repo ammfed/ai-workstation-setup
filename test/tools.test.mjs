@@ -82,6 +82,8 @@ test('the shared version check accepts what the CLIs print', async () => {
     ['quota-axi', '0.1.51\n'],
     ['treehouse', 'v2.3.0\n'],
     ['no-mistakes', 'no-mistakes version v1.72.0 (9fcc865) 2026-09-08T13:12:43Z\n'],
+    ['herdr', 'herdr 0.9.1\n'],
+    ['codex', 'codex-cli 0.156.0\n'],
   ];
   for (const [key, output] of printed) {
     const { ctx, rec } = context();

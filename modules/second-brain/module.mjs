@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Skip } from '../../lib/context.mjs';
 import { addSessionStartHook, setClaudeEnv } from '../../lib/claude.mjs';
+import { versionCheck } from '../agent-clis/tools.mjs';
 
 // A second brain: plain markdown notes with a frontmatter contract agents can rely on, plus
 // the scripts that keep that contract true. Two kinds of folder hold notes. Life-area folders
@@ -131,7 +132,7 @@ export default {
 
     if (ctx.get('VAULT_AGENT_ACCESS')) {
       // obsidian-axi resolves the vault from OBSIDIAN_VAULT, then defaultVault in ~/.config/obsidian-axi/config.json.
-      await ctx.step('obsidian-axi', () => ctx.ensureTool({ name: 'obsidian-axi', install: { default: { npm: '@andershoffmann/obsidian-axi' } } }));
+      await ctx.step('obsidian-axi', () => ctx.ensureTool({ name: 'obsidian-axi', install: { default: { npm: '@andershoffmann/obsidian-axi' } }, check: versionCheck('obsidian-axi') }));
       await ctx.step('defaultVault', () =>
         ctx.updateJson(path.join(ctx.home, '.config', 'obsidian-axi', 'config.json'), (cfg) => {
           cfg.defaultVault = vault;
