@@ -2,7 +2,8 @@
 # privacy-scan.sh - block secrets and private terms from entering this public repo.
 #
 # Three checks, over the working tree (tracked + untracked, not ignored) and the
-# full history of HEAD (patches, file names and commit messages):
+# full history of HEAD (patches, file names, commit messages, and the author and
+# committer of every commit):
 #   1. gitleaks, when it is on PATH or runnable through docker; otherwise a notice
 #      (CI always runs the official gitleaks action).
 #   2. generic secret patterns (API keys, tokens, private keys, email addresses).
@@ -11,7 +12,8 @@
 #      Occurrences listed in scripts/privacy-allow.txt are removed first.
 #
 # Hits are reported by location only - never by content - so a scan log cannot
-# leak the thing it found.
+# leak the thing it found: path:line in the tree, and in history
+# commit <sha>:<file|message|author|committer>.
 #
 # Usage: scripts/privacy-scan.sh [--tree-only] [--denylist FILE]
 #   PRIVACY_DENYLIST=FILE   same as --denylist
@@ -29,7 +31,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --tree-only) tree_only=1 ;;
     --denylist) denylist=${2:?--denylist needs a file}; shift ;;
-    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
@@ -42,7 +44,8 @@ trap 'rm -rf "$tmp"' EXIT
 
 section() { printf '\n== %s\n' "$1"; }
 
-# Build the scan corpus once: one file for the tree (path:line:text), one for history.
+# Build the scan corpus once: one file for the tree (path:line:text), one for history
+# (commit <sha>:<where>:text, where = the patch's file, message, author or committer).
 git ls-files -z --cached --others --exclude-standard | while IFS= read -r -d '' f; do
   [ -f "$f" ] || continue
   grep -Iq . "$f" 2>/dev/null || continue # skip binaries and empty files
@@ -51,10 +54,16 @@ git ls-files -z --cached --others --exclude-standard | while IFS= read -r -d '' 
 done >"$tmp/tree.txt"
 
 if [ "$tree_only" -eq 0 ] && git rev-parse -q --verify HEAD >/dev/null; then
-  git log -p --no-color --no-ext-diff --format='commit %H%n%B' HEAD | awk '
-    /^commit [0-9a-f]{40}$/ { c = substr($2, 1, 12); print; next }
-    /^\+\+\+ b\// { f = substr($0, 7) }
-    { print "commit " c " " f ": " $0 }' >"$tmp/history.txt"
+  # The two lines after each commit line are its author and committer, then its message.
+  git log -p --no-color --no-ext-diff --format='commit %H%n%an <%ae>%n%cn <%ce>%n%B' HEAD | awk '
+    /^commit [0-9a-f]{40}$/ { c = substr($2, 1, 12); n = 0; next }
+    { n++ }
+    n == 1 { w = "author" }
+    n == 2 { w = "committer" }
+    n == 3 { w = "message" }
+    /^diff --git a\// { w = substr($0, 14); sub(/ b\/.*$/, "", w) }
+    /^--- a\// || /^\+\+\+ b\// { w = substr($0, 7) }
+    { print "commit " c ":" w ":" $0 }' >"$tmp/history.txt"
 else
   : >"$tmp/history.txt"
 fi
@@ -100,11 +109,13 @@ for entry in "${patterns[@]}"; do
   re=${entry#*:}
   report "$name" < <(cat "$tmp/tree.txt" "$tmp/history.txt" | grep -E -- "$re" || true)
 done
-# Email addresses, except documentation placeholders and GitHub noreply identities.
+# Email addresses, except documentation placeholders and GitHub noreply identities (your
+# id+name@users.noreply.github.com, and noreply@github.com, which commits merges made on
+# github.com). Those are removed first, so they cannot hide another address on the same line.
 # The local part must start with a letter or digit, so an "@AGENTS.md" import is not an address.
 report email < <(cat "$tmp/tree.txt" "$tmp/history.txt" |
-  grep -E '[A-Za-z0-9][A-Za-z0-9._%+-]*@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}' |
-  grep -vE '@(example\.(com|org|net)|users\.noreply\.github\.com)' || true)
+  sed -E 's/[A-Za-z0-9._%+-]*@(example\.(com|org|net)|users\.noreply\.github\.com)//g; s/(^|[^A-Za-z0-9._%+-])noreply@github\.com/\1/g' |
+  grep -E '[A-Za-z0-9][A-Za-z0-9._%+-]*@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}' || true)
 
 # ---------------------------------------------------------------- 3. private denylist
 section "private denylist"

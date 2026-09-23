@@ -90,7 +90,8 @@ never read from or written to answers files: export `CLICKUP_TOKEN` or
 
 Tokens you enter go only to the tool's own local config (for example
 `claude mcp add` or `clickup-axi auth login`), never into this repository.
-`scripts/privacy-scan.sh` checks the tree and history for secrets and for terms in
+`scripts/privacy-scan.sh` checks the tree and history (commit authors and committers
+included) for secrets, email addresses other than GitHub noreply ones, and terms in
 a local, gitignored denylist; CI runs it and gitleaks on every pull request.
 
 ## Contributing
