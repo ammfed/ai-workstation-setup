@@ -664,7 +664,7 @@ class Live {
     setTimeout(() => {
       this.session?.close();
       this.ec?.stop();
-      process.exit(0);
+      process.exit(this.exitCode ?? 0);
     }, 250);
   }
 }
@@ -899,8 +899,10 @@ async function main(argv) {
         await live.start();
       } catch (err) {
         console.error(`voice-mode: ${err.message}`);
+        // stop() exits once the echo canceller and the rest are released.
+        live.exitCode = 1;
         live.stop();
-        return 1;
+        return new Promise(() => {});
       }
       return new Promise(() => {});
     }
