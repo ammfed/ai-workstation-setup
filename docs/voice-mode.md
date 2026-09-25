@@ -52,8 +52,8 @@ points at another one). Everything not in the file takes the defaults in `bin/co
 | `sources` | What it may read: `{ "name", "path", "about"?, "show"? }` for a file or folder (a `*` in a path segment makes one source per match), or `{ "name", "command": [..., "{query}"] }` for a read-only search command (`{regex}` gives the keywords as `a\|b`). `about` tells the model what the source holds; `show: true` lets its top-level notes be shown on screen by voice. |
 | `queue` | `{ "command": [...], "env": {} }`: the request text is added as the last argument. Never run through a shell. |
 | `actions` | `enabled`, `chooser` (`model`, `keyName`, `keyFile`, `threshold` 0.9 mid-sentence, `finalThreshold` 0.7 once you stop), `apps` (extra `{ id, name, desktop \| mac \| command }`), `discoverApps` (installed desktop apps on Linux), `sites` (`{ id, name, url }`, http and https only), `documents` (its folders can be opened), `files`. |
-| `audio` | `echoCancel` (default on; it wraps the default devices, so setting `input` turns it off), `input` and `output` device names, `fullDuplex` (keep the mic open during replies without echo cancellation: for a headset), `earcons` (a short tone when the mic opens and closes). |
-| `listen.idleCloseSec` | Close the mic after this long without speech (default 60). |
+| `audio` | `duplex`: `half` (default: the mic is muted while a reply plays) or `full` (talk over a reply), `echoCancel` (used in full duplex; it wraps the default devices, so setting `input` turns it off), `input` and `output` device names, `earcons` (a short tone when the mic opens and closes). |
+| `listen` | `idleCloseSec`: close the mic after this long without speech (default 60). `exitAfterMin`: end the session after this long with the mic closed (default 15). |
 | `logDir`, `logTranscripts` | Run log and `metrics.jsonl`. Transcripts go to the run log only when `logTranscripts` is true, and never to the metrics file. |
 
 Keys never go in `config.json`, an answers file, the repo, a log or a chat. The decision
@@ -86,11 +86,12 @@ never copied.
 Either way, a records lookup still running when you cut in does not restart the answer you
 abandoned.
 
-Talking over the reply needs the reply kept out of the microphone. On Linux, voice mode
-loads PipeWire's (or PulseAudio's) own `module-echo-cancel` for as long as it runs and
-unloads it on exit. When that is unavailable (or `echoCancel` is off, an `input` device is
-chosen, or on macOS), the mic is muted while a reply plays and the hotkey is how you cut in,
-unless `audio.fullDuplex` says a headset keeps the reply out of the mic.
+A reply from laptop speakers must never come back in as you talking. By default
+(`audio.duplex: "half"`) the mic is muted while a reply plays and for 400 ms after, and the
+hotkey is how you cut in. With `"full"`, voice mode loads PipeWire's (or PulseAudio's) own
+`module-echo-cancel` for as long as it runs so you can talk over a reply; when that is
+unavailable it falls back to half duplex. A headset needs no echo cancellation: `"full"`
+with `echoCancel: false`.
 
 ## The hotkey
 
@@ -98,6 +99,11 @@ Global shortcuts on KDE Plasma deliver a key press but no release, so the hotkey
 rather than being held: press to open the mic, speak, press again to close it (it also closes
 by itself after `listen.idleCloseSec`), press during a reply to cut in. When voice mode is not
 running, the hotkey starts it with the mic open.
+
+There is only ever one session. It holds a lock file (its pid, in `$XDG_RUNTIME_DIR`) from
+the moment it starts, so a second `start` refuses and a hotkey press while the first session
+is still connecting waits for it instead of starting another. A lock left by a session that
+died is taken over.
 
 The default is **Ctrl+2** (`VOICE_HOTKEY`). A global shortcut takes the key from every app,
 so apps lose their own Ctrl+2 (a browser's "go to tab 2", for example); pick another

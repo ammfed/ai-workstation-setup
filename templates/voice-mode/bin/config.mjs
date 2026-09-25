@@ -21,8 +21,12 @@ export const DEFAULTS = {
     'You are a voice assistant. Be brief, plain and friendly: one to three short spoken sentences, ' +
     'no lists, no markdown. Answer from the records your tools return and say so when they do not say.',
   personaFile: '',
-  listen: { idleCloseSec: 60 },
-  audio: { echoCancel: true, input: '', output: '', earcons: true },
+  // The mic closes after idleCloseSec without speech; the session exits after exitAfterMin
+  // with the mic closed.
+  listen: { idleCloseSec: 60, exitAfterMin: 15 },
+  // duplex: half (mic muted while a reply plays; the hotkey cuts in) or full (talk over a
+  // reply; needs echoCancel, or a headset with echoCancel false).
+  audio: { duplex: 'half', echoCancel: true, input: '', output: '', earcons: true },
   actions: {
     enabled: true,
     chooser: {

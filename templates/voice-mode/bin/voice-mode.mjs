@@ -27,7 +27,63 @@ import { Mic, Speaker, audioTools, has, resample, rms, startEchoCancel, tone } f
 import { PROVIDERS, createProvider } from './providers.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
-const SOCKET = process.platform === 'win32' ? '\\\\.\\pipe\\voice-mode' : path.join(process.env.XDG_RUNTIME_DIR || CONFIG_DIR, 'voice-mode.sock');
+const RUNTIME = process.env.XDG_RUNTIME_DIR || CONFIG_DIR;
+const SOCKET = process.platform === 'win32' ? '\\\\.\\pipe\\voice-mode' : path.join(RUNTIME, 'voice-mode.sock');
+const LOCK = path.join(RUNTIME, 'voice-mode.lock');
+
+// ------------------------------------------------------------------ one session at a time
+//
+// A session holds LOCK (its pid) from before it does anything slow until it exits, so a
+// second start, however quick, refuses. A lock whose pid is gone, or is no longer voice
+// mode, is stale and taken over.
+
+function isVoiceMode(pid) {
+  try {
+    process.kill(pid, 0);
+  } catch (err) {
+    if (err.code !== 'EPERM') return false;
+  }
+  try {
+    return fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes('voice-mode.mjs');
+  } catch {
+    return true; // no /proc (macOS): a live pid is taken as the holder
+  }
+}
+
+/** The pid of the running (or starting) session, or null. */
+export function lockHolder(file = LOCK) {
+  let pid;
+  try {
+    pid = Number(fs.readFileSync(file, 'utf8').trim());
+  } catch {
+    return null;
+  }
+  return pid > 0 && pid !== process.pid && isVoiceMode(pid) ? pid : null;
+}
+
+export function acquireLock(file = LOCK) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  for (let i = 0; i < 3; i++) {
+    try {
+      fs.writeFileSync(file, String(process.pid), { flag: 'wx' });
+      // Two starts that both cleared the same stale lock can both get here; after a
+      // moment only one pid is left in the file, and the other gives way.
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60);
+      return fs.readFileSync(file, 'utf8').trim() === String(process.pid);
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+    }
+    if (lockHolder(file)) return false;
+    fs.rmSync(file, { force: true }); // stale: its pid is gone or is no longer voice mode
+  }
+  return false;
+}
+
+export function releaseLock(file = LOCK) {
+  try {
+    if (fs.readFileSync(file, 'utf8').trim() === String(process.pid)) fs.rmSync(file, { force: true });
+  } catch {}
+}
 
 const RULES = `How you work:
 - Your knowledge comes from the records. Use search_records, list_records and read_record before answering anything about work, status, plans, people or past decisions, and say so when the records do not tell you. Never make up a status.
@@ -267,22 +323,31 @@ class Live {
 
   async start({ listen }) {
     const c = this.config;
+    this.lastActive = Date.now();
     for (const bin of audioTools()) if (!has(bin)) throw new Error(`\`${bin}\` is not installed (needed for the microphone and speaker)`);
-    // A chosen input device bypasses echo cancellation, which wraps the default devices.
-    this.ec = c.audio.echoCancel && !c.audio.input ? startEchoCancel(this.log) : null;
-    // Without echo cancellation the reply would be heard as the user talking over it, so
-    // the mic is muted while a reply plays and the hotkey is the way to cut in.
-    this.halfDuplex = !this.ec && !c.audio.fullDuplex;
+    // Half duplex (the default): the mic is muted while a reply plays and a moment after,
+    // so a reply from laptop speakers never comes back in as the user talking; the hotkey
+    // cuts in. Full duplex lets the user talk over a reply, which needs echo cancellation
+    // (loaded here, wrapping the default devices) or a headset (echoCancel false).
+    const full = c.audio.duplex === 'full';
+    this.ec = full && c.audio.echoCancel && !c.audio.input ? startEchoCancel(this.log) : null;
+    this.halfDuplex = !full || (c.audio.echoCancel && !c.audio.input && !this.ec);
+    if (full && this.halfDuplex) this.log({ event: 'half-duplex', why: 'echo cancellation is unavailable' });
     await this.connect();
     this.mic = new Mic({ rate: this.session.provider.inputRate, device: c.audio.input || this.ec?.input });
     this.mic.on('data', (pcm) => {
       if (!this.listening) return;
-      if (this.halfDuplex && this.session.speaker.busy()) return;
+      if (this.halfDuplex && this.session.speaker.busy(400)) return;
       this.session.feed(pcm);
-      if (rms(pcm) > 800) this.lastSpeech = Date.now();
+      if (rms(pcm) > 800) this.lastSpeech = this.lastActive = Date.now();
     });
     this.idle = setInterval(() => {
       if (this.listening && !this.session.speaker.busy() && Date.now() - this.lastSpeech > c.listen.idleCloseSec * 1000) this.setListening(false, 'idle');
+      // A session left with its mic closed ends itself, so nothing lingers in the background.
+      if (!this.listening && !this.session.speaker.busy() && Date.now() - this.lastActive > c.listen.exitAfterMin * 60000) {
+        this.log({ event: 'idle-exit' });
+        this.stop();
+      }
     }, 1000);
     this.server = net.createServer((sock) => {
       sock.setEncoding('utf8');
@@ -295,8 +360,10 @@ class Live {
       });
       sock.on('error', () => {});
     });
+    // Holding the lock means any socket file left here belongs to a session that is gone.
     if (process.platform !== 'win32') fs.rmSync(SOCKET, { force: true });
     this.server.listen(SOCKET);
+    this.ownsSocket = true;
     for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => this.stop());
     this.log({ event: 'ready', echo_cancel: !!this.ec, hotkey_hint: 'voice-mode toggle' });
     if (listen) this.setListening(true);
@@ -343,6 +410,7 @@ class Live {
   setListening(on, why) {
     if (on === this.listening) return;
     this.listening = on;
+    this.lastActive = Date.now();
     if (on) {
       this.lastSpeech = Date.now();
       this.mic.start();
@@ -377,7 +445,9 @@ class Live {
     this.session?.close();
     this.ec?.stop();
     this.server?.close();
-    if (process.platform !== 'win32') fs.rmSync(SOCKET, { force: true });
+    // The socket and lock are this session's own: it holds the lock.
+    if (this.ownsSocket && process.platform !== 'win32') fs.rmSync(SOCKET, { force: true });
+    releaseLock();
     this.log({ event: 'stopped' });
     setTimeout(() => process.exit(0), 100);
   }
@@ -585,15 +655,17 @@ async function main(argv) {
   }
   switch (cmd) {
     case 'start': {
-      if (await send('status')) {
-        console.error('voice-mode is already running; `voice-mode toggle` talks to it');
-        return 2;
-      }
       const keyName = PROVIDERS[config.provider].keyName;
       if (keyName && !readKey(config.keysFile, keyName)) {
         console.error(`voice-mode: ${keyName} is empty in ${config.keysFile}; add it there, or set "provider" in ${config.file}`);
         return 2;
       }
+      // Strictly one session: the lock is taken before anything slow happens.
+      if (!acquireLock()) {
+        console.error(`voice-mode is already running (pid ${lockHolder() ?? '?'}); \`voice-mode toggle\` talks to it`);
+        return 2;
+      }
+      process.on('exit', () => releaseLock());
       const live = new Live(config, makeLogger(config));
       try {
         await live.start({ listen: !!args.listen });
@@ -606,6 +678,16 @@ async function main(argv) {
     }
     case 'toggle': {
       if (await send('toggle')) return 0;
+      // A session that is still starting holds the lock but has no socket yet: this press is
+      // passed to it once it is up, never answered by starting a second one.
+      if (lockHolder()) {
+        for (let i = 0; i < 120; i++) {
+          await new Promise((r) => setTimeout(r, 250));
+          if (await send('toggle')) return 0;
+          if (!lockHolder()) break;
+        }
+        return 0;
+      }
       fs.mkdirSync(config.logDir, { recursive: true });
       const out = fs.openSync(path.join(config.logDir, 'voice-mode.log'), 'a');
       spawn(process.execPath, [SELF, 'start', '--listen'], { detached: true, stdio: ['ignore', out, out] }).unref();

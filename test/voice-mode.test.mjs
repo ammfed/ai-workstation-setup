@@ -17,7 +17,8 @@ const { merge, parseEnvFile, readKey, expandGlob, loadConfig, DEFAULTS } = await
 const { Records, runTool } = await import(path.join(bin, 'records.mjs'));
 const { Chooser, buildCatalog, criteria, perform } = await import(path.join(bin, 'desk.mjs'));
 const { OpenAIRealtime, GeminiLive, FakeProvider } = await import(path.join(bin, 'providers.mjs'));
-const { Session, streamClip, speechBounds } = await import(path.join(bin, 'voice-mode.mjs'));
+const { Session, streamClip, speechBounds, acquireLock, releaseLock, lockHolder } = await import(path.join(bin, 'voice-mode.mjs'));
+const { spawn } = await import('node:child_process');
 const { resample, tone } = await import(path.join(bin, 'audio.mjs'));
 const { parseCommand, qtKey } = await import(path.join(repoRoot, 'modules', 'voice-mode', 'module.mjs'));
 
@@ -351,6 +352,48 @@ test('installer: queue command lines and hotkeys are parsed', () => {
   assert.equal(qtKey('Meta+F9'), 0x10000000 | 0x01000038);
   assert.throws(() => qtKey('Space'), /modifier/);
   assert.throws(() => qtKey('Meta+Enter'), /cannot read/);
+});
+
+test('one session: a live holder blocks a second start; a dead or foreign pid is a stale lock', { skip: process.platform === 'win32' }, async () => {
+  const lock = path.join(tmp, 'run', 'voice-mode.lock');
+  // A stand-in running session: its command line names voice mode, as a real one does.
+  const holder = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 20000)', 'voice-mode.mjs'], { stdio: 'ignore' });
+  await new Promise((r) => holder.once('spawn', r));
+  fs.mkdirSync(path.dirname(lock), { recursive: true });
+  fs.writeFileSync(lock, String(holder.pid));
+  assert.equal(lockHolder(lock), holder.pid);
+  assert.equal(acquireLock(lock), false);
+  holder.kill('SIGKILL');
+  await new Promise((r) => holder.once('exit', r));
+  assert.equal(lockHolder(lock), null);
+  assert.equal(acquireLock(lock), true);
+  assert.equal(fs.readFileSync(lock, 'utf8'), String(process.pid));
+  releaseLock(lock);
+  assert.equal(fs.existsSync(lock), false);
+
+  // A live process that is not voice mode (a reused pid) does not hold the lock.
+  const other = spawn('sleep', ['20'], { stdio: 'ignore' });
+  await new Promise((r) => other.once('spawn', r));
+  fs.writeFileSync(lock, String(other.pid));
+  if (fs.existsSync('/proc')) assert.equal(acquireLock(lock), true);
+  other.kill('SIGKILL');
+  releaseLock(lock);
+});
+
+test('half duplex: the speaker counts as busy for a short tail after the reply', () => {
+  const Speaker = class {
+    constructor() {
+      this.playEnd = performance.now() + 100;
+    }
+  };
+  // Borrow the real method rather than start an audio player.
+  return import(path.join(bin, 'audio.mjs')).then(({ Speaker: Real }) => {
+    const sp = new Speaker();
+    sp.busy = Real.prototype.busy;
+    sp.playEnd = performance.now() - 200;
+    assert.equal(sp.busy(), false);
+    assert.equal(sp.busy(400), true);
+  });
 });
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));

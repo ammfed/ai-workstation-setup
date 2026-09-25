@@ -143,9 +143,9 @@ export class Speaker extends EventEmitter {
     return Math.max(0, this.replyMs - Math.max(0, this.playEnd - performance.now()));
   }
 
-  /** True while sent audio is still playing. */
-  busy() {
-    return performance.now() < this.playEnd;
+  /** True while sent audio is still playing (and for `tailMs` after). */
+  busy(tailMs = 0) {
+    return performance.now() < this.playEnd + tailMs;
   }
 
   /** Stop now, dropping anything not yet played. */
