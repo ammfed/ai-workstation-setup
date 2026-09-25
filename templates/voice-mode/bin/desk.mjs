@@ -153,7 +153,7 @@ export function buildCatalog(config, records, opts = {}) {
   for (const r of records ? records.showable() : []) add('record', r.id, `the ${r.name} record`, { path: r.path });
   const control = controlActions(config, opts);
   // Switching to an app's open window needs the desktop's window manager (KWin on Plasma).
-  if (control.length && process.platform === 'linux' && isKde(opts.env) && (opts.has || defaultHas)('gdbus')) {
+  if (control.length && (opts.platform || process.platform) === 'linux' && isKde(opts.env) && (opts.has || defaultHas)('gdbus')) {
     for (const [key, it] of [...items]) if (it.kind === 'app' && it.desktop) items.set(`focus:${key.slice(4)}`, { kind: 'focus', name: it.name, desktop: it.desktop });
   }
   for (const [key, it] of control) items.set(key, it);
