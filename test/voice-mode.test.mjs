@@ -21,7 +21,8 @@ const { Session, streamClip, speechBounds } = await import(path.join(bin, 'voice
 const { resample, tone } = await import(path.join(bin, 'audio.mjs'));
 const { parseCommand, qtKey } = await import(path.join(repoRoot, 'modules', 'voice-mode', 'module.mjs'));
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'voice-mode-test-'));
+// Resolved, because macOS's temp folder is a symlink and opened paths are resolved ones.
+const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'voice-mode-test-')));
 const data = path.join(tmp, 'data');
 const docs = path.join(tmp, 'Documents');
 const outside = path.join(tmp, 'outside');
