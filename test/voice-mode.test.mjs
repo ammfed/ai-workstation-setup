@@ -15,7 +15,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const bin = path.join(repoRoot, 'templates', 'voice-mode', 'bin');
 const { merge, parseEnvFile, readKey, expandGlob, loadConfig, DEFAULTS } = await import(path.join(bin, 'config.mjs'));
 const { Records, runTool } = await import(path.join(bin, 'records.mjs'));
-const { Chooser, buildCatalog, criteria, perform } = await import(path.join(bin, 'desk.mjs'));
+const { Chooser, buildCatalog, criteria, perform, controlActions, spans, focusScript, describe, typeable, SYSTEM } = await import(path.join(bin, 'desk.mjs'));
 const { OpenAIRealtime, GeminiLive, FakeProvider } = await import(path.join(bin, 'providers.mjs'));
 const { Session, streamClip, speechBounds, acquireLock, claimLock, releaseLock, lockHolder, decisionLine } = await import(path.join(bin, 'voice-mode.mjs'));
 const net = await import('node:net');
@@ -389,6 +389,107 @@ test('decisions log: one readable line per decision; the words heard only with t
   );
   assert.match(decisionLine({ at, event: 'chooser-error', cause: 'ETIMEDOUT', ms: 502, final: false }), /FAILED ETIMEDOUT after 502 ms \(mid-sentence\)$/);
   assert.match(decisionLine({ at, event: 'action', done: 'opened Firefox', ms_from_speech_start: 2100 }), /-> opened Firefox, 2100 ms after you started speaking$/);
+});
+
+// ------------------------------------------------------------------ PC control
+
+const KDE = { platform: 'linux', env: { XDG_CURRENT_DESKTOP: 'KDE' }, has: () => true, components: new Set(['kwin', 'kmix', 'mediacontrol', 'org_kde_powerdevil', 'org_kde_spectacle_desktop', 'ksmserver']) };
+
+test('control: KDE shortcuts on Plasma, standard commands elsewhere, and nothing that deletes, sends or closes', () => {
+  const c = config();
+  const kde = new Map(controlActions(c, KDE));
+  assert.deepEqual(kde.get('system:volume-up').invoke, ['kmix', 'increase_volume']);
+  assert.equal(kde.get('system:lock-screen').final, true);
+  assert.equal(kde.get('note:new').folder, path.join(docs, 'Notes'));
+  assert.ok(kde.has('search:web') && kde.has('type:text'));
+  assert.equal([...kde.keys()].filter((k) => k.startsWith('system:')).length, SYSTEM.length);
+  // A component that is missing falls back to a standard command, or leaves the action out.
+  const partial = new Map(controlActions(c, { ...KDE, components: new Set(['kwin']) }));
+  assert.equal(partial.get('system:volume-up').argv[0], 'wpctl');
+  assert.ok(!partial.has('system:screenshot'));
+  // Other Linux desktops: only where a standard command is installed.
+  const other = new Map(controlActions(c, { platform: 'linux', env: {}, has: (b) => b === 'wpctl' }));
+  assert.deepEqual(other.get('system:volume-down').argv, ['wpctl', 'set-volume', '@DEFAULT_AUDIO_SINK@', '5%-']);
+  assert.ok(!other.has('system:media-next') && !other.has('system:window-minimize') && !other.has('type:text'));
+  assert.equal(controlActions(merge(c, { actions: { control: false } }), KDE).length, 0);
+  // The fixed list has no destructive kind at all.
+  for (const [key] of kde) assert.doesNotMatch(key, /delete|remove|move-file|send|mail|buy|settings|shell|close|quit|kill/);
+  assert.match(criteria(new Map()).none, /deleting or moving files, sending a message or email, buying something, changing settings, running a command, closing or quitting an app/);
+});
+
+test('control: each action runs exactly its fixed command; the words go only where they belong', async () => {
+  const runs = [];
+  const run = async (argv, env) => runs.push([argv, env]);
+  const c = config();
+  const cat = new Map(controlActions(c, KDE));
+  await perform(cat.get('system:media-play-pause'), { run });
+  assert.deepEqual(runs.pop()[0], ['gdbus', 'call', '--session', '--dest', 'org.kde.kglobalaccel', '--object-path', '/component/mediacontrol', '--method', 'org.kde.kglobalaccel.Component.invokeShortcut', 'playpausemedia']);
+
+  await perform(cat.get('search:web'), { run, platform: 'linux', slot: 'cheap flights & hotels?' });
+  assert.deepEqual(runs.pop()[0], ['xdg-open', 'https://duckduckgo.com/?q=cheap%20flights%20%26%20hotels']);
+
+  await perform(cat.get('type:text'), { run, slot: 'hello\nworld\u0007 ok' });
+  assert.deepEqual(runs.pop()[0], ['ydotool', 'type', '--key-delay', '8', '--', 'hello world ok']);
+  assert.equal(typeable('\r\n\t'), '');
+  await assert.rejects(perform(cat.get('type:text'), { run, slot: '\n' }), /nothing to type/);
+
+  const folder = path.join(tmp, 'notes-test');
+  await perform({ ...cat.get('note:new'), folder }, { run, platform: 'linux', slot: 'buy milk and eggs tomorrow', note: undefined });
+  const [opened] = runs.pop();
+  assert.equal(opened[0], 'xdg-open');
+  assert.equal(fs.readFileSync(opened[1], 'utf8'), 'buy milk and eggs tomorrow\n');
+  assert.match(path.basename(opened[1]), /^\d{4}-\d\d-\d\d \d{4} buy milk and eggs tomorrow\.md$/);
+  // A second note with the same words never overwrites the first.
+  await perform({ ...cat.get('note:new'), folder }, { run, platform: 'linux', slot: 'buy milk and eggs tomorrow' });
+  assert.notEqual(runs.pop()[0][1], opened[1]);
+
+  const calls = [];
+  const exec = async (argv) => (calls.push(argv), argv.includes('org.kde.kwin.Scripting.loadScript') ? '(7,)' : '()');
+  await perform({ kind: 'focus', name: 'Firefox', desktop: 'firefox.desktop' }, { exec });
+  assert.ok(calls[0].includes('org.kde.kwin.Scripting.loadScript'));
+  assert.deepEqual(calls[1].slice(-3), ['/Scripting/Script7', '--method', 'org.kde.kwin.Script.run']);
+  assert.match(focusScript('org.kde.konsole.desktop'), /const want = "org\.kde\.konsole";/);
+  assert.equal(describe(cat.get('system:volume-up')), 'turned the volume up');
+  assert.equal(describe(cat.get('search:web'), 'cheap flights'), 'searched the web for "cheap flights"');
+  assert.equal(describe(cat.get('note:new'), 'buy milk tomorrow', { words: false }), 'wrote a note (3 words)');
+});
+
+test('chooser: a note is picked mid-sentence and written with the words once the sentence ends; lock waits for the end', async () => {
+  const c = merge(config(), { actions: { discoverApps: false } });
+  const cat = buildCatalog(c, new Records(c), KDE);
+  assert.ok(cat.has('focus:firefox') && cat.has('note:new'));
+  const done = [];
+  const fetchImpl = async (url, init) => {
+    const body = JSON.parse(init.body);
+    const q = body.questions.target;
+    const heard = body.state.heard_so_far;
+    let choice = 'none';
+    if (q.criteria['note:new']) choice = /note/.test(heard) ? 'note:new' : /lock/.test(heard) ? 'system:lock-screen' : 'none';
+    else choice = Object.keys(q.criteria).find((k) => q.criteria[k] === '"buy milk tomorrow"') || 'none';
+    return { ok: true, json: async () => ({ answers: { target: { choice, probabilities: { [choice]: 0.99 } } } }) };
+  };
+  const ch = new Chooser(c, cat, { execute: async (k, info) => done.push([k, info.slot, info.final]), fetchImpl });
+  ch.key = 'test';
+  ch.reset(0);
+  ch.hear('make a note');
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(done, []);
+  ch.hear('make a note buy milk tomorrow', true);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(done, [['note:new', 'buy milk tomorrow', true]]);
+
+  done.length = 0;
+  ch.reset(0);
+  ch.hear('lock my screen');
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(done, [], 'not mid-sentence');
+  ch.hear('lock my screen', true);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(done, [['system:lock-screen', undefined, true]]);
+
+  const opts = spans('make a note buy milk tomorrow');
+  assert.equal(opts['s3-6'], '"buy milk tomorrow"');
+  assert.ok(Object.keys(spans(Array(80).fill('w').join(' '))).length <= 41);
 });
 
 test('installer: queue command lines and hotkeys are parsed', () => {

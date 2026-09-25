@@ -51,6 +51,14 @@ export const DEFAULTS = {
     // One line per decision in logs/decisions.log (what was chosen, how sure, how fast;
     // the words heard only with logTranscripts).
     decisionLog: true,
+    // PC control: window, media, volume, brightness, screenshot, lock, switching to an open
+    // app (KDE Plasma), notes, web search and typing dictated text (with ydotool).
+    control: true,
+    // Where notes go (default: a Notes folder in the documents folder); opened with the default app.
+    notes: { folder: '' },
+    searchUrl: 'https://duckduckgo.com/?q={q}',
+    // Log what an action would run instead of running it.
+    dryRun: false,
     apps: [],
     discoverApps: true,
     sites: [
@@ -158,6 +166,7 @@ export function loadConfig(file = process.env.VOICE_MODE_CONFIG || path.join(CON
   config.keysFile = expandHome(config.keysFile);
   config.logDir = expandHome(config.logDir);
   config.actions.documents = expandHome(config.actions.documents);
+  config.actions.notes.folder = expandHome(config.actions.notes.folder);
   config.actions.chooser.keyFile = expandHome(config.actions.chooser.keyFile);
   config.sources = expandSources(config.sources || []);
   if (config.personaFile) config.persona = fs.readFileSync(expandHome(config.personaFile), 'utf8').trim();

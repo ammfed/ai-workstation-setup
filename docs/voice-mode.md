@@ -27,7 +27,7 @@ mic ──► realtime voice provider (OpenAI Realtime or Gemini Live) ──►
             │   └── tool results ◄────┴── tool calls: search/read/list records, queue work
             │
             └── words as you speak ──► decision model picks ONE action from a fixed list
-                                        └──► plain code opens it (app, site, folder, record)
+                                        └──► plain code does it (open, switch, volume, note...)
 ```
 
 - **The voice model talks.** It has four tools that read your records and one that queues
@@ -35,9 +35,9 @@ mic ──► realtime voice provider (OpenAI Realtime or Gemini Live) ──►
 - **A decision model chooses, code acts.** While you speak, the partial transcript goes to a
   fast decision model ([Jev](https://openrouter.ai/typesafe/jev-1.13), through OpenRouter's
   Decisions API), which returns one choice from a fixed catalog with a probability per option.
-  Plain code opens the chosen item only when that probability clears a threshold, so the app
-  can open before you finish the sentence. The model never produces a command, a path or a
-  URL: every item and its target come from the catalog.
+  Plain code carries out the chosen item only when that probability clears a threshold, so the
+  app can open before you finish the sentence. The model never produces a command, a path or
+  a URL: every item and its target come from the catalog.
 - **The voice model is told what was opened** (a one-line note on OpenAI, a `desktop_action`
   tool on either provider), so it confirms instead of claiming it cannot open apps.
 
@@ -55,7 +55,7 @@ points at another one). Everything not in the file takes the defaults in `bin/co
 | `persona` / `personaFile` | Who the voice is. The shipped default is neutral and brief; put your own in a file. |
 | `sources` | What it may read: `{ "name", "path", "about"?, "show"? }` for a file or folder (a `*` in a path segment makes one source per match), or `{ "name", "command": [..., "{query}"] }` for a read-only search command (`{regex}` gives the keywords as `a\|b`). `about` tells the model what the source holds; `show: true` lets its top-level notes be shown on screen by voice. |
 | `queue` | `{ "command": [...], "env": {} }`: the request text is added as the last argument. Never run through a shell. |
-| `actions` | `enabled`, `chooser` (`model`, `keyName`, `keyFile`, `threshold` 0.9 mid-sentence, `finalThreshold` 0.7 once you stop), `apps` (extra `{ id, name, desktop \| mac \| command }`), `discoverApps` (installed desktop apps on Linux), `sites` (`{ id, name, url }`, http and https only), `documents` (its folders can be opened), `files`, `decisionLog` (default on: one line per decision in `logs/decisions.log`). |
+| `actions` | `enabled`, `chooser` (`model`, `keyName`, `keyFile`, `threshold` 0.9 mid-sentence, `finalThreshold` 0.7 once you stop), `apps` (extra `{ id, name, desktop \| mac \| command }`), `discoverApps` (installed desktop apps on Linux), `sites` (`{ id, name, url }`, http and https only), `documents` (its folders can be opened), `files`, `decisionLog` (default on: one line per decision in `logs/decisions.log`), `control` (default on: the PC control below), `notes.folder`, `searchUrl` (`{q}` is replaced by the words), `dryRun`. |
 | `audio` | `duplex`: `full` (default: talk over a reply to cut in) or `half` (the mic is muted while a reply plays), `echoCancel` (default on; it wraps the `input` and `output` devices, or the default ones), `input` and `output` device names, `earcons` (a short tone when a conversation starts and ends). |
 | `listen.exitAfterMin` | End the conversation after this many minutes without speech (default 10). |
 | `orb` | `enabled`, `size` (pixels), `corner` (`bottom-right`, `bottom-left`, `top-right`, `top-left`), `margin` (pixels from that corner), `colors` for `idle`, `listening`, `thinking`, `speaking` and `action`, `runner` (the Qt 6 `qml` tool, found by itself when empty). |
@@ -64,6 +64,40 @@ points at another one). Everything not in the file takes the defaults in `bin/co
 Keys never go in `config.json`, an answers file, the repo, a log or a chat. The decision
 model's key is read from `actions.chooser.keyFile` (or the environment) at run time and is
 never copied.
+
+## Controlling the computer
+
+Everything the decision model can pick, and how plain code does it:
+
+| Say something like | What happens | How |
+| --- | --- | --- |
+| "open Firefox", "open my Projects folder", "show me the backlog" | Opens an installed app, a listed site, a documents folder, or a record | the desktop's launcher or default app |
+| "switch to Chrome" | Brings that app's open window to the front | a two-line KWin script (KDE Plasma) |
+| "minimize this", "maximize it", "move it to the other screen", "next desktop" | Acts on the window in front | KWin's own shortcuts |
+| "show the desktop", "show me all my windows" | Show desktop, Overview | KWin's own shortcuts |
+| "turn it up", "volume down", "mute" | Volume | the volume shortcuts (Plasma), else `wpctl` |
+| "pause the music", "next track", "previous" | Media players | the media shortcuts (Plasma), else `playerctl` |
+| "brighter", "dim the screen" | Screen brightness | the brightness shortcuts (Plasma), else `brightnessctl` |
+| "take a screenshot" | A full-screen screenshot | Spectacle's shortcut |
+| "lock my screen" | Locks the screen, only once the sentence has ended | the lock shortcut (Plasma), else `loginctl lock-session` |
+| "make a note: buy milk tomorrow" | Writes a new note with those words and opens it | a new `.md` file in `actions.notes.folder` (default: a `Notes` folder in your documents), opened with the default app |
+| "search the web for cheap flights to Rome" | Opens a web search for those words | `actions.searchUrl` in the default browser |
+| "type hello from voice mode" | Types those words into the window in front, once the sentence has ended | `ydotool` (needs `ydotoold` running); characters follow your keyboard layout |
+
+On KDE Plasma every window, media, volume, brightness, screenshot and lock action is one of
+the desktop's own global shortcuts, invoked over D-Bus exactly as if the key were pressed, so
+it does what the key does and shows the same on-screen display. Actions whose component or
+command is missing are left out of the catalog.
+
+For a note, a search or typing, the model first picks the action (often mid-sentence), then,
+once the sentence has ended, picks which span of your own words is the text: the Decisions
+API returns choices and scores, never free text, so the text is always words you said.
+
+It never deletes or moves files, sends messages or email, buys anything, changes settings,
+runs commands, or closes or quits apps. Those are not in the catalog; asked for one, the
+decision model picks nothing and the voice says voice mode does not do that. Set
+`actions.control` to `false` to keep it to opening things, and `actions.dryRun` to `true` to
+log what each action would run instead of running it.
 
 ## What it may read, and what it never does
 
@@ -76,10 +110,11 @@ never copied.
   at what you are content to send to that provider.
 - Real work goes only through `queue`. The voice model is told it cannot do work itself and
   must say the request is queued.
-- Desktop actions only open catalog items. Folders, files and records must still resolve
-  inside the documents folder or a source; anything executable (scripts, `.desktop` launchers,
-  installers, anything with an execute bit) is refused. Nothing closes, deletes, types or runs
-  arbitrary commands.
+- Desktop actions only do what the catalog lists (see Controlling the computer). Folders,
+  files and records must still resolve inside the documents folder or a source; anything
+  executable (scripts, `.desktop` launchers, installers, anything with an execute bit) is
+  refused. Nothing closes, deletes, moves, sends or runs arbitrary commands, and the only
+  file it writes is a new note (never over an existing file).
 
 ## Barge-in (cutting in on a reply)
 
@@ -185,6 +220,16 @@ Measured on 2026-09-25 on a Linux desktop, over a few thousand local notes, with
   action lands after the sentence, not during it. Gemini also calls its record tools before
   saying anything, while OpenAI speaks a short acknowledgement first, which is most of the
   difference in the first row.
+- PC control, OpenAI Realtime, 3 runs each of a short spoken command (1 to 3 s long), from the
+  start of speech to the action being carried out (medians): "Minimize this window please"
+  2.15 s, "Pause the music" 2.53 s, "Take a screenshot" 2.65 s, "Switch to Chrome" 2.73 s,
+  "Turn the volume down a little" 2.99 s, "Lock my screen" 3.18 s (waits for the end of the
+  sentence), "Type hello from voice mode" 4.40 s, "Make a note: buy milk and eggs tomorrow"
+  4.49 s, "Search the web for cheap flights to Rome in October" 5.59 s. The right action was
+  taken in all 27 runs. Window, media, volume and screenshot commands are decided on a
+  partial transcript; with sentences this short that is just after you stop, and on a longer
+  sentence it is while you are still talking. Notes, searches and typing wait for the end of
+  the sentence, then take about 0.4 s more to pick the words.
 - Launching itself (`kstart`, `gtk-launch`, `xdg-open`, `open`) takes about 10 ms to hand
   off. The window appears when the app has started, which the numbers above do not include.
 - Not included: your microphone and speaker buffers (about 20 and 40 ms as configured).
@@ -201,4 +246,5 @@ Measured on 2026-09-25 on a Linux desktop, over a few thousand local notes, with
   by word, without opening anything.
 - `voice-mode bench` with `"provider": "fake"` runs the whole pipeline with no network, and
   `test/voice-mode.test.mjs` covers the read boundary, the queue, the action refusals, the
-  chooser, barge-in, both provider adapters, the one-conversation lock and the orb's routes.
+  chooser, barge-in, both provider adapters, the one-conversation lock, the orb's routes and
+  every PC-control action's exact command.

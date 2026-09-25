@@ -21,7 +21,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CONFIG_DIR, loadConfig, readKey } from './config.mjs';
 import { Records, TOOLS, runTool } from './records.mjs';
-import { Chooser, buildCatalog, describe, perform } from './desk.mjs';
+import { Chooser, TEXT_KINDS, buildCatalog, describe, perform } from './desk.mjs';
 import { Mic, Speaker, audioTools, has, resample, rms, startEchoCancel, tone } from './audio.mjs';
 import { PROVIDERS, createProvider } from './providers.mjs';
 import { orbRunner, startOrb, toLevel } from './orb.mjs';
@@ -104,12 +104,13 @@ export function releaseLock(file = LOCK) {
 const RULES = `How you work:
 - Your knowledge comes from the records. Use search_records, list_records and read_record before answering anything about work, status, plans, people or past decisions, and say so when the records do not tell you. Never make up a status.
 - You cannot do work yourself. When the user asks for real work (changing code, files, tasks or messages, research, anything that takes effort), call queue_work with the request, then say plainly that it is queued. Never say it is done or that you are doing it.
-- A separate desktop helper opens apps, websites, folders and records on screen while the user is still talking. What it did may already be in the conversation as a line starting "Desktop helper:"; then confirm it in a few words. Otherwise, when the user asked to open, launch or show something, call desktop_action to learn what it opened. If it opened nothing, say you could not tell what to open.
+- A separate desktop helper acts on the computer while the user is still talking: it opens apps, websites, folders and records, switches to an open app, minimizes, maximizes or moves the window in front, shows the desktop or the overview, turns the volume up or down or mutes it, plays, pauses or skips media, changes screen brightness, takes a screenshot, locks the screen, writes a note, searches the web, and types dictated text. What it did may already be in the conversation as a line starting "Desktop helper:"; then confirm it in a few words. Otherwise, when the user asked for one of those, call desktop_action to learn what it did. If it did nothing, say you could not tell what to do.
+- The helper never deletes or moves files, sends messages or email, buys anything, changes settings, runs commands, or closes or quits apps, and neither do you. If asked, say plainly that voice mode does not do that.
 - You are heard, not read: short spoken sentences, no lists, no markdown, no links read aloud. Keep an answer under about twenty seconds unless asked for more.`;
 
 const DESKTOP_TOOL = {
   name: 'desktop_action',
-  description: 'Call when the user asked to open, launch or show something: returns what the desktop helper opened this turn, if anything.',
+  description: 'Call when the user asked the computer to do something (open, switch, volume, media, a note, a search, typing...): returns what the desktop helper did this turn, if anything.',
   parameters: { type: 'object', properties: {} },
 };
 
@@ -275,26 +276,40 @@ export class Session {
     const item = this.catalog.get(key);
     const started = performance.now();
     const turn = this.turn;
-    // The same thing asked for twice in a row (a repeated or split sentence) opens once.
+    const slot = info.slot || '';
+    const done = describe(item, slot);
+    // The same thing opened twice in a row (a repeated or split sentence) opens once;
+    // "volume up" twice is meant twice.
     const last = this.lastAction;
-    if (last && last.key === key && started - last.at < 8000) {
-      turn?.actions.push({ key, done: describe(item), ms: turn ? Math.round(started - turn.t0) : null, repeat: true });
+    if (item.kind !== 'system' && !TEXT_KINDS.has(item.kind) && last && last.key === key && started - last.at < 8000) {
+      turn?.actions.push({ key, done, ms: turn ? Math.round(started - turn.t0) : null, repeat: true });
       return;
     }
     this.lastAction = { key, at: started };
     try {
-      await this.performImpl(item, { roots: this.roots, has });
-      this.provider.note?.(`Desktop helper: ${describe(item)} for the user.`);
-      const rec = { event: 'action', target: key, done: describe(item), words: info.text.split(/\s+/).length, final: info.final, p: info.p };
+      await this.performImpl(item, { roots: this.roots, has, slot, ...(this.config.actions.dryRun ? this.dryRun(slot) : {}) });
+      this.provider.note?.(`Desktop helper: ${done} for the user.`);
+      const rec = { event: 'action', target: key, done, words: info.text.split(/\s+/).length, final: info.final, p: info.p };
+      if (!this.config.logTranscripts) rec.done = describe(item, slot, { words: false });
       rec.ms_from_speech_start = turn ? Math.round(performance.now() - turn.t0) : null;
       rec.launch_ms = Math.round(performance.now() - started);
-      turn?.actions.push({ key, done: describe(item), ms: rec.ms_from_speech_start, at: performance.now() });
+      turn?.actions.push({ key, done, ms: rec.ms_from_speech_start, at: performance.now() });
       this.log(rec);
-      this.onAction?.(describe(item));
+      this.onAction?.(done);
     } catch (err) {
       turn?.actions.push({ key, error: err.message });
       this.log({ event: 'action-failed', target: key, error: err.message });
     }
+  }
+
+  /** actions.dryRun: log what would run instead of running it (the dictated words only with logTranscripts). */
+  dryRun(slot) {
+    const hide = (a) => (slot && !this.config.logTranscripts && String(a).includes(slot.trim().slice(0, 12)) ? '<dictated words>' : a);
+    return {
+      run: async (argv) => this.log({ event: 'dry-run', argv: argv.map(hide) }),
+      exec: async (argv) => (this.log({ event: 'dry-run', argv: argv.slice(0, 9) }), '(0,)'),
+      note: (folder) => path.join(folder, '(dry run).md'),
+    };
   }
 
   async onToolCall(call) {
@@ -314,9 +329,10 @@ export class Session {
   /** What the chooser did this turn, waiting briefly for a decision still in flight. */
   async desktopResult() {
     const until = performance.now() + this.config.actions.chooser.timeoutMs + 500;
-    while ((this.chooser.inflight > 0 || this.chooser.pending) && performance.now() < until) await new Promise((r) => setTimeout(r, 50));
+    const busy = () => this.chooser.inflight > 0 || this.chooser.pending || (this.chooser.textAction && !this.chooser.textAction.done);
+    while (busy() && performance.now() < until) await new Promise((r) => setTimeout(r, 50));
     const acts = this.turn?.actions || [];
-    if (!acts.length) return { opened: null, note: 'Nothing was opened: the request did not clearly match an app, site, folder or record the helper knows.' };
+    if (!acts.length) return { opened: null, note: 'Nothing was done: the request did not clearly match something the helper can do.' };
     return { opened: acts.map((a) => a.done || `failed to open (${a.error})`) };
   }
 
