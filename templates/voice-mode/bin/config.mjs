@@ -72,8 +72,14 @@ export const DEFAULTS = {
   },
   // Read-only sources: { name, path, about?, show? } or { name, command: [..., '{query}'], about? }.
   sources: [],
-  // Where real work is handed over: argv with the request text appended; env is added.
+  // Where real work and deeper questions are handed over: argv with the note appended; env is added.
   queue: { command: [], env: {} },
+  // Answers to hand-offs come back with `<replyCommand> <id> "<answer>"` (see handoff.mjs).
+  handoff: { dir: '', replyCommand: 'voice-mode reply' },
+  // The live briefing (see briefing.mjs), rebuilt at start, every refreshMin minutes and when
+  // a source changes. parts: { name, transcript: <Claude Code project folder>, messages?,
+  // maxChars? } | { name, path, sections?: ['In flight'], maxChars? } | { name, glob, hours?, maxChars? }.
+  briefing: { enabled: true, refreshMin: 3, maxChars: 24000, parts: [] },
   logDir: path.join(CONFIG_DIR, 'logs'),
   // Also write what was said and answered to the run log (never to the metrics file).
   logTranscripts: false,

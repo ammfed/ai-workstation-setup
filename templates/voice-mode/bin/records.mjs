@@ -274,11 +274,6 @@ export const TOOLS = [
     description: 'List the record sources, or the most recently changed records in one source.',
     parameters: { type: 'object', properties: { source: { type: 'string', description: 'optional source name' } } },
   },
-  {
-    name: 'queue_work',
-    description: 'Hand a real piece of work to the assistant (anything that changes files, code, tasks or messages). It is queued, not done now; tell the user it is queued.',
-    parameters: { type: 'object', properties: { request: { type: 'string', description: 'the request in the user\'s words, with any detail they gave' } }, required: ['request'] },
-  },
 ];
 
 export async function runTool(records, name, args = {}) {
@@ -289,8 +284,6 @@ export async function runTool(records, name, args = {}) {
       return records.read(args.name, { tail: !!args.tail });
     case 'list_records':
       return records.list(args.source);
-    case 'queue_work':
-      return records.queue(args.request);
     default:
       return { error: `unknown tool ${name}` };
   }

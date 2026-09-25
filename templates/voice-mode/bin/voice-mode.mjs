@@ -3,6 +3,9 @@
 //
 //   voice-mode start               talk, in this terminal: the mic is open until you stop it
 //   voice-mode toggle              the hotkey: start a conversation in the background, or end it
+//   voice-mode reply <id> "<answer>"
+//                                  answer a hand-off; the voice speaks it (now, or at the next start)
+//   voice-mode briefing            print the live briefing the voice gets (after redaction)
 //   voice-mode stop | status
 //   voice-mode check               what is configured and what is missing (never prints keys)
 //   voice-mode pick "<words>"      which desktop action the chooser would take (opens nothing)
@@ -25,6 +28,8 @@ import { Chooser, TEXT_KINDS, buildCatalog, describe, perform } from './desk.mjs
 import { Mic, Speaker, audioTools, has, resample, rms, startEchoCancel, tone } from './audio.mjs';
 import { PROVIDERS, createProvider } from './providers.mjs';
 import { orbRunner, startOrb, toLevel } from './orb.mjs';
+import { briefingStamp, buildBriefing, redact } from './briefing.mjs';
+import { Deliveries, newId, noteText, savePending, saveReply } from './handoff.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 
@@ -102,11 +107,43 @@ export function releaseLock(file = LOCK) {
 }
 
 const RULES = `How you work:
-- Your knowledge comes from the records. Use search_records, list_records and read_record before answering anything about work, status, plans, people or past decisions, and say so when the records do not tell you. Never make up a status.
-- You cannot do work yourself. When the user asks for real work (changing code, files, tasks or messages, research, anything that takes effort), call queue_work with the request, then say plainly that it is queued. Never say it is done or that you are doing it.
+- Your knowledge comes from the briefing below (when there is one) and the records. When the briefing answers a question, answer at once without tools. For detail it lacks, use search_records, list_records and read_record. Never make up a status.
+- When the briefing and records do not answer a question (including anything outside them: mail, messages, the web, other people's replies), or the user asks for real work (changing, renaming, moving or deleting files, code, tasks or messages, running or checking anything now, research, anything that takes effort), say one short line such as "Let me check" or "On it" and call hand_off in that same reply, with the request in the user's words. Saying you will check without calling hand_off leaves the user waiting for nothing. It goes to your own working session, which can do it; never say the work is done until an answer says so. Every new request needs its own hand_off, even one asked before.
+- When an answer to a hand-off arrives (a line starting "Answer arrived"), tell the user at once, briefly, as your own answer. You are one assistant: never say that someone else, another session or another assistant answered.
 - A separate desktop helper acts on the computer while the user is still talking: it opens apps, websites, folders and records, switches to an open app, minimizes, maximizes or moves the window in front, shows the desktop or the overview, turns the volume up or down or mutes it, plays, pauses or skips media, changes screen brightness, takes a screenshot, locks the screen, writes a note, searches the web, and types dictated text. What it did may already be in the conversation as a line starting "Desktop helper:"; then confirm it in a few words. Otherwise, when the user asked for one of those, call desktop_action to learn what it did. If it did nothing, say you could not tell what to do.
-- The helper never deletes or moves files, sends messages or email, buys anything, changes settings, runs commands, or closes or quits apps, and neither do you. If asked, say plainly that voice mode does not do that.
+- The helper itself never deletes or moves files, sends messages or email, buys anything, changes settings, runs commands, or closes or quits apps. That limits only the helper: such requests are real work, so hand them off.
 - You are heard, not read: short spoken sentences, no lists, no markdown, no links read aloud. Keep an answer under about twenty seconds unless asked for more.`;
+
+// Without a queue command there is no hand-off: those rules give way to a plain refusal.
+const NO_HANDOFF = '- You cannot do work, and you know only the briefing and the records. When asked for more, say plainly that voice mode cannot do that.';
+
+function rules(handoff) {
+  if (handoff) return RULES;
+  const lines = RULES.split('\n').filter((l) => !/hand_off|Answer arrived/.test(l));
+  lines.splice(2, 0, NO_HANDOFF);
+  return lines.join('\n').replace('That limits only the helper: such requests are real work, so hand them off.', 'Neither do you.');
+}
+
+// Provider errors that no retry fixes.
+const FATAL = /credits|billing|quota|api key|unauthori[sz]ed|permission|\b40[13]\b/i;
+
+// A reply that promises to look into something, which only a hand-off can keep.
+export const PROMISE = /\b(let me (check|find out|look into)|i('| wi)ll (check|find out|look into) (that|it|now))\b|^\W*(on it|checking)\b/i;
+
+const HANDOFF_TOOL = {
+  name: 'hand_off',
+  description:
+    'Send a question the briefing and records cannot answer, or any real work, to your own working session, which has the full context and can act. ' +
+    'Its answer comes back into this conversation later; speak it then. Say a short line like "Let me check" before calling this.',
+  parameters: {
+    type: 'object',
+    properties: {
+      request: { type: 'string', description: "the question or request in the user's words, with any detail they gave" },
+      kind: { type: 'string', enum: ['question', 'task'], description: 'question: they want an answer; task: they want something done' },
+    },
+    required: ['request'],
+  },
+};
 
 const DESKTOP_TOOL = {
   name: 'desktop_action',
@@ -151,9 +188,10 @@ function makeLogger(config, { quiet = false } = {}) {
   };
 }
 
-export function instructionsFor(config, records) {
+export function instructionsFor(config, records, briefing = '') {
   const sources = records.describe();
-  return `${config.persona}\n\n${RULES}${sources ? `\n\nRecord sources:\n${sources}` : ''}`;
+  const brief = briefing ? `\n\nBriefing: what you currently know (your own recent conversation, current work and notes; newest last):\n${briefing}` : '';
+  return `${config.persona}\n\n${rules((config.queue.command || []).length > 0)}${sources ? `\n\nRecord sources:\n${sources}` : ''}${brief}`;
 }
 
 // ------------------------------------------------------------------ session
@@ -164,7 +202,7 @@ export function instructionsFor(config, records) {
  * same session runs from a clip (bench, tests) as from the laptop's audio devices.
  */
 export class Session {
-  constructor(config, { provider, records, catalog, chooser, speaker, log, performImpl = perform, script } = {}) {
+  constructor(config, { provider, records, catalog, chooser, speaker, log, performImpl = perform, script, briefing = '' } = {}) {
     this.config = config;
     this.log = log || (() => {});
     this.records = records || new Records(config);
@@ -178,12 +216,13 @@ export class Session {
         log: (r) => this.log(r),
       });
     if (chooser) chooser.execute = (key, info) => this.act(key, info);
-    const tools = [...TOOLS, ...(this.chooser.ready ? [DESKTOP_TOOL] : [])];
+    this.handoff = (config.queue.command || []).length > 0;
+    const tools = [...TOOLS, ...(this.handoff ? [HANDOFF_TOOL] : []), ...(this.chooser.ready ? [DESKTOP_TOOL] : [])];
     const keyName = PROVIDERS[config.provider].keyName;
     this.provider =
       provider ||
       createProvider(config, {
-        instructions: instructionsFor(config, this.records),
+        instructions: instructionsFor(config, this.records, briefing),
         tools,
         key: keyName ? readKey(config.keysFile, keyName) : '',
         script,
@@ -212,10 +251,19 @@ export class Session {
     });
     p.on('audio', (pcm) => this.onReplyAudio(pcm));
     p.on('reply-text', (d) => {
-      if (this.turn) this.turn.reply = (this.turn.reply || '') + d;
+      if (this.aside) this.aside.reply = (this.aside.reply || '') + d;
+      else if (this.turn) this.turn.reply = (this.turn.reply || '') + d;
     });
     p.on('tool-call', (call) => this.onToolCall(call));
-    p.on('reply-done', () => this.finishTurn());
+    p.on('reply-done', () => {
+      const a = this.aside;
+      if (a && !a.heard) this.dropAside('no audio');
+      else if (a) {
+        if (this.config.logTranscripts) this.log({ event: 'handoff-spoken', id: a.id, reply: a.reply });
+        this.aside = null;
+      }
+      this.finishTurn();
+    });
     p.on('interrupted', () => {
       this.speaker?.cut();
       if (this.turn?.firstAudio) this.turn.interrupted = true;
@@ -253,6 +301,14 @@ export class Session {
       if (this.turn) this.turn.interrupted = true;
     }
     if (this.turn && !this.turn.logged) this.finishTurn();
+    if (this.aside && !this.aside.heard) {
+      // OpenAI cancels the answer's reply when the user talks first, so it is tried again later;
+      // Gemini cannot cancel and will give it anyway, so it counts as delivered.
+      if (this.provider.canCancel === false) {
+        this.onAnswer?.(this.aside);
+        this.aside = null;
+      } else this.dropAside('the user spoke first');
+    }
     // The local loudness onset is the true start; a provider's own event can come late
     // (Gemini has none, and its first words arrive after the user stops).
     const t0 = this.onset !== null && (!this.turn || this.onset > this.turn.t0) && now - this.onset < 15000 ? this.onset : now;
@@ -263,6 +319,14 @@ export class Session {
   onReplyAudio(pcm) {
     const now = performance.now();
     const t = this.turn;
+    // The first audio of an answer that came back from a hand-off: the round trip.
+    const a = this.aside;
+    if (a && !a.heard) {
+      a.heard = true;
+      this.speaker?.beginReply();
+      this.log({ event: 'handoff-answer', id: a.id, round_trip_ms: a.askedAt ? Date.now() - a.askedAt : null, speak_ms: Math.round(now - a.sentAt) });
+      this.onAnswer?.(a);
+    }
     if (t && t.firstAudio === null) {
       t.firstAudio = now;
       // The user's speech ended at the last loud frame before the reply began.
@@ -317,13 +381,54 @@ export class Session {
     let result;
     try {
       if (call.name === 'desktop_action') result = await this.desktopResult();
+      else if (call.name === 'hand_off') result = await this.handOff(call.args);
       else result = await runTool(this.records, call.name, call.args);
     } catch (err) {
       result = { error: err.message };
     }
     if (this.turn) (this.turn.tools ||= []).push(call.name);
     this.log({ event: 'tool', name: call.name, ms: Math.round(performance.now() - started), ok: !result?.error });
-    this.provider.toolResult(call, result);
+    // A hand-off after the reply already said "Let me check" needs no second reply.
+    this.provider.toolResult(call, result, { quiet: call.name === 'hand_off' && !!result?.handed_off && this.turn?.firstAudio != null });
+  }
+
+  /** Send a question or task to the assistant's own session, with an id its answer comes back under. */
+  async handOff({ request, kind } = {}) {
+    const text = String(request || '').trim();
+    if (!text) return { handed_off: false, error: 'nothing to hand off' };
+    const id = newId();
+    const k = kind === 'task' ? 'task' : 'question';
+    // The question ended at the user's last loud frame; the round trip is timed from there.
+    const t = this.turn;
+    const end = t && this.lastLoud > t.t0 ? this.lastLoud : t?.vadEnd ?? performance.now();
+    savePending(this.config, { id, kind: k, request: text, askedAt: Math.round(Date.now() - (performance.now() - end)), at: Date.now() });
+    const r = await this.records.queue(noteText({ id, kind: k, request: text, replyCommand: this.config.handoff.replyCommand }));
+    this.log({ event: 'handoff', id, kind: k, sent: !!r.queued, ...(r.error ? { error: r.error } : {}) });
+    if (!r.queued) return { handed_off: false, error: r.error };
+    return { handed_off: true, note: 'Sent. The answer will arrive in this conversation; you already said you are on it, so say nothing more about it now unless asked.' };
+  }
+
+  /** A quiet moment to speak a hand-off's answer: nobody talking, nothing playing or pending. */
+  quiet() {
+    const now = performance.now();
+    return !this.aside && !this.speaker?.busy(300) && now - this.lastLoud > 1200 && (!this.turn || this.turn.logged) && !this.provider.responseActive;
+  }
+
+  /** Speak an answer that came back from a hand-off. False when the provider is busy. */
+  speakAnswer(entry) {
+    const q = entry.question?.request;
+    const text = redact(`Answer arrived${q ? ` to what the user asked earlier ("${q}")` : ''}: ${entry.text}`) + `\nTell the user now, briefly, in your own words, as your own answer.`;
+    if (!this.provider.say?.(text)) return false;
+    this.aside = { id: entry.id, text, askedAt: entry.question?.askedAt, sentAt: performance.now() };
+    return true;
+  }
+
+  /** An answer that was not heard: it stays queued, to be tried again. */
+  dropAside(why) {
+    const a = this.aside;
+    this.aside = null;
+    this.log({ event: 'handoff-unheard', id: a.id, why, ...(why === 'no audio' && this.provider.lastResponse ? { response: this.provider.lastResponse } : {}) });
+    this.onUnheard?.(a);
   }
 
   /** What the chooser did this turn, waiting briefly for a decision still in flight. */
@@ -340,6 +445,11 @@ export class Session {
     const t = this.turn;
     if (!t || t.logged) return;
     t.logged = true;
+    // Said it would check but never called hand_off: hand off the user's own words.
+    if (this.handoff && t.text && !(t.tools || []).includes('hand_off') && PROMISE.test(t.reply || '')) {
+      (t.tools ||= []).push('hand_off (auto)');
+      this.handOff({ request: t.text }).catch(() => {});
+    }
     const end = t.speechEnd ?? t.vadEnd;
     const rec = {
       event: 'turn',
@@ -387,7 +497,16 @@ class Live {
     this.ec = full && c.audio.echoCancel ? startEchoCancel(this.log, c.audio) : null;
     this.halfDuplex = !full || (c.audio.echoCancel && !this.ec);
     if (full && this.halfDuplex) this.log({ event: 'half-duplex', why: 'echo cancellation is unavailable' });
-    await this.connect();
+    try {
+      await this.connect();
+    } catch (err) {
+      // Say why on the orb before it goes, since a hotkey press has no terminal.
+      if (this.orb) {
+        this.lastAction = { label: `Cannot connect: ${err.message.replace(/^[^:]*: /, '').slice(0, 60)}`, at: Date.now() };
+        await new Promise((r) => setTimeout(r, 3500));
+      }
+      throw err;
+    }
     if (this.stopping) return;
     this.mic = new Mic({ rate: this.session.provider.inputRate, device: this.ec?.input || c.audio.input });
     this.mic.on('data', (pcm) => {
@@ -403,6 +522,12 @@ class Live {
         this.stop();
       }
     }, 1000);
+    // Answers to hand-offs (including ones that came back while no session ran) are spoken
+    // in the first quiet moment; the briefing is refreshed when its sources change.
+    this.watch = setInterval(() => {
+      this.deliverAnswers();
+      this.refreshBriefing();
+    }, 250);
     this.server = net.createServer((sock) => {
       sock.setEncoding('utf8');
       sock.on('data', (d) => {
@@ -428,7 +553,8 @@ class Live {
         return await this.connectOnce();
       } catch (err) {
         this.session?.provider.close();
-        if (this.stopping || i >= attempts) throw err;
+        // A key or billing problem does not go away by retrying.
+        if (this.stopping || i >= attempts || FATAL.test(err.message)) throw err;
         this.log({ event: 'connect-retry', attempt: i, error: err.message });
         await new Promise((r) => setTimeout(r, 1000 * 2 ** (i - 1)));
       }
@@ -444,9 +570,15 @@ class Live {
       this.log({ event: 'records-warm', ...this.records.warm() });
       this.catalog = c.actions.enabled ? buildCatalog(c, this.records) : new Map();
     }
-    const session = new Session(c, { log: this.log, records: this.records, catalog: this.catalog });
+    this.refreshBriefing(true);
+    const session = new Session(c, { log: this.log, records: this.records, catalog: this.catalog, briefing: this.briefing });
     // What the decision model just did shows on the orb for a few seconds.
     session.onAction = (done) => (this.lastAction = { label: done[0].toUpperCase() + done.slice(1), at: Date.now() });
+    // A hand-off's answer leaves the queue once heard; one not heard is tried again.
+    session.onAnswer = (a) => this.deliveries?.heard(a.id);
+    session.onUnheard = (a) => {
+      if (this.deliveries?.failed(a.id)) this.log({ event: 'handoff-gave-up', id: a.id });
+    };
     session.speaker = speaker || new Speaker({ rate: session.provider.outputRate, device: this.ec?.output || c.audio.output });
     this.session = session;
     await session.connect();
@@ -455,6 +587,39 @@ class Live {
       this.log({ event: 'disconnected', code: e?.code, reason: e?.reason });
       this.connect(Infinity).catch((err) => this.log({ event: 'reconnect-failed', error: err.message }));
     });
+  }
+
+  /** Rebuild the briefing when a source changed or `refreshMin` passed; push it to the provider. */
+  refreshBriefing(initial = false) {
+    const b = this.config.briefing;
+    if (!b.enabled || !(b.parts || []).length) return;
+    const now = Date.now();
+    if (!initial && now - (this.briefCheckAt || 0) < 5000) return;
+    this.briefCheckAt = now;
+    const stamp = briefingStamp(this.config);
+    if (!initial && stamp === this.briefStamp && now - this.briefAt < b.refreshMin * 60000) return;
+    if (initial && this.briefing !== undefined) return;
+    const { text, missing, chars } = buildBriefing(this.config);
+    this.briefStamp = stamp;
+    this.briefAt = now;
+    if (text === this.briefing) return;
+    this.briefing = text;
+    this.log({ event: 'briefing', chars, ...(missing.length ? { missing } : {}) });
+    if (!initial && this.session) this.session.provider.setInstructions?.(instructionsFor(this.config, this.records, text));
+  }
+
+  deliverAnswers() {
+    const s = this.session;
+    if (!s || !this.mic || !s.quiet()) return;
+    this.deliveries ||= new Deliveries(this.config);
+    let next;
+    try {
+      next = this.deliveries.next();
+    } catch {
+      return;
+    }
+    if (!next || !s.speakAnswer(next)) return;
+    this.lastAction = { label: 'Answer ready', at: Date.now() };
   }
 
   /**
@@ -485,6 +650,7 @@ class Live {
     if (this.stopping) return;
     this.stopping = true;
     clearInterval(this.idle);
+    clearInterval(this.watch);
     this.mic?.stop();
     this.orb?.stop();
     this.server?.close();
@@ -639,7 +805,12 @@ function check(config) {
   }
   const records = new Records(config);
   for (const s of config.sources) add(s.command ? has(s.command[0]) : fs.existsSync(s.path), `source "${s.name}"`);
-  add(!!(config.queue.command || []).length && (path.isAbsolute(config.queue.command[0]) ? fs.existsSync(config.queue.command[0]) : has(config.queue.command[0])), 'queue command');
+  add(!!(config.queue.command || []).length && (path.isAbsolute(config.queue.command[0]) ? fs.existsSync(config.queue.command[0]) : has(config.queue.command[0])), 'queue command (hand-off)');
+  if ((config.queue.command || []).length) rows.push(`     answers come back with: ${config.handoff.replyCommand} <id> "<answer>"`);
+  if (config.briefing.enabled && (config.briefing.parts || []).length) {
+    const b = buildBriefing(config);
+    add(!b.missing.length, `briefing: ${config.briefing.parts.length} parts, ${b.chars} characters${b.missing.length ? ` (cannot read: ${b.missing.join(', ')})` : ''}`);
+  }
   if (config.actions.enabled) {
     const catalog = buildCatalog(config, records);
     const chooser = new Chooser(config, catalog, {});
@@ -753,6 +924,26 @@ async function main(argv) {
       child.unref();
       return 0;
     }
+    case 'reply': {
+      // The assistant's answer to a hand-off: voice-mode reply <id> "<answer>"
+      // Raw words, so an answer may contain anything, "--" included.
+      const [id, ...words] = argv.slice(argv.indexOf('reply') + 1);
+      try {
+        saveReply(config, id, words.join(' '));
+      } catch (err) {
+        console.error(`voice-mode reply: ${err.message}`);
+        return 2;
+      }
+      const running = await send('status');
+      console.log(running ? `${id}: queued; it will be spoken as soon as the user is not talking` : `${id}: saved; no conversation is running, so the next one starts with it`);
+      return 0;
+    }
+    case 'briefing': {
+      const b = buildBriefing(config);
+      console.log(b.text || '(empty: add parts to "briefing" in the config)');
+      console.error(`\n${b.chars} characters${b.missing.length ? `; could not read: ${b.missing.join(', ')}` : ''}`);
+      return 0;
+    }
     case 'status': {
       const r = await send('status');
       console.log(r || (lockHolder() ? 'starting' : 'not running'));
@@ -767,7 +958,7 @@ async function main(argv) {
     case 'latency':
       return latency(config);
     default:
-      console.error(`voice-mode: unknown command "${cmd}" (start, toggle, stop, status, check, pick, bench, latency)`);
+      console.error(`voice-mode: unknown command "${cmd}" (start, toggle, stop, status, reply, briefing, check, pick, bench, latency)`);
       return 2;
   }
 }

@@ -2,8 +2,9 @@
 
 The `voice-mode` module (opt-in, Linux and macOS) lets you speak to your assistant and hear
 it answer in real time, speech to speech. It answers from your own records, notes and files
-(read-only), hands real work to your assistant's inbox and says out loud that it is queued,
-and opens apps, websites, folders and records on your desktop while you are still talking.
+(read-only) and from a live briefing of what your assistant is working on, hands anything
+deeper or any real work to your assistant's own session and speaks the answer when it comes
+back, and opens apps, websites, folders and records on your desktop while you are still talking.
 
 It is a handful of dependency-free Node scripts in `~/.config/ai-workstation-setup/voice/bin/`,
 one `config.json` next to them, and the system's own audio tools (`parecord` and `pacat`
@@ -24,14 +25,15 @@ to end, you talk, it answers, and you cut in on an answer by talking over it.
 ```
 mic ──► realtime voice provider (OpenAI Realtime or Gemini Live) ──► speaker
             │   ▲                     │
-            │   └── tool results ◄────┴── tool calls: search/read/list records, queue work
+            │   └── tool results ◄────┴── tool calls: search/read/list records, hand off
             │
             └── words as you speak ──► decision model picks ONE action from a fixed list
                                         └──► plain code does it (open, switch, volume, note...)
 ```
 
-- **The voice model talks.** It has four tools that read your records and one that queues
-  work. It has no tool that changes a file, runs a command or sends a message.
+- **The voice model talks.** Its instructions carry a live briefing (see below). It has tools
+  that read your records and one that hands a question or task to your assistant's own
+  session. It has no tool that changes a file, runs a command or sends a message.
 - **A decision model chooses, code acts.** While you speak, the partial transcript goes to a
   fast decision model ([Jev](https://openrouter.ai/typesafe/jev-1.13), through OpenRouter's
   Decisions API), which returns one choice from a fixed catalog with a probability per option.
@@ -54,7 +56,9 @@ points at another one). Everything not in the file takes the defaults in `bin/co
 | `providers.gemini` | `model` (`gemini-3.8-live`), `voice`, `silenceMs`. |
 | `persona` / `personaFile` | Who the voice is. The shipped default is neutral and brief; put your own in a file. |
 | `sources` | What it may read: `{ "name", "path", "about"?, "show"? }` for a file or folder (a `*` in a path segment makes one source per match), or `{ "name", "command": [..., "{query}"] }` for a read-only search command (`{regex}` gives the keywords as `a\|b`). `about` tells the model what the source holds; `show: true` lets its top-level notes be shown on screen by voice. |
-| `queue` | `{ "command": [...], "env": {} }`: the request text is added as the last argument. Never run through a shell. |
+| `queue` | `{ "command": [...], "env": {} }`: how a hand-off reaches your assistant; the note is added as the last argument. Never run through a shell. Without it there is no hand-off. |
+| `handoff` | `replyCommand` (default `voice-mode reply`: the command written into each note; give the full path if your assistant's shell does not have it on PATH), `dir` (the reply queue; default `handoff/` next to the config). |
+| `briefing` | `enabled`, `refreshMin` (3), `maxChars` (24000 in all), `parts` (see Briefing and hand-off). |
 | `actions` | `enabled`, `chooser` (`model`, `keyName`, `keyFile`, `threshold` 0.9 mid-sentence, `finalThreshold` 0.7 once you stop), `apps` (extra `{ id, name, desktop \| mac \| command }`), `discoverApps` (installed desktop apps on Linux), `sites` (`{ id, name, url }`, http and https only), `documents` (its folders can be opened), `files`, `decisionLog` (default on: one line per decision in `logs/decisions.log`), `control` (default on: the PC control below), `notes.folder`, `searchUrl` (`{q}` is replaced by the words), `dryRun`. |
 | `audio` | `duplex`: `full` (default: talk over a reply to cut in) or `half` (the mic is muted while a reply plays), `echoCancel` (default on; it wraps the `input` and `output` devices, or the default ones), `input` and `output` device names, `earcons` (a short tone when a conversation starts and ends). |
 | `listen.exitAfterMin` | End the conversation after this many minutes without speech (default 10). |
@@ -108,13 +112,60 @@ log what each action would run instead of running it.
   thousand notes takes a few hundred milliseconds.
 - **The realtime provider sees what the tools return**, plus your voice. Point `sources` only
   at what you are content to send to that provider.
-- Real work goes only through `queue`. The voice model is told it cannot do work itself and
-  must say the request is queued.
+- Real work goes only through `queue`, as a hand-off note. The voice model is told never to
+  say work is done until an answer says so.
+- The briefing and every spoken answer pass a redactor first: keys (`sk-...`, GitHub, AWS,
+  Google, Slack), JSON web tokens, private keys, authorization and bearer headers,
+  `user:password@` in links, `NAME=value` and `"name": "value"` where the name says key,
+  token, secret or password, "password is ...", and any long random-looking token.
 - Desktop actions only do what the catalog lists (see Controlling the computer). Folders,
   files and records must still resolve inside the documents folder or a source; anything
   executable (scripts, `.desktop` launchers, installers, anything with an execute bit) is
   refused. Nothing closes, deletes, moves, sends or runs arbitrary commands, and the only
   file it writes is a new note (never over an existing file).
+
+## Briefing and hand-off
+
+Without context, a voice model is a stranger. Two things make it the assistant you work with.
+
+**The briefing.** At the start of a conversation, and again whenever a source changes (checked
+every few seconds) or `refreshMin` passes, voice mode builds a briefing and puts it in the
+model's instructions. Each part has its own budget (`maxChars`, default 4000):
+
+| Part | What it takes |
+| --- | --- |
+| `{ "name", "transcript": "<folder>", "messages"? }` | The newest `.jsonl` in a Claude Code project folder (`~/.claude/projects/<project>`): only what you typed and what the assistant wrote back, never tool calls, tool output, thinking or harness notices; the newest `messages` (30) that fit. |
+| `{ "name", "path", "sections"? }` | A text file, or only its named `## ` sections (a backlog's open work, say). |
+| `{ "name", "glob", "hours"? }` | The newest line of each matching log changed within `hours` (24): live status logs. |
+
+`voice-mode briefing` prints exactly what the model would get, redacted, with its size.
+
+**Hand-off.** When the briefing and records do not answer, or you ask for something to be
+done, the voice says one short line ("Let me check") and calls `hand_off`. That sends your
+assistant one note through `queue`:
+
+```
+Voice question vq-3f9a2c: "<your request>" -- the user is waiting in voice mode; answer in one to three short spoken sentences with: voice-mode reply vq-3f9a2c "<answer>"
+```
+
+(`Voice request` for work.) Your assistant answers by running the command in the note:
+
+```sh
+voice-mode reply vq-3f9a2c "It merged this morning; CI is green."
+```
+
+The answer lands in a file-based reply queue (`handoff/replies/`, no server). A running
+conversation speaks it in the next quiet moment, as its own answer, and the orb shows
+"Answer ready"; if no conversation is running, the next one starts with it. Spoken answers
+move to `handoff/spoken/`. A wrong id, or one already answered, makes `reply` fail.
+
+Two safety nets: a reply that promises to check ("Let me check", "On it") without calling
+`hand_off` hands off your words anyway, and an answer that gets a reply with no sound is said
+once more. An answer you talk over is not repeated; it stays in the conversation for the model.
+
+The run log records `handoff` (id, sent), `handoff-answer` with `round_trip_ms` (the end of
+your question to the first sound of the answer) and `speak_ms` (answer queued to heard), and
+`handoff-unheard` when an answer was not heard.
 
 ## Barge-in (cutting in on a reply)
 
@@ -230,6 +281,14 @@ Measured on 2026-09-25 on a Linux desktop, over a few thousand local notes, with
   partial transcript; with sentences this short that is just after you stop, and on a longer
   sentence it is while you are still talking. Notes, searches and typing wait for the end of
   the sentence, then take about 0.4 s more to pick the words.
+- Hand-off, OpenAI Realtime, with a stand-in for the assistant that answered 1.0 s after
+  each note arrived: from the end of the question to the first sound of the answer, 4.72 s
+  median (4.08 to 5.46, 8 runs). That is about 1.5 s to "Let me check", the stand-in's 1.1 s,
+  the wait for a quiet moment after the acknowledgement, and 0.65 s median from queuing the
+  answer to hearing it. Your real assistant's own time to answer comes on top. A reply that
+  only promised to check was handed off by the safety net in both runs where that happened.
+  In 4 of 13 hand-offs the provider returned a failed reply for the answer; answers are now
+  kept and tried again until heard.
 - Launching itself (`kstart`, `gtk-launch`, `xdg-open`, `open`) takes about 10 ms to hand
   off. The window appears when the app has started, which the numbers above do not include.
 - Not included: your microphone and speaker buffers (about 20 and 40 ms as configured).
@@ -241,10 +300,12 @@ Measured on 2026-09-25 on a Linux desktop, over a few thousand local notes, with
   failed call gives its reason (for example a connect timeout). The words heard are added
   only when `logTranscripts` is on. `tail -f` it while you talk to watch the decisions arrive.
 - `voice-mode check` lists the config, which keys are set (never their values), audio tools,
-  sources, the queue command and the action catalog.
+  sources, the queue command and its reply command, the briefing's size and the action catalog.
+- `voice-mode briefing` prints the briefing exactly as the model gets it, redacted.
 - `voice-mode pick "open my documents folder"` shows what the decision model would open, word
   by word, without opening anything.
 - `voice-mode bench` with `"provider": "fake"` runs the whole pipeline with no network, and
   `test/voice-mode.test.mjs` covers the read boundary, the queue, the action refusals, the
-  chooser, barge-in, both provider adapters, the one-conversation lock, the orb's routes and
-  every PC-control action's exact command.
+  chooser, barge-in, both provider adapters, the one-conversation lock, the orb's routes,
+  every PC-control action's exact command, the redactor, the briefing's parts and the
+  hand-off round trip with its reply queue.

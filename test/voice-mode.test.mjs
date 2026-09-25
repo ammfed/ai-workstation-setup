@@ -1,6 +1,6 @@
 // Tests for templates/voice-mode/bin against throwaway folders, a fake realtime provider, a
 // stubbed decision model and a stubbed launcher: no network, no audio devices, nothing opened.
-// Covers what may be read (and what never is), how work is queued, which actions can run,
+// Covers what may be read (and what never is), how questions and work are handed off (and answers come back), which actions can run,
 // how the chooser decides mid-sentence, barge-in, and both provider adapters' event handling.
 // Run: node --test test/voice-mode.test.mjs
 
@@ -17,11 +17,13 @@ const { merge, parseEnvFile, readKey, expandGlob, loadConfig, DEFAULTS } = await
 const { Records, runTool } = await import(path.join(bin, 'records.mjs'));
 const { Chooser, buildCatalog, criteria, perform, controlActions, spans, focusScript, describe, typeable, SYSTEM } = await import(path.join(bin, 'desk.mjs'));
 const { OpenAIRealtime, GeminiLive, FakeProvider } = await import(path.join(bin, 'providers.mjs'));
-const { Session, streamClip, speechBounds, acquireLock, claimLock, releaseLock, lockHolder, decisionLine } = await import(path.join(bin, 'voice-mode.mjs'));
+const { Session, PROMISE, streamClip, speechBounds, acquireLock, claimLock, releaseLock, lockHolder, decisionLine } = await import(path.join(bin, 'voice-mode.mjs'));
 const net = await import('node:net');
 const { spawn } = await import('node:child_process');
 const { resample, tone, Speaker } = await import(path.join(bin, 'audio.mjs'));
 const { startOrb, toLevel } = await import(path.join(bin, 'orb.mjs'));
+const { redact, transcriptTail, sections, buildBriefing } = await import(path.join(bin, 'briefing.mjs'));
+const { noteText, savePending, saveReply, waitingReplies, markSpoken, handoffDir, Deliveries } = await import(path.join(bin, 'handoff.mjs'));
 const { parseCommand, qtKey } = await import(path.join(repoRoot, 'modules', 'voice-mode', 'module.mjs'));
 
 // Resolved, because macOS's temp folder is a symlink and opened paths are resolved ones.
@@ -52,6 +54,7 @@ function config(over = {}) {
     logDir: path.join(tmp, 'logs'),
     sources: [{ name: 'notes', path: data, show: true, about: 'records' }],
     queue: { command: [process.execPath, queueScript, '--from-voice'], env: {} },
+    handoff: { dir: path.join(tmp, 'handoff'), replyCommand: 'voice-mode reply' },
     actions: { documents: docs, discoverApps: false, apps: [{ id: 'firefox', name: 'Firefox web browser', desktop: 'firefox.desktop' }], sites: [{ id: 'mail', name: 'Mail', url: 'https://mail.example.com' }] },
   }), over);
 }
@@ -114,11 +117,11 @@ test('records: read stays inside the sources, refusing traversal and symlinks ou
   assert.ok(r.list().recent.some((x) => x.record === 'notes/backlog.md'));
 });
 
-test('records: queue_work passes the request as one argument, never through a shell', async () => {
+test('records: the queue command gets the note as one argument, never through a shell', async () => {
   fs.rmSync(queued, { force: true });
   const r = new Records(config());
   const req = 'tidy the learnings; rm -rf ~ $(whoami) "quoted"';
-  assert.deepEqual(await runTool(r, 'queue_work', { request: req }), { queued: true });
+  assert.deepEqual(await r.queue(req), { queued: true });
   assert.equal(fs.readFileSync(queued, 'utf8'), `--from-voice\n${req}\n=====\n`);
   assert.deepEqual(await new Records(config({ queue: { command: [] } })).queue('x'), { queued: false, error: 'no queue command is configured' });
 });
@@ -237,19 +240,210 @@ test('session: speech opens the app before the sentence ends, the reply is timed
   assert.ok(logs.some((l) => l.event === 'turn'));
 });
 
-test('session: real work is queued through the configured command and reported as queued', async () => {
+test('session: a hand-off sends one note with an id and the reply command, and its answer is spoken as the reply', async () => {
   fs.rmSync(queued, { force: true });
   const c = config();
-  const script = [{ text: 'queue a task to tidy the learnings', tools: [{ name: 'queue_work', args: { request: 'tidy the learnings' } }], reply: 'Queued.' }];
+  fs.rmSync(handoffDir(c), { recursive: true, force: true });
+  const script = [{ text: 'is the login fix merged yet', tools: [{ name: 'hand_off', args: { request: 'is the login fix merged yet', kind: 'question' } }], reply: 'Let me check.' }];
+  const logs = [];
+  const session = new Session(c, { script, log: (r) => logs.push(r), performImpl: async () => assert.fail('nothing to open') });
+  session.chooser.key = 'test';
+  session.chooser.fetch = fakeDecisions([]);
+  assert.ok(session.provider.tools.some((t) => t.name === 'hand_off'));
+  await session.connect();
+  const turn = await streamClip(session, clip(session.provider.inputRate), { timeoutMs: 8000 });
+  assert.deepEqual(turn.tools, ['hand_off']);
+  const note = fs.readFileSync(queued, 'utf8').split('\n')[1];
+  const id = /^Voice question (vq-[0-9a-f]{6}): "is the login fix merged yet" -- .* with: voice-mode reply vq-[0-9a-f]{6} "<answer>"$/.exec(note)?.[1];
+  assert.ok(id, note);
+  // The answer comes back through the reply queue and is spoken in a quiet moment.
+  saveReply(c, id, 'Yes, it merged this morning.');
+  const [waiting] = waitingReplies(c);
+  assert.equal(waiting.question.request, 'is the login fix merged yet');
+  session.lastLoud = 0;
+  assert.ok(session.quiet());
+  assert.ok(session.speakAnswer(waiting));
+  markSpoken(c, id);
+  assert.equal(session.quiet(), false, 'one answer at a time');
+  const until = performance.now() + 4000;
+  while (!logs.some((l) => l.event === 'handoff-answer') && performance.now() < until) await new Promise((r) => setTimeout(r, 20));
+  session.close();
+  assert.match(session.provider.said[0], /Answer arrived .*"is the login fix merged yet".*: Yes, it merged this morning\./);
+  assert.match(session.provider.said[0], /as your own answer/);
+  const heard = logs.find((l) => l.event === 'handoff-answer');
+  assert.equal(heard.id, id);
+  assert.ok(heard.round_trip_ms > 0 && heard.speak_ms >= 0, JSON.stringify(heard));
+  assert.deepEqual(waitingReplies(c), []);
+  assert.throws(() => saveReply(c, id, 'again'), /already answered and spoken/);
+});
+
+test('session: an answer not heard stays queued, is tried again after a pause, then given up on', () => {
+  const c = config();
+  fs.rmSync(handoffDir(c), { recursive: true, force: true });
+  const logs = [];
+  const session = new Session(c, { script: [], log: (r) => logs.push(r) });
+  const said = [];
+  session.provider.say = (text) => said.push(text) > 0;
+  const deliveries = new Deliveries(c, { maxTries: 3, backoffMs: 1000 });
+  session.onUnheard = (a) => deliveries.failed(a.id, 0);
+  session.onAnswer = (a) => deliveries.heard(a.id);
+  savePending(c, { id: 'vq-00000a', request: 'q', askedAt: Date.now() });
+  saveReply(c, 'vq-00000a', 'yes');
+  assert.ok(session.speakAnswer(deliveries.next(0)));
+  session.provider.emit('reply-done');
+  assert.equal(session.aside, null);
+  assert.deepEqual(logs.filter((l) => l.event === 'handoff-unheard').map((l) => l.why), ['no audio']);
+  assert.equal(deliveries.next(500), null, 'waits before trying again');
+  assert.equal(deliveries.next(1000).id, 'vq-00000a');
+  // The user talking before it starts: not heard either.
+  session.speakAnswer(deliveries.next(1000));
+  session.onSpeechStart();
+  assert.equal(logs.filter((l) => l.event === 'handoff-unheard').at(-1).why, 'the user spoke first');
+  assert.equal(deliveries.next(1500), null, 'a longer pause the second time');
+  // A provider that cannot cancel gives the answer anyway: delivered, not tried again.
+  session.provider.canCancel = false;
+  const delivered = [];
+  session.onAnswer = (x) => delivered.push(x.id);
+  session.speakAnswer(deliveries.next(10000));
+  session.onSpeechStart();
+  assert.deepEqual(delivered, ['vq-00000a']);
+  session.onAnswer = (x) => deliveries.heard(x.id);
+  session.provider.canCancel = undefined;
+  saveReply(c, 'vq-00000a', 'yes');
+  assert.equal(deliveries.failed('vq-00000a', 0), true, 'third miss: given up');
+  assert.deepEqual(waitingReplies(c), []);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(handoffDir(c), 'spoken', 'vq-00000a.json'), 'utf8')).unheard, true);
+  // Heard: out of the queue at once.
+  savePending(c, { id: 'vq-00000b', request: 'q2' });
+  saveReply(c, 'vq-00000b', 'no');
+  session.speakAnswer(deliveries.next());
+  session.onReplyAudio(Buffer.alloc(960));
+  assert.deepEqual(waitingReplies(c), []);
+  session.close();
+});
+
+test('session: a reply that promises to check without calling hand_off hands off the words itself', async () => {
+  fs.rmSync(queued, { force: true });
+  const c = config();
+  const script = [{ text: 'did the vendor reply', reply: 'Let me check.' }];
   const session = new Session(c, { script, performImpl: async () => assert.fail('nothing to open') });
   session.chooser.key = 'test';
   session.chooser.fetch = fakeDecisions([]);
+  session.provider.on('reply-text', () => {});
   await session.connect();
+  session.provider.streamReply = function (spec) {
+    this.emit('reply-text', spec.reply);
+    this.emit('reply-done');
+  };
   const turn = await streamClip(session, clip(session.provider.inputRate), { timeoutMs: 8000 });
+  await new Promise((r) => setTimeout(r, 300));
   session.close();
-  assert.deepEqual(turn.tools, ['queue_work']);
-  assert.match(fs.readFileSync(queued, 'utf8'), /tidy the learnings/);
-  assert.equal(turn.action, null);
+  assert.deepEqual(turn.tools, ['hand_off (auto)']);
+  assert.match(fs.readFileSync(queued, 'utf8'), /^Voice question vq-[0-9a-f]{6}: "did the vendor reply"/m);
+  for (const yes of ['Let me check.', 'On it, captain.', "I'll look into it now.", 'Checking now.']) assert.match(yes, PROMISE, yes);
+  for (const no of ['The team is working on it.', 'It is checking the build.', 'You can check the backlog.']) assert.doesNotMatch(no, PROMISE, no);
+});
+
+test('session: without a queue command there is no hand_off tool', () => {
+  const session = new Session(config({ queue: { command: [] } }), { script: [] });
+  assert.ok(!session.provider.tools.some((t) => t.name === 'hand_off'));
+  assert.doesNotMatch(session.provider.instructions, /hand_off|hand them off|Answer arrived/);
+  assert.match(session.provider.instructions, /voice mode cannot do that/);
+  assert.match(new Session(config(), { script: [] }).provider.instructions, /call hand_off in that same reply/);
+  session.close();
+});
+
+// ------------------------------------------------------------------ hand-off and briefing
+
+test('handoff: the note format, and reply validation', () => {
+  const c = config();
+  assert.equal(
+    noteText({ id: 'vq-0a1b2c', kind: 'task', request: 'draft\n the  summary', replyCommand: 'voice-mode reply' }),
+    'Voice request vq-0a1b2c: "draft the summary" -- the user is waiting in voice mode; answer in one to three short spoken sentences with: voice-mode reply vq-0a1b2c "<answer>"',
+  );
+  assert.throws(() => saveReply(c, '../x', 'hi'), /not a voice hand-off id/);
+  assert.throws(() => saveReply(c, 'vq-ffffff', 'hi'), /no voice hand-off vq-ffffff/);
+  savePending(c, { id: 'vq-000001', request: 'first', at: 1 });
+  savePending(c, { id: 'vq-000002', request: 'second', at: 2 });
+  assert.throws(() => saveReply(c, 'vq-000001', '  '), /empty/);
+  assert.throws(() => saveReply(c, 'vq-000001', 'x'.repeat(4001)), /4000/);
+  saveReply(c, 'vq-000002', 'two');
+  const t = Date.now();
+  while (Date.now() === t);
+  saveReply(c, 'vq-000001', 'one');
+  const w = waitingReplies(c);
+  assert.deepEqual(w.map((r) => r.text), ['two', 'one'], 'in the order the answers came');
+  for (const r of w) markSpoken(c, r.id);
+  assert.deepEqual(waitingReplies(c), []);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(handoffDir(c), 'spoken', 'vq-000001.json'), 'utf8')).reply.text, 'one');
+});
+
+test('redact: keys, tokens, passwords and secret lines go; ordinary ids stay', () => {
+  // Built from pieces so no key-shaped literal sits in the repo for secret scanners to flag.
+  const k = (...parts) => parts.join('');
+  const cases = [
+    [k('the one sk', '-', 'proj-AbC123dEf456GhI789jKl0 here'), /sk-proj/],
+    [k('OPENROUTER_API_KEY=sk-', 'or-v1-0123456789abcdef0123'), /0123456789abcdef/],
+    [k('export GEMINI_API_KEY="AI', 'zaSyA-1234567890abcdefghijklmnopqrstu"'), /zaSy/],
+    [k('AI', 'zaSyA-1234567890abcdefghijklmnopqrstu alone'), /zaSy/],
+    ['DB_PASSWORD=hunter2', /hunter2/],
+    ['{"client_secret": "s3cr3t-value"}', /s3cr3t/],
+    ['Authorization: Bearer abcdefghijklmnop.qrstuv', /abcdefghijklmnop/],
+    [k('curl -H "x-api', '-key', ': ', '9f8e7d', '6c5b4a"'), /9f8e7d6c5b4a/],
+    ['my password is correcthorse', /correcthorse/],
+    ['git clone https://me:tok3n-value@example.com/r.git', /tok3n/],
+    [k('gh', 'p_0123456789abcdefghijABCDEFGHIJ012345'), /p_0123/],
+    [k('AK', 'IAQWERTYUIOPASDFGH'), /QWERTY/],
+    [k('ey', 'JhbGciOiJIUzI1NiJ9.ey', 'JzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U'), /JhbGci/],
+    [k('-----BEGIN OPENSSH PRIV', 'ATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIV', 'ATE KEY-----'), /b3BlbnNz/],
+    [k('token', ': ', 'Xy7Qw2Er9Ty4Ui8Op3As6Df1Gh5Jk0Lz'), /Xy7Qw2Er9/],
+  ];
+  for (const [text, gone] of cases) assert.doesNotMatch(redact(text), gone, text);
+  const safe = 'commit 9d7fe7c0a1b2c3d4e5f60718293a4b5c6d7e8f90 on run 550e8400-e29b-41d4-a716-446655440000, PR 11, the key decision, tokens: 350k, password reset flow';
+  assert.equal(redact(safe), safe);
+});
+
+test('briefing: transcript text only, sections, globs, budgets, and redaction', () => {
+  const dir = path.join(tmp, 'brief');
+  const proj = path.join(dir, 'project');
+  fs.mkdirSync(proj, { recursive: true });
+  const lines = [
+    { type: 'user', message: { content: 'what is left on the login fix? <system-reminder>hidden</system-reminder>' } },
+    { type: 'user', isMeta: true, message: { content: 'meta' } },
+    { type: 'user', message: { content: '<task-notification>done</task-notification>' } },
+    { type: 'assistant', message: { content: [{ type: 'thinking', thinking: 'private' }, { type: 'tool_use', name: 'Bash', input: {} }, { type: 'text', text: `Only the review. Key sk-${'proj'}-AbC123dEf456GhI789jKl0.` }] } },
+    { type: 'user', message: { content: [{ type: 'tool_result', content: 'tool output' }] } },
+    { type: 'assistant', isSidechain: true, message: { content: [{ type: 'text', text: 'side' }] } },
+  ];
+  fs.writeFileSync(path.join(proj, 'old.jsonl'), '{"type":"user","message":{"content":"older session"}}\n');
+  fs.utimesSync(path.join(proj, 'old.jsonl'), new Date(0), new Date(0));
+  fs.writeFileSync(path.join(proj, 'new.jsonl'), `partial line}\n${lines.map((l) => JSON.stringify(l)).join('\n')}\n`);
+  assert.deepEqual(transcriptTail(path.join(proj, 'new.jsonl')), [
+    { who: 'User', text: 'what is left on the login fix?' },
+    { who: 'Assistant', text: `Only the review. Key sk-${'proj'}-AbC123dEf456GhI789jKl0.` },
+  ]);
+  const md = '# Backlog\n\n## In flight\n- login fix\n\n## Done\n- old thing\n\n## Queued\n- summary\n';
+  fs.writeFileSync(path.join(dir, 'backlog.md'), md);
+  assert.equal(sections(md, ['In flight', 'queued']), '## In flight\n- login fix\n\n## Queued\n- summary');
+  fs.mkdirSync(path.join(dir, 'state'));
+  fs.writeFileSync(path.join(dir, 'state', 'login.status'), 'working: started\nworking: tests green\n');
+  fs.writeFileSync(path.join(dir, 'state', 'stale.status'), 'done: long ago\n');
+  fs.utimesSync(path.join(dir, 'state', 'stale.status'), new Date(0), new Date(0));
+  const b = buildBriefing(config({ briefing: { parts: [
+    { name: 'Recent conversation', transcript: proj },
+    { name: 'Current work', path: path.join(dir, 'backlog.md'), sections: ['In flight'] },
+    { name: 'Live status', glob: path.join(dir, 'state', '*.status'), hours: 24 },
+    { name: 'Gone', path: path.join(dir, 'missing.md') },
+  ] } }));
+  assert.deepEqual(b.missing, ['Gone']);
+  assert.match(b.text, /## Recent conversation\nUser: what is left on the login fix\?\n\nAssistant: Only the review\. Key \[redacted key\]\./);
+  assert.match(b.text, /## Current work\n## In flight\n- login fix/);
+  assert.match(b.text, /## Live status\n- login: working: tests green/);
+  assert.doesNotMatch(b.text, /older session|private|tool output|side|hidden|old thing|long ago|sk-proj/);
+  // A budget keeps the newest messages.
+  const small = buildBriefing(config({ briefing: { parts: [{ name: 'c', transcript: proj, maxChars: 80 }] } }));
+  assert.doesNotMatch(small.text, /User:/);
+  assert.match(small.text, /Assistant: Only the review/);
 });
 
 test('session: talking over a reply cuts it (barge-in), and the provider is told how much was heard', async () => {
@@ -300,6 +494,37 @@ test('openai adapter: session setup, mid-speech words, tool calls, and barge-in 
   p.onMessage({ type: 'input_audio_buffer.speech_started', item_id: 'u3' });
   p.toolResult({ id: 'c2' }, { ok: 1 });
   assert.deepEqual(sent.map((m) => m.type), ['conversation.item.create']);
+
+  // A quiet result (a hand-off after "Let me check") ends the reply without asking for more.
+  sent.length = 0;
+  ev.length = 0;
+  p.onMessage({ type: 'response.created' });
+  p.onMessage({ type: 'response.output_item.done', item: { type: 'function_call', call_id: 'c3', name: 'hand_off', arguments: '{}' } });
+  p.onMessage({ type: 'response.done', response: { status: 'completed' } });
+  p.toolResult({ id: 'c3' }, { handed_off: true }, { quiet: true });
+  assert.deepEqual(sent.map((m) => m.type), ['conversation.item.create']);
+  assert.deepEqual(ev.map((e) => e[0]), ['tool-call', 'reply-done']);
+  // The session.update for a refreshed briefing, and an answer spoken on its own.
+  sent.length = 0;
+  p.setInstructions('new briefing');
+  assert.deepEqual(sent[0], { type: 'session.update', session: { type: 'realtime', instructions: 'new briefing' } });
+  assert.equal(p.say('Answer arrived: yes'), true);
+  assert.deepEqual(sent.slice(1).map((m) => m.type), ['conversation.item.create', 'response.create']);
+  assert.equal(sent[1].item.role, 'user');
+  assert.match(sent[1].item.content[0].text, /^\(Not spoken by the user\.\) Answer arrived: yes$/);
+  p.onMessage({ type: 'response.created' });
+  assert.equal(p.say('again'), false, 'never over a reply in progress');
+});
+
+test('openai adapter: an error before the session is ready fails the connect with its message', async () => {
+  const p = new OpenAIRealtime(DEFAULTS.providers.openai, { instructions: 'x', tools: [], key: 'k' });
+  p.open = async () => {};
+  p.send = () => {};
+  p.on('error', () => {});
+  const connecting = p.connect();
+  await new Promise((r) => setImmediate(r));
+  p.onMessage({ type: 'error', error: { message: 'You have no credits remaining.' } });
+  await assert.rejects(connecting, /no credits remaining/);
 });
 
 test('gemini adapter: a turn ending in a tool call is not the reply; interrupted stops playback', () => {

@@ -9,7 +9,7 @@ import { Skip } from '../../lib/context.mjs';
 // templates/voice-mode/bin, with the system's own audio tools. See docs/voice-mode.md.
 
 const NAME = 'voice-mode';
-const SCRIPTS = ['voice-mode.mjs', 'config.mjs', 'providers.mjs', 'records.mjs', 'desk.mjs', 'audio.mjs', 'orb.mjs', 'orb.qml'];
+const SCRIPTS = ['voice-mode.mjs', 'config.mjs', 'providers.mjs', 'records.mjs', 'desk.mjs', 'audio.mjs', 'orb.mjs', 'orb.qml', 'briefing.mjs', 'handoff.mjs'];
 // The orb runs on Qt 6's own `qml` tool with KDE's layer-shell module (overlay above every window).
 const ORB_PKGS = { apt: 'qml-qt6 qml6-module-qtquick-window qml6-module-qtquick-shapes qml6-module-org-kde-layershell', pacman: 'qt6-declarative layer-shell-qt' };
 const ORB_RUNNERS = ['/usr/lib/qt6/bin/qml', 'qml6', 'qml-qt6'];
@@ -57,12 +57,16 @@ function buildConfig(ctx) {
     sources.push({ name: 'second brain', about: 'the notes vault, searched by keyword', command: ['obsidian-axi', 'search', '{regex}', '--regex', '--limit', '12'] });
   }
   const queue = parseCommand(ctx.get('VOICE_QUEUE_COMMAND'));
+  const transcript = ctx.get('VOICE_BRIEFING_TRANSCRIPT');
   return {
     provider: ctx.get('VOICE_PROVIDER'),
     keysFile: path.join(dir(ctx), '.env'),
     ...(ctx.get('VOICE_PERSONA_FILE') ? { personaFile: ctx.get('VOICE_PERSONA_FILE') } : {}),
     sources,
     queue,
+    // Answers to hand-offs come back through the launcher, by full path.
+    handoff: { replyCommand: `${path.join(ctx.home, '.local', 'bin', 'voice-mode')} reply` },
+    ...(transcript ? { briefing: { parts: [{ name: 'Recent conversation', transcript: ctx.path(transcript) }] } } : {}),
     ...(ctx.get('VOICE_ORB') === false ? { orb: { enabled: false } } : {}),
     actions: {
       enabled: ctx.get('VOICE_ACTIONS'),
@@ -143,7 +147,7 @@ export default {
     {
       key: 'VOICE_QUEUE_COMMAND',
       type: 'text',
-      message: 'Command that queues real work for your assistant; the request is added as its last argument (empty: it says it cannot queue)',
+      message: 'Command that hands questions and work to your assistant; the note is added as its last argument (empty: no hand-off)',
       default: (ctx) => (ctx.values.FIRSTMATE_DIR ? `"${path.join(ctx.values.FIRSTMATE_DIR, 'bin', 'fm-inbox.sh')}" note` : ''),
     },
     { key: 'VOICE_ACTIONS', type: 'confirm', message: 'Open apps, sites, folders and records by voice (a fast decision model picks from a fixed list)?', default: true },
@@ -156,6 +160,13 @@ export default {
       when: (ctx) => ctx.get('VOICE_ACTIONS'),
     },
     { key: 'VOICE_DOCUMENTS', type: 'text', path: true, message: 'Documents folder whose folders it may open', default: '~/Documents', when: (ctx) => ctx.get('VOICE_ACTIONS') },
+    {
+      key: 'VOICE_BRIEFING_TRANSCRIPT',
+      type: 'text',
+      path: true,
+      message: "A Claude Code project folder (~/.claude/projects/<project>) whose latest conversation briefs the voice, redacted (empty: none)",
+      default: '',
+    },
     { key: 'VOICE_PERSONA_FILE', type: 'text', path: true, message: 'A text file with your own persona for the voice (empty: a neutral default)', default: '' },
     { key: 'VOICE_HOTKEY', type: 'text', message: 'Global hotkey that starts a conversation and ends it (KDE Plasma sets it for you; elsewhere you are told the command to bind)', default: 'Ctrl+2' },
     { key: 'VOICE_ORB', type: 'confirm', message: 'Show a floating orb that moves with the conversation while it runs (Linux, Qt 6)?', default: true, when: (ctx) => ctx.os === 'linux' },

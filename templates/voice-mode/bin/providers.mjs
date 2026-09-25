@@ -6,7 +6,7 @@
 //   await p.connect()               open and configure the session
 //   p.sendAudio(pcm)                microphone audio at inputRate
 //   p.interrupt(playedMs)           the user cut in: stop the reply, forget what was not heard
-//   p.toolResult(call, result)      answer a 'tool-call'
+//   p.toolResult(call, result, { quiet? })  answer a 'tool-call' (quiet: no reply needed)
 //   p.note?.(text)                  optional: context the model reads without replying
 //   p.close()
 //
@@ -81,13 +81,20 @@ class Socketed extends EventEmitter {
   }
 
   /** Resolve once `event` fires, or reject after ms. */
+  /** Resolves on `event`; an 'error' first rejects with it (a key or billing problem, say). */
   wait(event, ms) {
     return new Promise((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error(`${this.name}: no ${event} within ${ms} ms`)), ms);
-      this.once(event, (v) => {
+      const done = (fn, v) => {
         clearTimeout(t);
-        resolve(v);
-      });
+        this.off(event, onEvent);
+        this.off('error', onError);
+        fn(v);
+      };
+      const onEvent = (v) => done(resolve, v);
+      const onError = (err) => done(reject, err);
+      const t = setTimeout(() => done(reject, new Error(`${this.name}: no ${event} within ${ms} ms`)), ms);
+      this.once(event, onEvent);
+      this.once('error', onError);
     });
   }
 }
@@ -107,6 +114,7 @@ export class OpenAIRealtime extends Socketed {
     this.userText = new Map();
     this.pending = new Set();
     this.hadCalls = false;
+    this.speakAfter = false;
     this.responseActive = false;
     this.audioItem = null;
   }
@@ -197,6 +205,8 @@ export class OpenAIRealtime extends Socketed {
         break;
       case 'response.done':
         this.responseActive = false;
+        // What the reply held, for the log when one that should have spoken did not.
+        this.lastResponse = { status: m.response?.status, details: m.response?.status_details?.error?.message || m.response?.status_details?.reason || m.response?.status_details?.type, output: (m.response?.output || []).map((o) => o.type) };
         // A cancelled reply was cut off by the user, who is already on the next turn.
         if (m.response?.status === 'cancelled') this.emit('interrupted');
         else if (this.hadCalls) this.continueAfterTools();
@@ -213,28 +223,52 @@ export class OpenAIRealtime extends Socketed {
   abandonTools() {
     this.pending.clear();
     this.hadCalls = false;
+    this.speakAfter = false;
   }
 
+  /** Once every call is answered: reply to the results, unless all asked for quiet. */
   continueAfterTools() {
     if (this.responseActive || this.pending.size) return;
     this.hadCalls = false;
-    this.send({ type: 'response.create' });
+    const speak = this.speakAfter;
+    this.speakAfter = false;
+    if (speak) this.send({ type: 'response.create' });
+    else this.emit('reply-done');
   }
 
   sendAudio(pcm) {
     this.send({ type: 'input_audio_buffer.append', audio: b64(pcm) });
   }
 
-  toolResult(call, result) {
+  toolResult(call, result, { quiet = false } = {}) {
     // The output is always recorded, so the conversation stays well formed; only a call
-    // that is still wanted continues the reply.
+    // that is still wanted continues the reply. `quiet`: the reply already said all it
+    // needs to (a hand-off after "Let me check"), so this result alone asks for no more.
     this.send({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: call.id, output: JSON.stringify(result) } });
-    if (this.pending.delete(call.id)) this.continueAfterTools();
+    if (!this.pending.delete(call.id)) return;
+    if (!quiet) this.speakAfter = true;
+    this.continueAfterTools();
   }
 
   /** A line of context the model reads without replying to it (what the desktop helper did). */
   note(text) {
     this.send({ type: 'conversation.item.create', item: { type: 'message', role: 'system', content: [{ type: 'input_text', text }] } });
+    return true;
+  }
+
+  /** New standing instructions (a refreshed briefing), for the rest of the session. */
+  setInstructions(text) {
+    this.instructions = text;
+    this.send({ type: 'session.update', session: { type: 'realtime', instructions: text } });
+    return true;
+  }
+
+  /** Speak now about something that did not come from the user's speech (an answer that arrived). */
+  say(text) {
+    if (this.responseActive) return false;
+    // As a user item, marked: a system item alone sometimes gets a reply with no audio.
+    this.send({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: `(Not spoken by the user.) ${text}` }] } });
+    this.send({ type: 'response.create' });
     return true;
   }
 
@@ -256,6 +290,8 @@ export class GeminiLive extends Socketed {
   constructor(cfg, { instructions, tools, key }) {
     super();
     this.name = 'Gemini Live';
+    // No cancel message: a reply already asked for is given even if the user talks first.
+    this.canCancel = false;
     this.cfg = cfg;
     this.instructions = instructions;
     this.tools = tools;
@@ -351,6 +387,17 @@ export class GeminiLive extends Socketed {
     this.send({ realtimeInput: { audio: { data: b64(pcm), mimeType: `audio/pcm;rate=${this.inputRate}` } } });
   }
 
+  /** Gemini Live takes its system instruction once, at setup: a new one applies from the next connect. */
+  setInstructions(text) {
+    this.instructions = text;
+    return false;
+  }
+
+  say(text) {
+    this.send({ clientContent: { turns: [{ role: 'user', parts: [{ text: `(Not spoken by the user.) ${text}` }] }], turnComplete: true } });
+    return true;
+  }
+
   toolResult(call, result) {
     this.send({ toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { output: result } }] } });
   }
@@ -368,9 +415,11 @@ export class GeminiLive extends Socketed {
  * replies with a tone. Each script turn: { text, tools?: [{ name, args }], reply? }.
  */
 export class FakeProvider extends EventEmitter {
-  constructor(cfg = {}, { script = [] } = {}) {
+  constructor(cfg = {}, { script = [], instructions = '', tools = [] } = {}) {
     super();
     this.name = 'fake';
+    this.instructions = instructions;
+    this.tools = tools;
     this.cfg = { replyDelayMs: 300, wordMs: 220, silenceMs: 500, threshold: 500, replyMs: 800, ...cfg };
     this.script = [...(cfg.script || []), ...script];
     this.inputRate = 24000;
@@ -380,6 +429,18 @@ export class FakeProvider extends EventEmitter {
     this.turn = null;
     this.replyTimer = null;
     this.calls = [];
+  }
+
+  setInstructions(text) {
+    this.instructions = text;
+    return true;
+  }
+
+  say(text) {
+    if (this.replyTimer || this.speaking) return false;
+    this.said = [...(this.said || []), text];
+    this.replyTimer = setTimeout(() => this.streamReply({ reply: 'answer' }), this.cfg.replyDelayMs);
+    return true;
   }
 
   async connect() {
@@ -474,5 +535,5 @@ export function createProvider(config, { instructions, tools, key, script }) {
   const entry = PROVIDERS[config.provider];
   if (!entry) throw new Error(`unknown provider "${config.provider}"`);
   const cfg = config.providers[config.provider] || {};
-  return config.provider === 'fake' ? new FakeProvider(cfg, { script }) : new entry.make(cfg, { instructions, tools, key });
+  return config.provider === 'fake' ? new FakeProvider(cfg, { script, instructions, tools }) : new entry.make(cfg, { instructions, tools, key });
 }
