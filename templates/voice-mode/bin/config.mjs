@@ -34,7 +34,7 @@ export const DEFAULTS = {
     size: 150,
     corner: 'bottom-right',
     margin: 40,
-    colors: { idle: '#7c8aa5', listening: '#38bdf8', thinking: '#fbbf24', speaking: '#c084fc' },
+    colors: { idle: '#7c8aa5', listening: '#38bdf8', thinking: '#fbbf24', speaking: '#c084fc', action: '#34d399' },
     runner: '',
   },
   actions: {
@@ -48,6 +48,9 @@ export const DEFAULTS = {
       finalThreshold: 0.7,
       timeoutMs: 3000,
     },
+    // One line per decision in logs/decisions.log (what was chosen, how sure, how fast;
+    // the words heard only with logTranscripts).
+    decisionLog: true,
     apps: [],
     discoverApps: true,
     sites: [

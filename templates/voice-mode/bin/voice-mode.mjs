@@ -27,6 +27,12 @@ import { PROVIDERS, createProvider } from './providers.mjs';
 import { orbRunner, startOrb, toLevel } from './orb.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
+
+// Node gives each address of a host only 250 ms to connect before it tries the next one. A
+// busy Wi-Fi link can take longer, and with no IPv6 route every address of a host then fails
+// at once ("fetch failed", cause ETIMEDOUT), which is what dropped decision calls whenever a
+// new connection was needed. One second per address.
+net.setDefaultAutoSelectFamilyAttemptTimeout?.(1000);
 const RUNTIME = process.env.XDG_RUNTIME_DIR || CONFIG_DIR;
 const SOCKET = process.platform === 'win32' ? '\\\\.\\pipe\\voice-mode' : path.join(RUNTIME, 'voice-mode.sock');
 const LOCK = path.join(RUNTIME, 'voice-mode.lock');
@@ -112,11 +118,30 @@ const median = (xs) => {
   return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null;
 };
 
+/** One readable line per decision-model call, for logs/decisions.log. */
+export function decisionLine(rec, { withText = false } = {}) {
+  const time = rec.at.replace('T', ' ').slice(0, 21);
+  const heard = withText && rec.text ? `  "${rec.text}"` : '';
+  const turn = rec.final ? 'end of sentence' : `${rec.words} word${rec.words === 1 ? '' : 's'} in`;
+  if (rec.event === 'chooser-error') return `${time}  FAILED ${rec.cause || rec.error} after ${rec.ms} ms (${rec.final ? 'end of sentence' : 'mid-sentence'})${heard}`;
+  if (rec.event === 'action') return `${time}  -> ${rec.done}, ${rec.ms_from_speech_start ?? '?'} ms after you started speaking`;
+  if (rec.event === 'action-failed') return `${time}  -> could not open ${rec.target}: ${rec.error}`;
+  return `${time}  ${rec.choice === 'none' ? 'nothing to open' : rec.choice} (p ${Number(rec.p).toFixed(2)}, ${rec.ms} ms, ${turn})${heard}`;
+}
+
 function makeLogger(config, { quiet = false } = {}) {
   fs.mkdirSync(config.logDir, { recursive: true });
   const metrics = path.join(config.logDir, 'metrics.jsonl');
+  const decisions = path.join(config.logDir, 'decisions.log');
   return (rec) => {
-    const line = { at: new Date().toISOString(), ...rec };
+    let line = { at: new Date().toISOString(), ...rec };
+    if (config.actions.decisionLog && ['chooser', 'chooser-error', 'action', 'action-failed'].includes(rec.event)) {
+      fs.appendFileSync(decisions, `${decisionLine(line, { withText: config.logTranscripts })}\n`);
+    }
+    if ('text' in line && !config.logTranscripts) {
+      const { text, ...rest } = line;
+      line = rest;
+    }
     if (!quiet) process.stderr.write(`${JSON.stringify(line)}\n`);
     if (rec.event === 'turn' || rec.event === 'action') {
       const { text, reply, ...numbers } = line;
@@ -265,6 +290,7 @@ export class Session {
       rec.launch_ms = Math.round(performance.now() - started);
       turn?.actions.push({ key, done: describe(item), ms: rec.ms_from_speech_start, at: performance.now() });
       this.log(rec);
+      this.onAction?.(describe(item));
     } catch (err) {
       turn?.actions.push({ key, error: err.message });
       this.log({ event: 'action-failed', target: key, error: err.message });
@@ -403,6 +429,8 @@ class Live {
       this.catalog = c.actions.enabled ? buildCatalog(c, this.records) : new Map();
     }
     const session = new Session(c, { log: this.log, records: this.records, catalog: this.catalog });
+    // What the decision model just did shows on the orb for a few seconds.
+    session.onAction = (done) => (this.lastAction = { label: done[0].toUpperCase() + done.slice(1), at: Date.now() });
     session.speaker = speaker || new Speaker({ rate: session.provider.outputRate, device: this.ec?.output || c.audio.output });
     this.session = session;
     await session.connect();
@@ -413,8 +441,16 @@ class Live {
     });
   }
 
-  /** What the orb shows: speaking (reply level), listening (voice level), thinking or idle. */
+  /**
+   * What the orb shows: speaking (reply level), listening (voice level), thinking or idle,
+   * plus the last desktop action for a few seconds after it happened.
+   */
   orbState() {
+    const a = this.lastAction && Date.now() - this.lastAction.at < 3500 ? { action: this.lastAction.label, actionAt: this.lastAction.at } : {};
+    return { ...this.orbMode(), ...a };
+  }
+
+  orbMode() {
     const s = this.session;
     if (!s || !this.mic) return { mode: 'thinking', level: 0 };
     const now = performance.now();

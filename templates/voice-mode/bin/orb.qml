@@ -23,6 +23,10 @@ Window {
     property real level: 0
     property real t: 0
     property int misses: 0
+    // The last desktop action the decision model took, shown beside the orb for a moment.
+    property string action: ""
+    property real actionAt: -1
+    readonly property color actionTint: look && look.colors && look.colors.action ? look.colors.action : "#34d399"
 
     // Placement: margins from the configured corner; the pill sits under (or over) the orb.
     property int size: 150
@@ -103,6 +107,11 @@ Window {
             orb.misses = 0;
             orb.mode = s.mode;
             orb.target = s.level;
+            orb.action = s.action || "";
+            if (s.action && s.actionAt !== orb.actionAt) {
+                orb.actionAt = s.actionAt;
+                flash.restart();
+            }
         })
     }
 
@@ -218,6 +227,23 @@ Window {
             opacity: 0.55
         }
 
+        // A ring that flashes outwards when an action is taken.
+        Rectangle {
+            id: ring
+            property real k: 0
+            readonly property real d: face.r0 * 2 * (1 + 0.45 * k)
+            width: d
+            height: d
+            radius: d / 2
+            x: face.c - d / 2
+            y: face.c - d / 2
+            color: "transparent"
+            border.width: 3
+            border.color: orb.actionTint
+            opacity: k > 0 ? 1 - k : 0
+            NumberAnimation on k { id: flash; running: false; from: 0; to: 1; duration: 900; easing.type: Easing.OutCubic }
+        }
+
         // The core: a glowing sphere that pulses with the voice, brightest while speaking.
         Shape {
             id: core
@@ -237,6 +263,45 @@ Window {
                     GradientStop { position: 1; color: Qt.darker(orb.tint, 2.4) }
                 }
                 PathAngleArc { centerX: face.c; centerY: face.c; radiusX: core.r; radiusY: core.r; startAngle: 0; sweepAngle: 360 }
+            }
+        }
+    }
+
+    // The action label: beside the orb, towards the middle of the screen, while it is fresh.
+    Window {
+        id: toast
+        transientParent: null
+        readonly property int h: 30
+        width: Math.min(380, label.implicitWidth + 30)
+        height: h
+        color: "transparent"
+        visible: orb.visible && orb.action !== ""
+        title: "Voice mode action"
+        flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowTransparentForInput | Qt.WindowDoesNotAcceptFocus | Qt.Tool
+
+        LayerShell.Window.scope: "voice-mode-orb-action"
+        LayerShell.Window.layer: LayerShell.Window.LayerOverlay
+        LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityNone
+        LayerShell.Window.exclusionZone: 0
+        LayerShell.Window.anchors: (orb.top ? LayerShell.Window.AnchorTop : LayerShell.Window.AnchorBottom) | (orb.left ? LayerShell.Window.AnchorLeft : LayerShell.Window.AnchorRight)
+        LayerShell.Window.margins.left: orb.left ? orb.mx + orb.size + 4 : 0
+        LayerShell.Window.margins.right: orb.left ? 0 : orb.mx + orb.size + 4
+        LayerShell.Window.margins.top: orb.top ? orb.my + (orb.size - h) / 2 : 0
+        LayerShell.Window.margins.bottom: orb.top ? 0 : orb.my + orb.pillH + orb.gap + (orb.size - h) / 2
+
+        Rectangle {
+            anchors.fill: parent
+            radius: height / 2
+            color: "#e60f172a"
+            border.width: 1.5
+            border.color: orb.actionTint
+            Text {
+                id: label
+                anchors.centerIn: parent
+                text: "\u2713  " + orb.action
+                color: "#f1f5f9"
+                font.pixelSize: 14
+                elide: Text.ElideRight
             }
         }
     }

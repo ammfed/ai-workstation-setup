@@ -146,8 +146,11 @@ export class Chooser {
   hear(text, final = false) {
     const clean = String(text || '').trim();
     if (!this.ready || this.done || !clean) return;
-    if (clean === this.lastText && !final) return;
-    this.lastText = clean;
+    // The same words again (a repeated partial, or only punctuation or case changed) add
+    // nothing to decide on: one call per new word, not per transcript event.
+    const words = clean.toLowerCase().replace(/[^\p{L}\p{N}\s']/gu, '').replace(/\s+/g, ' ').trim();
+    if (words === this.lastText && !final) return;
+    this.lastText = words;
     // Up to `parallel` calls in flight, so a new word never waits behind an older call;
     // beyond that, only the newest text waits.
     if (this.inflight >= (this.cfg.parallel || 3)) {
@@ -168,7 +171,10 @@ export class Chooser {
       try {
         answer = await this.decide(text);
       } catch (err) {
-        this.log({ event: 'chooser-error', final, error: String(err.message || err).slice(0, 200) });
+        // fetch() says only "fetch failed"; the reason (a connect timeout, a reset) is its cause.
+        const c = err.cause;
+        const cause = c ? [c.code || c.name, ...(c.errors || []).map((e) => e.code)].filter(Boolean).join(' ') : undefined;
+        this.log({ event: 'chooser-error', final, error: String(err.message || err).slice(0, 200), cause, ms: Math.round(performance.now() - started), text });
       }
     }
     if (turn !== this.turnId) return;
@@ -176,7 +182,7 @@ export class Chooser {
     if (this.done) return;
     if (answer) {
       const p = answer.probabilities?.[answer.choice] ?? 0;
-      this.log({ event: 'chooser', words: text.split(/\s+/).length, final, choice: answer.choice, p, ms: Math.round(performance.now() - started) });
+      this.log({ event: 'chooser', words: text.split(/\s+/).length, final, choice: answer.choice, p, ms: Math.round(performance.now() - started), text });
       if (answer.choice !== 'none' && this.catalog.has(answer.choice) && p >= (final ? this.cfg.finalThreshold : this.cfg.threshold)) {
         this.done = true;
         this.pending = null;

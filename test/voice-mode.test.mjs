@@ -17,7 +17,8 @@ const { merge, parseEnvFile, readKey, expandGlob, loadConfig, DEFAULTS } = await
 const { Records, runTool } = await import(path.join(bin, 'records.mjs'));
 const { Chooser, buildCatalog, criteria, perform } = await import(path.join(bin, 'desk.mjs'));
 const { OpenAIRealtime, GeminiLive, FakeProvider } = await import(path.join(bin, 'providers.mjs'));
-const { Session, streamClip, speechBounds, acquireLock, claimLock, releaseLock, lockHolder } = await import(path.join(bin, 'voice-mode.mjs'));
+const { Session, streamClip, speechBounds, acquireLock, claimLock, releaseLock, lockHolder, decisionLine } = await import(path.join(bin, 'voice-mode.mjs'));
+const net = await import('node:net');
 const { spawn } = await import('node:child_process');
 const { resample, tone, Speaker } = await import(path.join(bin, 'audio.mjs'));
 const { startOrb, toLevel } = await import(path.join(bin, 'orb.mjs'));
@@ -342,6 +343,52 @@ test('audio: resampling keeps duration; speech bounds find the spoken part of a 
   assert.equal(resample(pcm, 24000, 16000).length, 16000 * 2);
   const b = speechBounds(Buffer.concat([Buffer.alloc(24000), tone(24000, 300, 500, 0.3), Buffer.alloc(24000)]), 24000);
   assert.ok(Math.abs(b.startMs - 500) <= 20 && Math.abs(b.endMs - 1000) <= 20, JSON.stringify(b));
+});
+
+test('chooser: one call per new word, and a failed call logs its cause', async () => {
+  const c = config();
+  const cat = buildCatalog(c, new Records(c));
+  const calls = [];
+  const ch = new Chooser(c, cat, { execute: async () => {}, fetchImpl: fakeDecisions([], calls) });
+  ch.key = 'test';
+  ch.reset(0);
+  // Repeated partials, and ones that differ only in case or punctuation, are one call.
+  for (const t of ['Can you', 'can you', 'Can you,', 'can you open']) {
+    ch.hear(t);
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  assert.deepEqual(calls, ['Can you', 'can you open']);
+
+  const logs = [];
+  const failing = new Chooser(c, cat, {
+    execute: async () => {},
+    log: (r) => logs.push(r),
+    fetchImpl: async () => {
+      throw new TypeError('fetch failed', { cause: Object.assign(new AggregateError([Object.assign(new Error('t'), { code: 'ETIMEDOUT' }), Object.assign(new Error('u'), { code: 'ENETUNREACH' })]), { code: 'ETIMEDOUT' }) });
+    },
+  });
+  failing.key = 'test';
+  failing.reset(0);
+  failing.hear('open fire');
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(logs[0].event, 'chooser-error');
+  assert.equal(logs[0].cause, 'ETIMEDOUT ETIMEDOUT ENETUNREACH');
+});
+
+test('connections: each address of a host gets a full second to connect', () => {
+  // The default (250 ms) failed every address whenever a connect was slow and there was no IPv6 route.
+  if (net.getDefaultAutoSelectFamilyAttemptTimeout) assert.equal(net.getDefaultAutoSelectFamilyAttemptTimeout(), 1000);
+});
+
+test('decisions log: one readable line per decision; the words heard only with transcripts on', () => {
+  const at = '2026-01-02T03:04:05.678Z';
+  assert.equal(decisionLine({ at, event: 'chooser', choice: 'none', p: 1, ms: 372, words: 1, final: false, text: 'open' }), '2026-01-02 03:04:05.6  nothing to open (p 1.00, 372 ms, 1 word in)');
+  assert.equal(
+    decisionLine({ at, event: 'chooser', choice: 'app:firefox', p: 0.97, ms: 380, words: 4, final: true, text: 'open firefox please' }, { withText: true }),
+    '2026-01-02 03:04:05.6  app:firefox (p 0.97, 380 ms, end of sentence)  "open firefox please"',
+  );
+  assert.match(decisionLine({ at, event: 'chooser-error', cause: 'ETIMEDOUT', ms: 502, final: false }), /FAILED ETIMEDOUT after 502 ms \(mid-sentence\)$/);
+  assert.match(decisionLine({ at, event: 'action', done: 'opened Firefox', ms_from_speech_start: 2100 }), /-> opened Firefox, 2100 ms after you started speaking$/);
 });
 
 test('installer: queue command lines and hotkeys are parsed', () => {

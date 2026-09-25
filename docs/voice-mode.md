@@ -55,10 +55,10 @@ points at another one). Everything not in the file takes the defaults in `bin/co
 | `persona` / `personaFile` | Who the voice is. The shipped default is neutral and brief; put your own in a file. |
 | `sources` | What it may read: `{ "name", "path", "about"?, "show"? }` for a file or folder (a `*` in a path segment makes one source per match), or `{ "name", "command": [..., "{query}"] }` for a read-only search command (`{regex}` gives the keywords as `a\|b`). `about` tells the model what the source holds; `show: true` lets its top-level notes be shown on screen by voice. |
 | `queue` | `{ "command": [...], "env": {} }`: the request text is added as the last argument. Never run through a shell. |
-| `actions` | `enabled`, `chooser` (`model`, `keyName`, `keyFile`, `threshold` 0.9 mid-sentence, `finalThreshold` 0.7 once you stop), `apps` (extra `{ id, name, desktop \| mac \| command }`), `discoverApps` (installed desktop apps on Linux), `sites` (`{ id, name, url }`, http and https only), `documents` (its folders can be opened), `files`. |
+| `actions` | `enabled`, `chooser` (`model`, `keyName`, `keyFile`, `threshold` 0.9 mid-sentence, `finalThreshold` 0.7 once you stop), `apps` (extra `{ id, name, desktop \| mac \| command }`), `discoverApps` (installed desktop apps on Linux), `sites` (`{ id, name, url }`, http and https only), `documents` (its folders can be opened), `files`, `decisionLog` (default on: one line per decision in `logs/decisions.log`). |
 | `audio` | `duplex`: `full` (default: talk over a reply to cut in) or `half` (the mic is muted while a reply plays), `echoCancel` (default on; it wraps the `input` and `output` devices, or the default ones), `input` and `output` device names, `earcons` (a short tone when a conversation starts and ends). |
 | `listen.exitAfterMin` | End the conversation after this many minutes without speech (default 10). |
-| `orb` | `enabled`, `size` (pixels), `corner` (`bottom-right`, `bottom-left`, `top-right`, `top-left`), `margin` (pixels from that corner), `colors` for `idle`, `listening`, `thinking` and `speaking`, `runner` (the Qt 6 `qml` tool, found by itself when empty). |
+| `orb` | `enabled`, `size` (pixels), `corner` (`bottom-right`, `bottom-left`, `top-right`, `top-left`), `margin` (pixels from that corner), `colors` for `idle`, `listening`, `thinking`, `speaking` and `action`, `runner` (the Qt 6 `qml` tool, found by itself when empty). |
 | `logDir`, `logTranscripts` | Run log and `metrics.jsonl`. Transcripts go to the run log only when `logTranscripts` is true, and never to the metrics file. |
 
 Keys never go in `config.json`, an answers file, the repo, a log or a chat. The decision
@@ -138,6 +138,7 @@ and moves with it:
 | Blue, a ring that swells with your voice | You are talking |
 | Amber, two arcs turning and a sweeping highlight | Your turn has ended and it is thinking or looking something up |
 | Violet, a lively ring that follows the reply's loudness | It is speaking |
+| A green ring flashes out, and a label beside the orb names what was opened | The decision model just opened something (for a few seconds) |
 
 Clicks go through the orb to whatever is under it. The small pill under it is the only part
 that takes the mouse: drag its dots to move the orb (the place is remembered in
@@ -190,6 +191,10 @@ Measured on 2026-09-25 on a Linux desktop, over a few thousand local notes, with
 
 ## Checking it without talking
 
+- `logs/decisions.log` has one line per decision-model call: what it chose (or `nothing to
+  open`), how sure it was, how long the call took, and how far into the sentence it was; a
+  failed call gives its reason (for example a connect timeout). The words heard are added
+  only when `logTranscripts` is on. `tail -f` it while you talk to watch the decisions arrive.
 - `voice-mode check` lists the config, which keys are set (never their values), audio tools,
   sources, the queue command and the action catalog.
 - `voice-mode pick "open my documents folder"` shows what the decision model would open, word
