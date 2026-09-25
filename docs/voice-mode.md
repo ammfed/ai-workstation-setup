@@ -99,6 +99,10 @@ rather than being held: press to open the mic, speak, press again to close it (i
 by itself after `listen.idleCloseSec`), press during a reply to cut in. When voice mode is not
 running, the hotkey starts it with the mic open.
 
+The default is **Ctrl+2** (`VOICE_HOTKEY`). A global shortcut takes the key from every app,
+so apps lose their own Ctrl+2 (a browser's "go to tab 2", for example); pick another
+combination if you rely on it.
+
 - **KDE Plasma (X11 or Wayland)**: the installer writes `~/.local/share/applications/voice-mode-toggle.desktop`
   with `X-KDE-Shortcuts`, the same kind of entry System Settings > Shortcuts > Add Command
   makes, and registers it with kglobalaccel over D-Bus so it works at once, without logging

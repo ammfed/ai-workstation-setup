@@ -39,7 +39,7 @@ export function qtKey(combo) {
     else if (lower === 'space') key = 0x20;
     else if (/^f([1-9]|1[0-2])$/.test(lower)) key = 0x01000030 + Number(lower.slice(1)) - 1;
     else if (/^[a-z0-9]$/.test(lower)) key = part.toUpperCase().charCodeAt(0);
-    else throw new Error(`VOICE_HOTKEY: cannot read "${part}" in "${combo}" (use e.g. Meta+Shift+Space)`);
+    else throw new Error(`VOICE_HOTKEY: cannot read "${part}" in "${combo}" (use e.g. Ctrl+2 or Meta+Shift+Space)`);
   }
   if (key === null || !code) throw new Error(`VOICE_HOTKEY: "${combo}" needs at least one modifier and one key`);
   return code | key;
@@ -153,7 +153,7 @@ export default {
     },
     { key: 'VOICE_DOCUMENTS', type: 'text', path: true, message: 'Documents folder whose folders it may open', default: '~/Documents', when: (ctx) => ctx.get('VOICE_ACTIONS') },
     { key: 'VOICE_PERSONA_FILE', type: 'text', path: true, message: 'A text file with your own persona for the voice (empty: a neutral default)', default: '' },
-    { key: 'VOICE_HOTKEY', type: 'text', message: 'Global hotkey that toggles the mic (KDE Plasma sets it for you; elsewhere you are told the command to bind)', default: 'Meta+Shift+Space' },
+    { key: 'VOICE_HOTKEY', type: 'text', message: 'Global hotkey that toggles the mic (KDE Plasma sets it for you; elsewhere you are told the command to bind)', default: 'Ctrl+2' },
   ],
 
   async install(ctx) {

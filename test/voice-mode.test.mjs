@@ -345,6 +345,7 @@ test('audio: resampling keeps duration; speech bounds find the spoken part of a 
 test('installer: queue command lines and hotkeys are parsed', () => {
   assert.deepEqual(parseCommand('HOME_DIR=/x "/opt/my tools/inbox.sh" note'), { command: ['/opt/my tools/inbox.sh', 'note'], env: { HOME_DIR: '/x' } });
   assert.deepEqual(parseCommand(''), { command: [], env: {} });
+  assert.equal(qtKey('Ctrl+2'), 0x04000000 | 0x32);
   assert.equal(qtKey('Meta+Shift+Space'), 0x10000000 | 0x02000000 | 0x20);
   assert.equal(qtKey('Ctrl+Alt+V'), 0x04000000 | 0x08000000 | 0x56);
   assert.equal(qtKey('Meta+F9'), 0x10000000 | 0x01000038);
