@@ -62,11 +62,15 @@ export function audioTools() {
  * Echo cancellation for laptop speakers and microphone, so the reply is not heard as the
  * user talking (which would interrupt it). Loads PipeWire/PulseAudio's own echo-cancel
  * module for as long as voice mode runs and unloads it on exit; returns the device names.
+ * It wraps the default devices, or the `input` and `output` devices when they are named.
  */
-export function startEchoCancel(log = () => {}) {
+export function startEchoCancel(log = () => {}, { input = '', output = '' } = {}) {
   if (process.platform !== 'linux' || !has('pactl')) return null;
   const name = `voice_mode_${process.pid}`;
-  const r = spawnSync('pactl', ['load-module', 'module-echo-cancel', `source_name=${name}_mic`, `sink_name=${name}_out`, 'aec_method=webrtc'], { encoding: 'utf8' });
+  const args = ['load-module', 'module-echo-cancel', `source_name=${name}_mic`, `sink_name=${name}_out`, 'aec_method=webrtc'];
+  if (input) args.push(`source_master=${input}`);
+  if (output) args.push(`sink_master=${output}`);
+  const r = spawnSync('pactl', args, { encoding: 'utf8' });
   const id = r.stdout.trim();
   if (r.status !== 0 || !/^\d+$/.test(id)) {
     log({ event: 'echo-cancel-unavailable', error: (r.stderr || '').trim().slice(0, 200) });
@@ -122,15 +126,27 @@ export class Speaker extends EventEmitter {
     this.proc = proc;
     this.playEnd = 0;
     this.replyMs = 0;
+    this.levels = [];
   }
 
   write(pcm) {
     const ms = (pcm.length / 2 / this.rate) * 1000;
     const now = performance.now();
     // Latency of the player itself is small and constant; the cursor tracks audible time.
-    this.playEnd = Math.max(now + 40, this.playEnd) + ms;
+    let at = Math.max(now + 40, this.playEnd);
+    this.playEnd = at + ms;
     this.replyMs += ms;
+    // Loudness per 40 ms slice, keyed by when it will be heard, for `level()`.
+    const slice = Math.round((this.rate * 40) / 1000) * 2;
+    for (let i = 0; i < pcm.length; i += slice, at += 40) this.levels.push([at + 40, rms(pcm.subarray(i, i + slice))]);
     this.proc.stdin.write(pcm);
+  }
+
+  /** Loudness (RMS) of what is being heard right now; 0 when nothing is playing. */
+  level() {
+    const now = performance.now();
+    while (this.levels.length && this.levels[0][0] < now) this.levels.shift();
+    return this.levels.length && this.levels[0][0] - 40 <= now ? this.levels[0][1] : 0;
   }
 
   /** A new reply starts: count its audio from zero. */

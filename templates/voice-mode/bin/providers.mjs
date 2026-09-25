@@ -16,9 +16,9 @@
 //
 // Barge-in: both real providers detect the user speaking over a reply on the server and
 // stop it (OpenAI interrupt_response, Gemini START_OF_ACTIVITY_INTERRUPTS). interrupt() is
-// the hotkey path. OpenAI cancels the reply and truncates the model's copy to what was
-// heard; Gemini has no cancel or truncate message, so the reply's remaining audio is
-// dropped here and the model keeps its full copy of that reply.
+// called when that speech starts while reply audio is still playing here: OpenAI cancels
+// the reply and truncates the model's copy to what was heard; Gemini has no cancel or
+// truncate message, so the reply's remaining audio is dropped here.
 
 import { EventEmitter } from 'node:events';
 import { rms } from './audio.mjs';
@@ -146,10 +146,11 @@ export class OpenAIRealtime extends Socketed {
         break;
       case 'input_audio_buffer.speech_started':
         this.abandonTools();
-        this.turnAudioMs = 0;
         this.currentItem = m.item_id;
         this.userText.set(m.item_id, '');
+        // A cut-in (handled on this event) still needs the reply's audio offsets.
         this.emit('user-speech-start');
+        this.turnAudioMs = 0;
         break;
       case 'input_audio_buffer.speech_stopped':
         this.emit('user-speech-end');
@@ -242,7 +243,7 @@ export class OpenAIRealtime extends Socketed {
     if (this.responseActive) this.send({ type: 'response.cancel' });
     if (this.audioItem) {
       const itemMs = this.turnAudioMs - this.itemStartMs;
-      const heard = Math.min(Math.max(0, playedMs - this.itemStartMs), itemMs);
+      const heard = Math.max(0, Math.min(playedMs - this.itemStartMs, itemMs));
       this.send({ type: 'conversation.item.truncate', item_id: this.audioItem, content_index: 0, audio_end_ms: Math.floor(heard) });
     }
     this.audioItem = null;

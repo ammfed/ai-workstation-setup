@@ -7,13 +7,17 @@ and opens apps, websites, folders and records on your desktop while you are stil
 
 It is a handful of dependency-free Node scripts in `~/.config/ai-workstation-setup/voice/bin/`,
 one `config.json` next to them, and the system's own audio tools (`parecord` and `pacat`
-from PulseAudio or PipeWire on Linux, `sox` on macOS).
+from PulseAudio or PipeWire on Linux, `sox` on macOS). On Linux a small floating orb (a QML
+file run by Qt 6's `qml` tool) shows the conversation while it runs.
 
 ```sh
-voice-mode start --listen   # one command: connect and open the mic
-voice-mode toggle           # the hotkey: open the mic, close it, or cut in on a reply
+voice-mode toggle           # the hotkey: start a conversation, or end the one running
+voice-mode start            # the same conversation, in this terminal (Ctrl+C ends it)
 voice-mode check            # what is configured and what is missing (never prints keys)
 ```
+
+A conversation is one continuous speech-to-speech exchange: the mic stays open from start
+to end, you talk, it answers, and you cut in on an answer by talking over it.
 
 ## How it fits together
 
@@ -52,8 +56,9 @@ points at another one). Everything not in the file takes the defaults in `bin/co
 | `sources` | What it may read: `{ "name", "path", "about"?, "show"? }` for a file or folder (a `*` in a path segment makes one source per match), or `{ "name", "command": [..., "{query}"] }` for a read-only search command (`{regex}` gives the keywords as `a\|b`). `about` tells the model what the source holds; `show: true` lets its top-level notes be shown on screen by voice. |
 | `queue` | `{ "command": [...], "env": {} }`: the request text is added as the last argument. Never run through a shell. |
 | `actions` | `enabled`, `chooser` (`model`, `keyName`, `keyFile`, `threshold` 0.9 mid-sentence, `finalThreshold` 0.7 once you stop), `apps` (extra `{ id, name, desktop \| mac \| command }`), `discoverApps` (installed desktop apps on Linux), `sites` (`{ id, name, url }`, http and https only), `documents` (its folders can be opened), `files`. |
-| `audio` | `duplex`: `half` (default: the mic is muted while a reply plays) or `full` (talk over a reply), `echoCancel` (used in full duplex; it wraps the default devices, so setting `input` turns it off), `input` and `output` device names, `earcons` (a short tone when the mic opens and closes). |
-| `listen` | `idleCloseSec`: close the mic after this long without speech (default 60). `exitAfterMin`: end the session after this long with the mic closed (default 15). |
+| `audio` | `duplex`: `full` (default: talk over a reply to cut in) or `half` (the mic is muted while a reply plays), `echoCancel` (default on; it wraps the `input` and `output` devices, or the default ones), `input` and `output` device names, `earcons` (a short tone when a conversation starts and ends). |
+| `listen.exitAfterMin` | End the conversation after this many minutes without speech (default 10). |
+| `orb` | `enabled`, `size` (pixels), `corner` (`bottom-right`, `bottom-left`, `top-right`, `top-left`), `margin` (pixels from that corner), `colors` for `idle`, `listening`, `thinking` and `speaking`, `runner` (the Qt 6 `qml` tool, found by itself when empty). |
 | `logDir`, `logTranscripts` | Run log and `metrics.jsonl`. Transcripts go to the run log only when `logTranscripts` is true, and never to the metrics file. |
 
 Keys never go in `config.json`, an answers file, the repo, a log or a chat. The decision
@@ -78,32 +83,37 @@ never copied.
 
 ## Barge-in (cutting in on a reply)
 
-| | Talk over the reply | Press the hotkey during a reply |
-| --- | --- | --- |
-| OpenAI Realtime | The server detects your speech and cancels the reply (`interrupt_response`); playback stops at once and the model's copy of the reply is truncated to what you heard. | Same: `response.cancel` plus `conversation.item.truncate`. |
-| Gemini Live | The server detects your speech and interrupts (`START_OF_ACTIVITY_INTERRUPTS`); playback stops on `interrupted`. | Playback stops and the rest of that reply is dropped. Gemini Live has no cancel or truncate message, so **the model keeps its full copy of the reply** it was giving. |
+Talk over a reply and it stops:
+
+- **OpenAI Realtime**: the server detects your speech and cancels the reply
+  (`interrupt_response`); playback stops at once and the model's copy of the reply is
+  truncated (`conversation.item.truncate`) to what you actually heard.
+- **Gemini Live**: the server detects your speech and interrupts
+  (`START_OF_ACTIVITY_INTERRUPTS`); playback stops on `interrupted`.
 
 Either way, a records lookup still running when you cut in does not restart the answer you
 abandoned.
 
-A reply from laptop speakers must never come back in as you talking. By default
-(`audio.duplex: "half"`) the mic is muted while a reply plays and for 400 ms after, and the
-hotkey is how you cut in. With `"full"`, voice mode loads PipeWire's (or PulseAudio's) own
-`module-echo-cancel` for as long as it runs so you can talk over a reply; when that is
-unavailable it falls back to half duplex. A headset needs no echo cancellation: `"full"`
-with `echoCancel: false`.
+A reply from laptop speakers must never come back in as you talking. On Linux, voice mode
+loads PipeWire's (or PulseAudio's) own `module-echo-cancel` around the mic and speaker for
+as long as a conversation runs and unloads it at the end, so the reply is subtracted from
+what the mic hears while your voice gets through. When echo cancellation cannot load (or on
+macOS), it falls back to half duplex: the mic is muted while a reply plays and for 400 ms
+after, and you wait for the answer to finish (or end the conversation with the hotkey). A
+headset needs no echo cancellation: `echoCancel: false`. If a room's echo still interrupts
+replies, set `audio.duplex` to `"half"`.
 
 ## The hotkey
 
-Global shortcuts on KDE Plasma deliver a key press but no release, so the hotkey **toggles**
-rather than being held: press to open the mic, speak, press again to close it (it also closes
-by itself after `listen.idleCloseSec`), press during a reply to cut in. When voice mode is not
-running, the hotkey starts it with the mic open.
+The hotkey is on and off for a whole conversation: press it once and a conversation starts
+(a rising tone, and the orb appears), talk as long as you like, press it again and it ends
+(a falling tone, and the orb goes). A conversation nobody talks to ends by itself after
+`listen.exitAfterMin`.
 
-There is only ever one session. It holds a lock file (its pid, in `$XDG_RUNTIME_DIR`) from
-the moment it starts, so a second `start` refuses and a hotkey press while the first session
-is still connecting waits for it instead of starting another. A lock left by a session that
-died is taken over.
+There is only ever one conversation, so never two listeners or two voices, however fast or
+often the key is pressed. It holds a lock file (its pid, in `$XDG_RUNTIME_DIR`) from the
+moment the hotkey starts it, so the next press ends it even while it is still connecting,
+and a second `voice-mode start` refuses. A lock left by a conversation that died is taken over.
 
 The default is **Ctrl+2** (`VOICE_HOTKEY`). A global shortcut takes the key from every app,
 so apps lose their own Ctrl+2 (a browser's "go to tab 2", for example); pick another
@@ -116,6 +126,31 @@ combination if you rely on it.
   command that removes it.
 - **Other desktops and macOS**: bind the printed `... voice-mode.mjs toggle` command in your
   desktop's keyboard shortcut settings.
+
+## The orb
+
+While a conversation runs, a small orb floats in a corner of the screen, above every window,
+and moves with it:
+
+| Look | When |
+| --- | --- |
+| Grey, slowly breathing | Listening, and it is quiet |
+| Blue, a ring that swells with your voice | You are talking |
+| Amber, two arcs turning and a sweeping highlight | Your turn has ended and it is thinking or looking something up |
+| Violet, a lively ring that follows the reply's loudness | It is speaking |
+
+Clicks go through the orb to whatever is under it. The small pill under it is the only part
+that takes the mouse: drag its dots to move the orb (the place is remembered in
+`orb-position.json` next to the config), and its cross ends the conversation, like the hotkey.
+
+It is `bin/orb.qml`, run by Qt 6's own `qml` tool (package `qml-qt6` on Debian and Ubuntu,
+`qt6-declarative` on Arch; the installer adds it). On KDE Plasma (and other Wayland desktops
+with the layer-shell protocol, such as Sway and Hyprland) it is a layer-shell surface in the
+overlay layer, through KDE's `layer-shell-qt`, which is what keeps it above every window on
+Wayland, where an app cannot otherwise ask to stay on top. The orb only gets a mode and a
+loudness level from voice mode (over a local port, behind a random token), never a word of
+what is said. Without a `qml` tool or a desktop session, voice mode runs without it; turn it
+off with `"orb": { "enabled": false }`.
 
 ## Latency
 
@@ -161,4 +196,4 @@ Measured on 2026-09-25 on a Linux desktop, over a few thousand local notes, with
   by word, without opening anything.
 - `voice-mode bench` with `"provider": "fake"` runs the whole pipeline with no network, and
   `test/voice-mode.test.mjs` covers the read boundary, the queue, the action refusals, the
-  chooser, barge-in and both provider adapters.
+  chooser, barge-in, both provider adapters, the one-conversation lock and the orb's routes.

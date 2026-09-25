@@ -9,7 +9,10 @@ import { Skip } from '../../lib/context.mjs';
 // templates/voice-mode/bin, with the system's own audio tools. See docs/voice-mode.md.
 
 const NAME = 'voice-mode';
-const SCRIPTS = ['voice-mode.mjs', 'config.mjs', 'providers.mjs', 'records.mjs', 'desk.mjs', 'audio.mjs'];
+const SCRIPTS = ['voice-mode.mjs', 'config.mjs', 'providers.mjs', 'records.mjs', 'desk.mjs', 'audio.mjs', 'orb.mjs', 'orb.qml'];
+// The orb runs on Qt 6's own `qml` tool with KDE's layer-shell module (overlay above every window).
+const ORB_PKGS = { apt: 'qml-qt6 qml6-module-qtquick-window qml6-module-qtquick-shapes qml6-module-org-kde-layershell', pacman: 'qt6-declarative layer-shell-qt' };
+const ORB_RUNNERS = ['/usr/lib/qt6/bin/qml', 'qml6', 'qml-qt6'];
 const DESKTOP_FILE = 'voice-mode-toggle.desktop';
 const dir = (ctx) => path.join(ctx.home, '.config', 'ai-workstation-setup', 'voice');
 const list = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
@@ -60,6 +63,7 @@ function buildConfig(ctx) {
     ...(ctx.get('VOICE_PERSONA_FILE') ? { personaFile: ctx.get('VOICE_PERSONA_FILE') } : {}),
     sources,
     queue,
+    ...(ctx.get('VOICE_ORB') === false ? { orb: { enabled: false } } : {}),
     actions: {
       enabled: ctx.get('VOICE_ACTIONS'),
       documents: ctx.get('VOICE_DOCUMENTS'),
@@ -85,7 +89,7 @@ async function hotkey(ctx, node, script) {
     '[Desktop Entry]',
     'Type=Application',
     'Name=Voice mode',
-    'Comment=Talk to your assistant: open the mic, close it, or cut in on a reply',
+    'Comment=Talk to your assistant: start a conversation, or end it',
     `Exec=${toggle}`,
     'Icon=audio-input-microphone',
     'NoDisplay=true',
@@ -153,7 +157,8 @@ export default {
     },
     { key: 'VOICE_DOCUMENTS', type: 'text', path: true, message: 'Documents folder whose folders it may open', default: '~/Documents', when: (ctx) => ctx.get('VOICE_ACTIONS') },
     { key: 'VOICE_PERSONA_FILE', type: 'text', path: true, message: 'A text file with your own persona for the voice (empty: a neutral default)', default: '' },
-    { key: 'VOICE_HOTKEY', type: 'text', message: 'Global hotkey that toggles the mic (KDE Plasma sets it for you; elsewhere you are told the command to bind)', default: 'Ctrl+2' },
+    { key: 'VOICE_HOTKEY', type: 'text', message: 'Global hotkey that starts a conversation and ends it (KDE Plasma sets it for you; elsewhere you are told the command to bind)', default: 'Ctrl+2' },
+    { key: 'VOICE_ORB', type: 'confirm', message: 'Show a floating orb that moves with the conversation while it runs (Linux, Qt 6)?', default: true, when: (ctx) => ctx.os === 'linux' },
   ],
 
   async install(ctx) {
@@ -195,9 +200,17 @@ export default {
       });
     }
 
+    if (ctx.os === 'linux' && ctx.get('VOICE_ORB') !== false) {
+      await ctx.step('orb', () => {
+        const found = ORB_RUNNERS.find((r) => (r.startsWith('/') ? fs.existsSync(r) : ctx.has(r)));
+        if (found && !ctx.platform.simulated) return ctx.ok(`Qt 6 qml tool found (${found})`);
+        ctx.pkgInstall(ORB_PKGS);
+      });
+    }
+
     await ctx.step('hotkey', () => hotkey(ctx, node, script));
 
-    ctx.todo(`check what is set up and what is missing: voice-mode check; then talk: voice-mode start --listen (or press ${ctx.get('VOICE_HOTKEY') || 'your hotkey'})`);
+    ctx.todo(`check what is set up and what is missing: voice-mode check; then press ${ctx.get('VOICE_HOTKEY') || 'your hotkey'} and talk`);
     ctx.info('see docs/voice-mode.md for the config file, latency and barge-in');
   },
 };

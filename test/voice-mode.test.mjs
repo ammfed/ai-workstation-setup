@@ -17,9 +17,10 @@ const { merge, parseEnvFile, readKey, expandGlob, loadConfig, DEFAULTS } = await
 const { Records, runTool } = await import(path.join(bin, 'records.mjs'));
 const { Chooser, buildCatalog, criteria, perform } = await import(path.join(bin, 'desk.mjs'));
 const { OpenAIRealtime, GeminiLive, FakeProvider } = await import(path.join(bin, 'providers.mjs'));
-const { Session, streamClip, speechBounds, acquireLock, releaseLock, lockHolder } = await import(path.join(bin, 'voice-mode.mjs'));
+const { Session, streamClip, speechBounds, acquireLock, claimLock, releaseLock, lockHolder } = await import(path.join(bin, 'voice-mode.mjs'));
 const { spawn } = await import('node:child_process');
-const { resample, tone } = await import(path.join(bin, 'audio.mjs'));
+const { resample, tone, Speaker } = await import(path.join(bin, 'audio.mjs'));
+const { startOrb, toLevel } = await import(path.join(bin, 'orb.mjs'));
 const { parseCommand, qtKey } = await import(path.join(repoRoot, 'modules', 'voice-mode', 'module.mjs'));
 
 // Resolved, because macOS's temp folder is a symlink and opened paths are resolved ones.
@@ -371,6 +372,11 @@ test('one session: a live holder blocks a second start; a dead or foreign pid is
   releaseLock(lock);
   assert.equal(fs.existsSync(lock), false);
 
+  // toggle claims the lock for the session it starts; that session then finds it its own.
+  assert.equal(claimLock(process.pid, lock), true);
+  assert.equal(acquireLock(lock), true);
+  releaseLock(lock);
+
   // A live process that is not voice mode (a reused pid) does not hold the lock.
   const other = spawn('sleep', ['20'], { stdio: 'ignore' });
   await new Promise((r) => other.once('spawn', r));
@@ -381,19 +387,53 @@ test('one session: a live holder blocks a second start; a dead or foreign pid is
 });
 
 test('half duplex: the speaker counts as busy for a short tail after the reply', () => {
-  const Speaker = class {
-    constructor() {
-      this.playEnd = performance.now() + 100;
-    }
-  };
-  // Borrow the real method rather than start an audio player.
-  return import(path.join(bin, 'audio.mjs')).then(({ Speaker: Real }) => {
-    const sp = new Speaker();
-    sp.busy = Real.prototype.busy;
-    sp.playEnd = performance.now() - 200;
-    assert.equal(sp.busy(), false);
-    assert.equal(sp.busy(400), true);
-  });
+  // The real method on a bare object, so no audio player is started.
+  const sp = Object.create(Speaker.prototype);
+  sp.playEnd = performance.now() - 200;
+  assert.equal(sp.busy(), false);
+  assert.equal(sp.busy(400), true);
+});
+
+test('orb: serves its look and state behind a token, saves a drag, and its close control ends the conversation', { skip: process.platform !== 'linux' }, async () => {
+  // A stand-in for the qml tool: it does what orb.qml does over the same local routes.
+  const runner = path.join(tmp, 'fake-qml.mjs');
+  fs.writeFileSync(
+    runner,
+    `#!${process.execPath}
+const { createRequire } = await import('node:module');
+const require = createRequire(import.meta.url);
+const url = process.argv[process.argv.indexOf('--') + 1];
+const get = async (r) => (await fetch(url + '/' + r)).json();
+const out = { look: await get('look'), state: await get('state'), wrong: (await fetch(url.replace(/[0-9a-f]{32}$/, 'x'.repeat(32)) + '/state')).status };
+await fetch(url + '/moved', { method: 'POST', body: JSON.stringify({ x: 12, y: 34 }) });
+require('node:fs').writeFileSync(${JSON.stringify(path.join(tmp, 'orb-seen.json'))}, JSON.stringify(out));
+await fetch(url + '/stop', { method: 'POST', body: '{}' });
+`,
+    { mode: 0o755 },
+  );
+  const configFile = path.join(tmp, 'orb-config.json');
+  fs.writeFileSync(configFile, JSON.stringify({ provider: 'fake', orb: { runner, size: 120, corner: 'top-left' } }));
+  const config = loadConfig(configFile);
+  const logs = [];
+  let stopped;
+  const done = new Promise((r) => (stopped = r));
+  const orb = startOrb(config, { state: () => ({ mode: 'speaking', level: 0.5 }), stop: () => stopped(), log: (r) => logs.push(r), env: { DISPLAY: ':0' } });
+  await done;
+  orb.stop();
+  const seen = JSON.parse(fs.readFileSync(path.join(tmp, 'orb-seen.json'), 'utf8'));
+  assert.deepEqual(seen.look, { size: 120, corner: 'top-left', x: 40, y: 40, colors: DEFAULTS.orb.colors });
+  assert.deepEqual(seen.state, { mode: 'speaking', level: 0.5 });
+  assert.equal(seen.wrong, 404);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(tmp, 'orb-position.json'), 'utf8')), { x: 12, y: 34 });
+  assert.equal(logs[0].event, 'orb');
+  assert.equal(toLevel(50), 0);
+  assert.ok(toLevel(3000) > 0.5 && toLevel(3000) < 1);
+  assert.equal(toLevel(1e6), 1);
+});
+
+test('orb: nothing is started without a desktop session', () => {
+  const config = loadConfig(path.join(tmp, 'no-such-config.json'));
+  assert.equal(startOrb(config, { state: () => ({}), stop() {}, env: {} }), null);
 });
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));

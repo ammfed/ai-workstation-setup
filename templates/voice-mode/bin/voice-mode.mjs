@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 // voice-mode: talk with your assistant and hear it answer, speech to speech.
 //
-//   voice-mode start [--listen]    run in this terminal (--listen opens the mic at once)
-//   voice-mode toggle              the hotkey: open the mic, close it, or cut in on a reply;
-//                                  starts voice mode in the background when it is not running
+//   voice-mode start               talk, in this terminal: the mic is open until you stop it
+//   voice-mode toggle              the hotkey: start a conversation in the background, or end it
 //   voice-mode stop | status
 //   voice-mode check               what is configured and what is missing (never prints keys)
 //   voice-mode pick "<words>"      which desktop action the chooser would take (opens nothing)
@@ -25,6 +24,7 @@ import { Records, TOOLS, runTool } from './records.mjs';
 import { Chooser, buildCatalog, describe, perform } from './desk.mjs';
 import { Mic, Speaker, audioTools, has, resample, rms, startEchoCancel, tone } from './audio.mjs';
 import { PROVIDERS, createProvider } from './providers.mjs';
+import { orbRunner, startOrb, toLevel } from './orb.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const RUNTIME = process.env.XDG_RUNTIME_DIR || CONFIG_DIR;
@@ -61,15 +61,13 @@ export function lockHolder(file = LOCK) {
   return pid > 0 && pid !== process.pid && isVoiceMode(pid) ? pid : null;
 }
 
-export function acquireLock(file = LOCK) {
+/** Write `pid` into a free (or stale) lock; false when a live session holds it. */
+export function claimLock(pid, file = LOCK) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   for (let i = 0; i < 3; i++) {
     try {
-      fs.writeFileSync(file, String(process.pid), { flag: 'wx' });
-      // Two starts that both cleared the same stale lock can both get here; after a
-      // moment only one pid is left in the file, and the other gives way.
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60);
-      return fs.readFileSync(file, 'utf8').trim() === String(process.pid);
+      fs.writeFileSync(file, String(pid), { flag: 'wx' });
+      return true;
     } catch (err) {
       if (err.code !== 'EEXIST') throw err;
     }
@@ -77,6 +75,18 @@ export function acquireLock(file = LOCK) {
     fs.rmSync(file, { force: true }); // stale: its pid is gone or is no longer voice mode
   }
   return false;
+}
+
+export function acquireLock(file = LOCK) {
+  // `toggle` claims the lock for the session it starts, before it is even running.
+  try {
+    if (fs.readFileSync(file, 'utf8').trim() === String(process.pid)) return true;
+  } catch {}
+  if (!claimLock(process.pid, file)) return false;
+  // Two starts that both cleared the same stale lock can both get here; after a moment
+  // only one pid is left in the file, and the other gives way.
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60);
+  return fs.readFileSync(file, 'utf8').trim() === String(process.pid);
 }
 
 export function releaseLock(file = LOCK) {
@@ -319,32 +329,34 @@ class Live {
     this.config = config;
     this.log = log;
     this.stopping = false;
+    this.micLevel = 0;
   }
 
-  async start({ listen }) {
+  /** One conversation, mic open from start to stop: the hotkey starts it and ends it. */
+  async start() {
     const c = this.config;
-    this.lastActive = Date.now();
+    this.lastSpeech = Date.now();
     for (const bin of audioTools()) if (!has(bin)) throw new Error(`\`${bin}\` is not installed (needed for the microphone and speaker)`);
-    // Half duplex (the default): the mic is muted while a reply plays and a moment after,
-    // so a reply from laptop speakers never comes back in as the user talking; the hotkey
-    // cuts in. Full duplex lets the user talk over a reply, which needs echo cancellation
-    // (loaded here, wrapping the default devices) or a headset (echoCancel false).
+    this.orb = c.orb.enabled ? startOrb(c, { state: () => this.orbState(), stop: () => this.stop(), log: this.log }) : null;
+    // Full duplex (the default): talk over a reply to cut in. That needs the reply kept out
+    // of the mic: echo cancellation (loaded here) or a headset (echoCancel false). Without
+    // either, half duplex: the mic is muted while a reply plays and a moment after.
     const full = c.audio.duplex === 'full';
-    this.ec = full && c.audio.echoCancel && !c.audio.input ? startEchoCancel(this.log) : null;
-    this.halfDuplex = !full || (c.audio.echoCancel && !c.audio.input && !this.ec);
+    this.ec = full && c.audio.echoCancel ? startEchoCancel(this.log, c.audio) : null;
+    this.halfDuplex = !full || (c.audio.echoCancel && !this.ec);
     if (full && this.halfDuplex) this.log({ event: 'half-duplex', why: 'echo cancellation is unavailable' });
     await this.connect();
-    this.mic = new Mic({ rate: this.session.provider.inputRate, device: c.audio.input || this.ec?.input });
+    if (this.stopping) return;
+    this.mic = new Mic({ rate: this.session.provider.inputRate, device: this.ec?.input || c.audio.input });
     this.mic.on('data', (pcm) => {
-      if (!this.listening) return;
+      this.micLevel = rms(pcm);
       if (this.halfDuplex && this.session.speaker.busy(400)) return;
       this.session.feed(pcm);
-      if (rms(pcm) > 800) this.lastSpeech = this.lastActive = Date.now();
+      if (this.micLevel > 800) this.lastSpeech = Date.now();
     });
+    // A session nobody talks to ends itself, so nothing lingers in the background.
     this.idle = setInterval(() => {
-      if (this.listening && !this.session.speaker.busy() && Date.now() - this.lastSpeech > c.listen.idleCloseSec * 1000) this.setListening(false, 'idle');
-      // A session left with its mic closed ends itself, so nothing lingers in the background.
-      if (!this.listening && !this.session.speaker.busy() && Date.now() - this.lastActive > c.listen.exitAfterMin * 60000) {
+      if (!this.session.speaker.busy() && Date.now() - this.lastSpeech > c.listen.exitAfterMin * 60000) {
         this.log({ event: 'idle-exit' });
         this.stop();
       }
@@ -353,10 +365,8 @@ class Live {
       sock.setEncoding('utf8');
       sock.on('data', (d) => {
         const cmd = d.trim();
-        if (cmd === 'toggle') this.toggle();
-        else if (cmd === 'listen') this.setListening(true);
-        else if (cmd === 'stop') this.stop();
-        sock.end(`${JSON.stringify({ provider: c.provider, listening: this.listening, replying: this.session.speaker.busy() })}\n`);
+        sock.end(`${JSON.stringify({ provider: c.provider, running: !this.stopping, mode: this.orbState().mode, orb: !!this.orb })}\n`);
+        if (cmd === 'toggle' || cmd === 'stop') this.stop();
       });
       sock.on('error', () => {});
     });
@@ -364,9 +374,9 @@ class Live {
     if (process.platform !== 'win32') fs.rmSync(SOCKET, { force: true });
     this.server.listen(SOCKET);
     this.ownsSocket = true;
-    for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => this.stop());
-    this.log({ event: 'ready', echo_cancel: !!this.ec, hotkey_hint: 'voice-mode toggle' });
-    if (listen) this.setListening(true);
+    this.mic.start();
+    this.cue(880);
+    this.log({ event: 'ready', echo_cancel: !!this.ec, half_duplex: this.halfDuplex, orb: !!this.orb });
   }
 
   /** Connect, retrying with backoff: a dropped network should not end voice mode. */
@@ -393,7 +403,7 @@ class Live {
       this.catalog = c.actions.enabled ? buildCatalog(c, this.records) : new Map();
     }
     const session = new Session(c, { log: this.log, records: this.records, catalog: this.catalog });
-    session.speaker = speaker || new Speaker({ rate: session.provider.outputRate, device: c.audio.output || this.ec?.output });
+    session.speaker = speaker || new Speaker({ rate: session.provider.outputRate, device: this.ec?.output || c.audio.output });
     this.session = session;
     await session.connect();
     session.provider.on('close', (e) => {
@@ -403,38 +413,20 @@ class Live {
     });
   }
 
-  cue(hz) {
-    if (this.config.audio.earcons) this.session.speaker.write(tone(this.session.provider.outputRate, hz, 90));
-  }
-
-  setListening(on, why) {
-    if (on === this.listening) return;
-    this.listening = on;
-    this.lastActive = Date.now();
-    if (on) {
-      this.lastSpeech = Date.now();
-      this.mic.start();
-      this.cue(880);
-    } else {
-      // A little silence lets the provider close a turn cut off mid-sentence.
-      this.session.provider.sendAudio(Buffer.alloc((this.session.provider.inputRate * 2 * 600) / 1000));
-      this.mic.stop();
-      this.cue(440);
-    }
-    this.log({ event: on ? 'listening' : 'mic-closed', why });
-  }
-
-  toggle() {
+  /** What the orb shows: speaking (reply level), listening (voice level), thinking or idle. */
+  orbState() {
     const s = this.session;
-    if (s.speaker.busy()) {
-      s.provider.interrupt(s.speaker.playedMs());
-      s.speaker.cut();
-      if (s.turn) s.turn.interrupted = true;
-      this.log({ event: 'barge-in', by: 'hotkey' });
-      this.setListening(true);
-      return;
-    }
-    this.setListening(!this.listening, 'hotkey');
+    if (!s || !this.mic) return { mode: 'thinking', level: 0 };
+    const now = performance.now();
+    if (s.speaker.busy()) return { mode: 'speaking', level: toLevel(s.speaker.level()) };
+    if (now - s.lastLoud < 350) return { mode: 'listening', level: toLevel(this.micLevel) };
+    const t = s.turn;
+    if (t && !t.logged && now - Math.max(s.lastLoud, t.t0) < 20000) return { mode: 'thinking', level: 0 };
+    return { mode: 'idle', level: toLevel(this.micLevel) };
+  }
+
+  cue(hz) {
+    if (this.config.audio.earcons) this.session?.speaker.write(tone(this.session.provider.outputRate, hz, 90));
   }
 
   stop() {
@@ -442,14 +434,20 @@ class Live {
     this.stopping = true;
     clearInterval(this.idle);
     this.mic?.stop();
-    this.session?.close();
-    this.ec?.stop();
+    this.orb?.stop();
     this.server?.close();
     // The socket and lock are this session's own: it holds the lock.
     if (this.ownsSocket && process.platform !== 'win32') fs.rmSync(SOCKET, { force: true });
     releaseLock();
+    this.session?.speaker.cut();
+    this.cue(440);
     this.log({ event: 'stopped' });
-    setTimeout(() => process.exit(0), 100);
+    // Let the closing tone play, then let go of the provider and the echo canceller.
+    setTimeout(() => {
+      this.session?.close();
+      this.ec?.stop();
+      process.exit(0);
+    }, 250);
   }
 }
 
@@ -583,6 +581,10 @@ function check(config) {
   if (keyName) add(!!readKey(config.keysFile, keyName), `${keyName} in ${config.keysFile} (provider "${config.provider}")`);
   for (const [name, p] of Object.entries(PROVIDERS)) if (p.keyName && name !== config.provider) rows.push(`     ${p.keyName}: ${readKey(config.keysFile, p.keyName) ? 'set' : 'empty'} (switch with "provider": "${name}")`);
   for (const bin of audioTools()) add(has(bin), `\`${bin}\` for audio`);
+  if (process.platform === 'linux' && config.orb.enabled) {
+    const runner = orbRunner(config);
+    add(!!runner, runner ? `orb (${runner})` : 'orb: the Qt 6 qml tool (Debian and Ubuntu: qml-qt6)');
+  }
   const records = new Records(config);
   for (const s of config.sources) add(s.command ? has(s.command[0]) : fs.existsSync(s.path), `source "${s.name}"`);
   add(!!(config.queue.command || []).length && (path.isAbsolute(config.queue.command[0]) ? fs.existsSync(config.queue.command[0]) : has(config.queue.command[0])), 'queue command');
@@ -655,6 +657,10 @@ async function main(argv) {
   }
   switch (cmd) {
     case 'start': {
+      // A press that ends the conversation can come while it is still starting.
+      let live = null;
+      process.on('exit', () => releaseLock());
+      for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => (live ? live.stop() : process.exit(0)));
       const keyName = PROVIDERS[config.provider].keyName;
       if (keyName && !readKey(config.keysFile, keyName)) {
         console.error(`voice-mode: ${keyName} is empty in ${config.keysFile}; add it there, or set "provider" in ${config.file}`);
@@ -665,10 +671,9 @@ async function main(argv) {
         console.error(`voice-mode is already running (pid ${lockHolder() ?? '?'}); \`voice-mode toggle\` talks to it`);
         return 2;
       }
-      process.on('exit', () => releaseLock());
-      const live = new Live(config, makeLogger(config));
+      live = new Live(config, makeLogger(config));
       try {
-        await live.start({ listen: !!args.listen });
+        await live.start();
       } catch (err) {
         console.error(`voice-mode: ${err.message}`);
         live.stop();
@@ -676,27 +681,29 @@ async function main(argv) {
       }
       return new Promise(() => {});
     }
-    case 'toggle': {
-      if (await send('toggle')) return 0;
-      // A session that is still starting holds the lock but has no socket yet: this press is
-      // passed to it once it is up, never answered by starting a second one.
-      if (lockHolder()) {
-        for (let i = 0; i < 120; i++) {
-          await new Promise((r) => setTimeout(r, 250));
-          if (await send('toggle')) return 0;
-          if (!lockHolder()) break;
-        }
+    case 'toggle':
+    case 'stop': {
+      // On and off: a running session ends (one still connecting is told by signal); with
+      // none running, toggle starts one in the background.
+      const r = await send('stop');
+      const pid = r ? null : lockHolder();
+      if (pid) process.kill(pid, 'SIGTERM');
+      if (r || pid || cmd === 'stop') {
+        if (cmd === 'stop') console.log(r || (pid ? `stopping (pid ${pid})` : 'not running'));
         return 0;
       }
       fs.mkdirSync(config.logDir, { recursive: true });
       const out = fs.openSync(path.join(config.logDir, 'voice-mode.log'), 'a');
-      spawn(process.execPath, [SELF, 'start', '--listen'], { detached: true, stdio: ['ignore', out, out] }).unref();
+      const child = spawn(process.execPath, [SELF, 'start'], { detached: true, stdio: ['ignore', out, out] });
+      // The lock is the new session's from this moment, so a quick second press finds it
+      // and ends it. Losing the lock to a simultaneous press means that one started it.
+      if (!claimLock(child.pid)) child.kill('SIGTERM');
+      child.unref();
       return 0;
     }
-    case 'stop':
     case 'status': {
-      const r = await send(cmd);
-      console.log(r || 'not running');
+      const r = await send('status');
+      console.log(r || (lockHolder() ? 'starting' : 'not running'));
       return 0;
     }
     case 'check':

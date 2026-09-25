@@ -21,12 +21,22 @@ export const DEFAULTS = {
     'You are a voice assistant. Be brief, plain and friendly: one to three short spoken sentences, ' +
     'no lists, no markdown. Answer from the records your tools return and say so when they do not say.',
   personaFile: '',
-  // The mic closes after idleCloseSec without speech; the session exits after exitAfterMin
-  // with the mic closed.
-  listen: { idleCloseSec: 60, exitAfterMin: 15 },
-  // duplex: half (mic muted while a reply plays; the hotkey cuts in) or full (talk over a
-  // reply; needs echoCancel, or a headset with echoCancel false).
-  audio: { duplex: 'half', echoCancel: true, input: '', output: '', earcons: true },
+  // A conversation ends by itself after exitAfterMin without speech.
+  listen: { exitAfterMin: 10 },
+  // duplex: full (talk over a reply to cut in; needs echoCancel, or a headset with echoCancel
+  // false) or half (the mic is muted while a reply plays). Full falls back to half when echo
+  // cancellation cannot load.
+  audio: { duplex: 'full', echoCancel: true, input: '', output: '', earcons: true },
+  // The floating orb shown while a conversation runs (Linux desktops with Qt 6 QML).
+  // corner: bottom-right | bottom-left | top-right | top-left; margin in pixels from it.
+  orb: {
+    enabled: true,
+    size: 150,
+    corner: 'bottom-right',
+    margin: 40,
+    colors: { idle: '#7c8aa5', listening: '#38bdf8', thinking: '#fbbf24', speaking: '#c084fc' },
+    runner: '',
+  },
   actions: {
     enabled: true,
     chooser: {
