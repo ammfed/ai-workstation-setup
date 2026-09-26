@@ -17,8 +17,8 @@ jobs:
         run: shellcheck install.sh update.sh scripts/*.sh templates/*/*.sh
       - name: node syntax
         run: for f in lib/*.mjs modules/*/*.mjs templates/*/bin/*.mjs; do node --check "$f"; done
-      - name: update, saved-answers, tool-check, privacy-scan and daily-sync tests
-        run: node --test test/update.test.mjs test/answers.test.mjs test/tools.test.mjs test/privacy.test.mjs test/daily-sync.test.mjs
+      - name: update, saved-answers, tool-check, privacy-scan, daily-sync and ledger tests
+        run: node --test test/update.test.mjs test/answers.test.mjs test/tools.test.mjs test/privacy.test.mjs test/daily-sync.test.mjs test/ledger.test.mjs
       - name: simulated dry runs for every platform
         run: |
           for os in linux macos wsl windows; do
@@ -35,6 +35,9 @@ jobs:
       - uses: actions/checkout@v6
       - name: update, saved-answers, tool-check and daily-sync tests
         run: node --test test/update.test.mjs test/answers.test.mjs test/tools.test.mjs test/daily-sync.test.mjs
+      - name: ledger tests
+        if: runner.os != 'Windows'
+        run: node --test test/ledger.test.mjs
       - name: dry run (install.sh)
         if: runner.os != 'Windows'
         run: |
