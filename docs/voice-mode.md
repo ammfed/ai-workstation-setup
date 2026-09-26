@@ -130,7 +130,9 @@ Without context, a voice model is a stranger. Two things make it the assistant y
 
 **The briefing.** At the start of a conversation, and again whenever a source changes (checked
 every few seconds) or `refreshMin` passes, voice mode builds a briefing and puts it in the
-model's instructions. Each part has its own budget (`maxChars`, default 4000):
+model's instructions. OpenAI takes the new instructions at once. Gemini keeps its first
+instructions for the whole conversation (a resumed one too), so it is sent only the lines
+that changed, as context, in the next quiet moment. Each part has its own budget (`maxChars`, default 4000):
 
 | Part | What it takes |
 | --- | --- |

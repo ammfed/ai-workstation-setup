@@ -170,6 +170,29 @@ export function buildBriefing(config) {
   return { text, missing, chars: text.length };
 }
 
+/**
+ * The lines of `after` that `before` does not have, each under its part's heading: what a
+ * provider that cannot replace its instructions mid-conversation is told instead.
+ */
+export function briefingChanges(before, after, max = 4000) {
+  const had = new Set(String(before).split('\n'));
+  const out = [];
+  let heading = null;
+  for (const line of String(after).split('\n')) {
+    if (/^## /.test(line)) {
+      heading = line;
+      continue;
+    }
+    if (!line.trim() || had.has(line)) continue;
+    if (heading) {
+      out.push(heading);
+      heading = null;
+    }
+    out.push(line);
+  }
+  return clip(out.join('\n'), max);
+}
+
 /** Newest modification time among the briefing's sources, to rebuild when one changes. */
 export function briefingStamp(config) {
   let stamp = 0;

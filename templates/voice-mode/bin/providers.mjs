@@ -391,10 +391,19 @@ export class GeminiLive extends Socketed {
     this.send({ realtimeInput: { audio: { data: b64(pcm), mimeType: `audio/pcm;rate=${this.inputRate}` } } });
   }
 
-  /** Gemini Live takes its system instruction once, at setup: a new one applies from the next connect. */
+  /**
+   * Gemini Live takes its system instruction once, at setup, and a resumed session keeps the
+   * old one: a new one applies only to a fresh conversation. Mid-conversation, send a note.
+   */
   setInstructions(text) {
     this.instructions = text;
     return false;
+  }
+
+  /** Context the model takes in without replying (turnComplete false). */
+  note(text) {
+    this.send({ clientContent: { turns: [{ role: 'user', parts: [{ text: `(Context update, not a question: ${text})` }] }], turnComplete: false } });
+    return true;
   }
 
   say(text) {

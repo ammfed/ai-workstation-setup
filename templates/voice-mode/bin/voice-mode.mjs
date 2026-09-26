@@ -28,7 +28,7 @@ import { Chooser, TEXT_KINDS, buildCatalog, describe, perform } from './desk.mjs
 import { Mic, Speaker, audioTools, has, resample, rms, startEchoCancel, tone } from './audio.mjs';
 import { PROVIDERS, createProvider } from './providers.mjs';
 import { orbRunner, startOrb, toLevel } from './orb.mjs';
-import { briefingStamp, buildBriefing, redact } from './briefing.mjs';
+import { briefingChanges, briefingStamp, buildBriefing, redact } from './briefing.mjs';
 import { Deliveries, newId, noteText, savePending, saveReply } from './handoff.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
@@ -527,6 +527,7 @@ class Live {
     this.watch = setInterval(() => {
       this.deliverAnswers();
       this.refreshBriefing();
+      this.sendBriefingChanges();
     }, 250);
     this.server = net.createServer((sock) => {
       sock.setEncoding('utf8');
@@ -609,7 +610,21 @@ class Live {
     if (text === this.briefing) return;
     this.briefing = text;
     this.log({ event: 'briefing', chars, ...(missing.length ? { missing } : {}) });
-    if (!initial && this.session) this.session.provider.setInstructions?.(instructionsFor(this.config, this.records, text));
+    if (initial) this.briefKnown = text;
+    // A provider that cannot replace its instructions (Gemini) is told what changed instead,
+    // in the next quiet moment.
+    else if (this.session && !this.session.provider.setInstructions?.(instructionsFor(this.config, this.records, text))) this.briefPending = true;
+    else this.briefKnown = text;
+  }
+
+  /** Tell the model what changed in the briefing since it last saw it. */
+  sendBriefingChanges() {
+    const s = this.session;
+    if (!this.briefPending || !s || !s.quiet()) return;
+    this.briefPending = false;
+    const changes = briefingChanges(this.briefKnown || '', this.briefing);
+    this.briefKnown = this.briefing;
+    if (changes && s.provider.note?.(`Briefing update, what changed just now:\n${changes}`)) this.log({ event: 'briefing-update', chars: changes.length });
   }
 
   deliverAnswers() {

@@ -22,7 +22,7 @@ const net = await import('node:net');
 const { spawn } = await import('node:child_process');
 const { resample, tone, Speaker } = await import(path.join(bin, 'audio.mjs'));
 const { startOrb, toLevel } = await import(path.join(bin, 'orb.mjs'));
-const { redact, transcriptTail, sections, buildBriefing } = await import(path.join(bin, 'briefing.mjs'));
+const { redact, transcriptTail, sections, buildBriefing, briefingChanges } = await import(path.join(bin, 'briefing.mjs'));
 const { noteText, savePending, saveReply, waitingReplies, markSpoken, handoffDir, Deliveries } = await import(path.join(bin, 'handoff.mjs'));
 const { parseCommand, qtKey } = await import(path.join(repoRoot, 'modules', 'voice-mode', 'module.mjs'));
 
@@ -525,6 +525,20 @@ test('openai adapter: an error before the session is ready fails the connect wit
   await new Promise((r) => setImmediate(r));
   p.onMessage({ type: 'error', error: { message: 'You have no credits remaining.' } });
   await assert.rejects(connecting, /no credits remaining/);
+});
+
+test('briefing: only the new lines are sent, under their headings; a note takes no reply', () => {
+  const before = '## Current work\n- login fix\n- summary\n\n## Live status\n- api: working';
+  const after = '## Current work\n- login fix\n- summary\n- budget approved at 2pm\n\n## Live status\n- api: working\n- web: done';
+  assert.equal(briefingChanges(before, after), '## Current work\n- budget approved at 2pm\n## Live status\n- web: done');
+  assert.equal(briefingChanges(after, after), '');
+  const p = new GeminiLive(DEFAULTS.providers.gemini, { instructions: 'x', tools: [], key: 'k' });
+  const sent = [];
+  p.send = (m) => sent.push(m);
+  assert.equal(p.setInstructions('new'), false);
+  assert.equal(p.note('the budget was approved'), true);
+  assert.equal(sent[0].clientContent.turnComplete, false);
+  assert.match(sent[0].clientContent.turns[0].parts[0].text, /^\(Context update, not a question: the budget was approved\)$/);
 });
 
 test('gemini adapter: a reconnect resumes the conversation with the latest handle', async () => {
