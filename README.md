@@ -70,6 +70,7 @@ diverged, it stops, explains, and changes nothing. See
 | `clickup` | clickup-axi (checksum-verified release binary), skill, session hook, default list; [structure guide](docs/clickup-structure.md) | ✓ | ✓ | ✓ | ✓ |
 | `extras` | Optional docling (documents to markdown) and OpenWhispr (voice dictation) | ✓ | ✓ | app on Windows side | ✓ |
 | `daily-sync` | Opt-in daily job: fast-forwards clean repos, runs the vault ingest (failing loudly on a missing raw folder), checks tool updates, reads ClickUp and TickTick for drift; model calls only for new drift; one short report, FAILED when a run fails or is missed; [guide](docs/daily-sync.md) | ✓ | ✓ | ✓ | schedule by hand |
+| `ledger` | Opt-in always-on service: one append-only record of your messages, rulings and every Firstmate status line and inbox note, with secrets redacted, and a live Now page (waiting on you, in flight, latest words, latest status) rebuilt within seconds; [guide](docs/ledger.md) | ✓ | ✓ | ✓ | – (use WSL) |
 | `terminal` | Optional WezTerm and a translucent theme in `~/.wezterm.lua` | ✓ | ✓ | config only | ✓ |
 
 `./install.sh --list` prints the same from the modules themselves. A module that
