@@ -527,6 +527,35 @@ test('openai adapter: an error before the session is ready fails the connect wit
   await assert.rejects(connecting, /no credits remaining/);
 });
 
+test('gemini adapter: a reconnect resumes the conversation with the latest handle', async () => {
+  const p = new GeminiLive(DEFAULTS.providers.gemini, { instructions: 'x', tools: [], key: 'k' });
+  const sent = [];
+  p.open = async () => {};
+  p.send = (m) => sent.push(m);
+  const connecting = p.connect();
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(sent[0].setup.sessionResumption, {}, 'asks for handles from the start');
+  p.onMessage({ setupComplete: {} });
+  await connecting;
+  p.onMessage({ sessionResumptionUpdate: { newHandle: 'h1', resumable: true } });
+  p.onMessage({ sessionResumptionUpdate: { newHandle: 'h2', resumable: false } });
+  const left = [];
+  p.on('go-away', (t) => left.push(t));
+  p.onMessage({ goAway: { timeLeft: '60s' } });
+  assert.deepEqual(left, ['60s']);
+  // What the reconnect does: a new adapter carrying the handle.
+  const q = new GeminiLive(DEFAULTS.providers.gemini, { instructions: 'x', tools: [], key: 'k' });
+  q.resumeHandle = p.resumeHandle;
+  const sent2 = [];
+  q.open = async () => {};
+  q.send = (m) => sent2.push(m);
+  const again = q.connect();
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(sent2[0].setup.sessionResumption, { handle: 'h1' }, 'only a resumable handle is kept');
+  q.onMessage({ setupComplete: {} });
+  await again;
+});
+
 test('gemini adapter: a turn ending in a tool call is not the reply; interrupted stops playback', () => {
   const sent = [];
   const p = new GeminiLive(DEFAULTS.providers.gemini, { instructions: 'x', tools: [], key: 'k' });

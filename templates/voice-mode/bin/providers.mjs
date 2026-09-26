@@ -325,6 +325,8 @@ export class GeminiLive extends Socketed {
         inputAudioTranscription: {},
         outputAudioTranscription: {},
         contextWindowCompression: { slidingWindow: {} },
+        // Each connection lasts about ten minutes; a handle resumes the same conversation.
+        sessionResumption: this.resumeHandle ? { handle: this.resumeHandle } : {},
       },
     });
     await this.wait('ready', 10000);
@@ -340,7 +342,9 @@ export class GeminiLive extends Socketed {
 
   onMessage(m) {
     if (m.setupComplete) return this.emit('ready');
-    if (m.goAway) this.emit('error', new Error(`${this.name} is ending the session in ${m.goAway.timeLeft}`));
+    if (m.sessionResumptionUpdate?.resumable && m.sessionResumptionUpdate.newHandle) this.resumeHandle = m.sessionResumptionUpdate.newHandle;
+    // The connection is about to be reset; the reconnect resumes the conversation with the handle.
+    if (m.goAway) this.emit('go-away', m.goAway.timeLeft);
     const sc = m.serverContent;
     if (sc) {
       if (sc.inputTranscription?.text) {

@@ -53,7 +53,7 @@ points at another one). Everything not in the file takes the defaults in `bin/co
 | `provider` | **The one line that switches providers**: `openai`, `gemini`, or `fake` (no network, for tests). |
 | `keysFile` | Env file holding `OPENAI_API_KEY` and `GEMINI_API_KEY`; default `~/.config/ai-workstation-setup/voice/.env` (mode 600). Read at run time only. |
 | `providers.openai` | `model` (`gpt-realtime`), `voice`, `transcribeModel` (`gpt-live-transcribe`, which streams words while you speak), `silenceMs`, `vad` (`server` or `semantic`). |
-| `providers.gemini` | `model` (`gemini-3.8-live`), `voice`, `silenceMs`. |
+| `providers.gemini` | `model` (`gemini-3.8-live`), `voice`, `silenceMs`. Gemini resets each connection after about ten minutes; voice mode reconnects with the session's resumption handle, so the conversation carries on where it was. |
 | `persona` / `personaFile` | Who the voice is. The shipped default is neutral and brief; put your own in a file. |
 | `sources` | What it may read: `{ "name", "path", "about"?, "show"? }` for a file or folder (a `*` in a path segment makes one source per match), or `{ "name", "command": [..., "{query}"] }` for a read-only search command (`{regex}` gives the keywords as `a\|b`). `about` tells the model what the source holds; `show: true` lets its top-level notes be shown on screen by voice. |
 | `queue` | `{ "command": [...], "env": {} }`: how a hand-off reaches your assistant; the note is added as the last argument. Never run through a shell. Without it there is no hand-off. |

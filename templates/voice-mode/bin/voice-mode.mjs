@@ -564,6 +564,8 @@ class Live {
   async connectOnce() {
     const c = this.config;
     const speaker = this.session?.speaker;
+    // Gemini hands out a resumption handle: a reconnect with it continues the same conversation.
+    const resume = this.session?.provider.resumeHandle;
     // Records (with their read cache) and the action catalog outlive a reconnect.
     if (!this.records) {
       this.records = new Records(c);
@@ -580,11 +582,13 @@ class Live {
       if (this.deliveries?.failed(a.id)) this.log({ event: 'handoff-gave-up', id: a.id });
     };
     session.speaker = speaker || new Speaker({ rate: session.provider.outputRate, device: this.ec?.output || c.audio.output });
+    if (resume) session.provider.resumeHandle = resume;
     this.session = session;
     await session.connect();
+    session.provider.on('go-away', (timeLeft) => this.log({ event: 'go-away', time_left: timeLeft }));
     session.provider.on('close', (e) => {
       if (this.stopping || this.session !== session) return;
-      this.log({ event: 'disconnected', code: e?.code, reason: e?.reason });
+      this.log({ event: 'disconnected', code: e?.code, reason: e?.reason, resume: !!session.provider.resumeHandle });
       this.connect(Infinity).catch((err) => this.log({ event: 'reconnect-failed', error: err.message }));
     });
   }
