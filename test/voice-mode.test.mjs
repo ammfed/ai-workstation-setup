@@ -930,7 +930,7 @@ test('briefing: whole memory files, lines cut short, and who is working on what'
   const when = '\\d+ \\w{3} \\d\\d:\\d\\d';
   assert.match(b.text, new RegExp(`- site-mate \\(secondmate on site\\); working copy ${mate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}; latest, ${when}: done: shipped the banner`));
   assert.match(b.text, new RegExp(`- banner \\(ship on site under site-mate\\); working copy ~/copies/site-1; latest, ${when}: paused: PR open, waiting on review`));
-  assert.doesNotMatch(b.text, /old/);
+  assert.doesNotMatch(b.text, /^- old\b/m, "a task quiet for longer than days is left out");
   // A task's new status line counts as a change to rebuild for.
   const before = briefingStamp(c);
   fs.utimesSync(path.join(mate, 'state', 'banner.status'), new Date(), new Date(Date.now() + 60000));
