@@ -54,6 +54,43 @@ function playArgv(rate, device) {
   return ['pacat', '--playback', '--raw', '--format=s16le', `--rate=${rate}`, '--channels=1', '--latency-msec=40', ...(device ? [`--device=${device}`] : [])];
 }
 
+/** A WAV file's audio (16-bit PCM, first channel) and its rate; anything else is taken as raw PCM at `rate`. */
+export function wavToPcm(buf, rate = 24000) {
+  if (buf.toString('ascii', 0, 4) !== 'RIFF') return { pcm: buf, rate };
+  let off = 12;
+  let fmt = null;
+  while (off + 8 <= buf.length) {
+    const id = buf.toString('ascii', off, off + 4);
+    const size = buf.readUInt32LE(off + 4);
+    if (id === 'fmt ') fmt = { channels: buf.readUInt16LE(off + 10), rate: buf.readUInt32LE(off + 12), bits: buf.readUInt16LE(off + 22) };
+    if (id === 'data') {
+      if (!fmt || fmt.bits !== 16) throw new Error('only 16-bit PCM WAV is supported');
+      // A streamed WAV can say 0 or more than it has: take what is there.
+      let pcm = buf.subarray(off + 8, size && off + 8 + size <= buf.length ? off + 8 + size : buf.length);
+      if (fmt.channels > 1) {
+        const mono = Buffer.alloc(Math.floor(pcm.length / 2 / fmt.channels) * 2);
+        for (let i = 0; i < mono.length / 2; i++) mono.writeInt16LE(pcm.readInt16LE(i * 2 * fmt.channels), i * 2);
+        pcm = mono;
+      }
+      return { pcm, rate: fmt.rate };
+    }
+    off += 8 + size + (size % 2);
+  }
+  throw new Error('no audio data in the WAV');
+}
+
+/** Play PCM once to the end on `device` (the default output when empty). */
+export function play(pcm, { rate, device = '' }) {
+  return new Promise((resolve, reject) => {
+    const argv = playArgv(rate, device);
+    const proc = spawn(argv[0], argv.slice(1), { stdio: ['pipe', 'ignore', 'ignore'] });
+    proc.on('error', reject);
+    proc.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`${argv[0]} exited with ${code}`))));
+    proc.stdin.on('error', () => {});
+    proc.stdin.end(pcm);
+  });
+}
+
 export function audioTools() {
   return process.platform === 'darwin' ? ['rec', 'play'] : ['parecord', 'pacat'];
 }

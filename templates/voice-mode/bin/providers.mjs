@@ -21,7 +21,8 @@
 // truncate message, so the reply's remaining audio is dropped here.
 
 import { EventEmitter } from 'node:events';
-import { rms } from './audio.mjs';
+import { rms, wavToPcm } from './audio.mjs';
+import { readKey } from './config.mjs';
 
 const b64 = (buf) => Buffer.from(buf).toString('base64');
 
@@ -140,7 +141,7 @@ export class OpenAIRealtime extends Socketed {
           },
           output: { format: { type: 'audio/pcm', rate: 24000 }, voice: this.cfg.voice },
         },
-        tools: this.tools.map((t) => ({ type: 'function', ...t })),
+        tools: this.tools.map(({ name, description, parameters }) => ({ type: 'function', name, description, parameters })),
         tool_choice: 'auto',
       },
     });
@@ -302,6 +303,8 @@ export class GeminiLive extends Socketed {
     this.userFinal = false;
     this.replying = false;
     this.dropping = false;
+    // Calls the model waits on (the default here): their answers continue the same reply.
+    this.waitingFor = new Set();
   }
 
   async connect() {
@@ -317,7 +320,9 @@ export class GeminiLive extends Socketed {
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: this.cfg.voice } } },
         },
         systemInstruction: { parts: [{ text: this.instructions }] },
-        tools: [{ functionDeclarations: this.tools }],
+        // A tool marked async runs while the conversation goes on (NON_BLOCKING, the 3.8
+        // default); any other is BLOCKING: the model waits for the records before it answers.
+        tools: [{ functionDeclarations: this.tools.map(({ name, description, parameters, async }) => ({ name, description, parameters, behavior: async ? 'NON_BLOCKING' : 'BLOCKING' })) }],
         realtimeInputConfig: {
           automaticActivityDetection: { silenceDurationMs: this.cfg.silenceMs },
           activityHandling: 'START_OF_ACTIVITY_INTERRUPTS',
@@ -365,24 +370,23 @@ export class GeminiLive extends Socketed {
       for (const part of sc.modelTurn?.parts || []) {
         if (part.inlineData?.data) {
           this.finishUserText();
-          this.awaitingTools = false;
           this.replying = true;
           if (!this.dropping) this.emit('audio', Buffer.from(part.inlineData.data, 'base64'));
         }
       }
       if (sc.outputTranscription?.text && !this.dropping) this.emit('reply-text', sc.outputTranscription.text);
-      // A turn that ends in a tool call is not the reply: the reply follows the tool answer.
-      if (sc.turnComplete && this.awaitingTools) this.awaitingTools = false;
-      else if (sc.turnComplete) {
+      // While the model waits on a tool, the reply is not over: it goes on after the answer.
+      if (sc.turnComplete && !this.waitingFor.size) {
         this.finishUserText();
         this.replying = false;
         this.dropping = false;
         this.emit('reply-done');
       }
     }
+    for (const id of m.toolCallCancellation?.ids || []) this.waitingFor.delete(id);
     for (const fc of m.toolCall?.functionCalls || []) {
       this.finishUserText();
-      this.awaitingTools = true;
+      if (!this.tools.find((t) => t.name === fc.name)?.async) this.waitingFor.add(fc.id);
       this.emit('tool-call', { id: fc.id, name: fc.name, args: fc.args || {} });
     }
   }
@@ -411,8 +415,10 @@ export class GeminiLive extends Socketed {
     return true;
   }
 
-  toolResult(call, result) {
-    this.send({ toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { output: result } }] } });
+  /** A quiet result of an async call is taken in silently; otherwise the model speaks once it is free. */
+  toolResult(call, result, { quiet = false } = {}) {
+    const async = !this.waitingFor.delete(call.id);
+    this.send({ toolResponse: { functionResponses: [{ id: call.id, name: call.name, response: { output: result }, ...(async ? { scheduling: quiet ? 'SILENT' : 'WHEN_IDLE' } : {}) }] } });
   }
 
   interrupt() {
@@ -543,6 +549,60 @@ export class FakeProvider extends EventEmitter {
 }
 
 export const PROVIDERS = { openai: { make: OpenAIRealtime, keyName: 'OPENAI_API_KEY' }, gemini: { make: GeminiLive, keyName: 'GEMINI_API_KEY' }, fake: { make: FakeProvider } };
+
+// ------------------------------------------------------------------ text to speech
+
+/**
+ * Plain text to speech, once, outside a conversation (`voice-mode say`): the words as given,
+ * in the provider's configured voice. Each returns 16-bit mono PCM and its rate.
+ */
+const SPEECH = {
+  async gemini(cfg, text, key, fetchImpl) {
+    const res = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${cfg.ttsModel}:generateContent`, {
+      method: 'POST',
+      headers: { 'x-goog-api-key': key, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text }] }],
+        generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: cfg.voice } } } },
+      }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body?.error?.message || `HTTP ${res.status}`);
+    const data = body.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData;
+    if (!data) throw new Error('no audio in the reply');
+    // audio/wav, or raw audio/L16;rate=24000.
+    const rate = Number(/rate=(\d+)/.exec(data.mimeType || '')?.[1]) || 24000;
+    return wavToPcm(Buffer.from(data.data, 'base64'), rate);
+  },
+  async openai(cfg, text, key, fetchImpl) {
+    const res = await fetchImpl('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: cfg.ttsModel, voice: cfg.voice, input: text, response_format: 'pcm' }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body?.error?.message || `HTTP ${res.status}`);
+    }
+    // pcm: raw 24 kHz 16-bit mono.
+    return { pcm: Buffer.from(await res.arrayBuffer()), rate: 24000 };
+  },
+};
+
+/**
+ * Speech for `text` from the configured provider, or from the other one only when the
+ * configured one has no key. Returns { pcm, rate, provider, model, voice }.
+ */
+export async function synthesize(config, text, { fetchImpl = fetch } = {}) {
+  const order = [config.provider, ...Object.keys(SPEECH)].filter((n, i, all) => SPEECH[n] && all.indexOf(n) === i);
+  for (const name of order) {
+    const key = readKey(config.keysFile, PROVIDERS[name].keyName);
+    if (!key) continue;
+    const cfg = config.providers[name];
+    return { ...(await SPEECH[name](cfg, text, key, fetchImpl)), provider: name, model: cfg.ttsModel, voice: cfg.voice };
+  }
+  throw new Error(`no provider key for speech in ${config.keysFile} (${order.map((n) => PROVIDERS[n].keyName).join(' or ')})`);
+}
 
 export function createProvider(config, { instructions, tools, key, script }) {
   const entry = PROVIDERS[config.provider];

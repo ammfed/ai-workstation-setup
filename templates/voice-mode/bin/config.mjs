@@ -13,8 +13,9 @@ export const DEFAULTS = {
   provider: 'openai',
   keysFile: path.join(CONFIG_DIR, '.env'),
   providers: {
-    openai: { model: 'gpt-realtime', voice: 'marin', transcribeModel: 'gpt-live-transcribe', silenceMs: 500 },
-    gemini: { model: 'gemini-3.8-live', voice: 'Puck', silenceMs: 500 },
+    // ttsModel: plain text to speech for `voice-mode say` outside a conversation, same voice.
+    openai: { model: 'gpt-realtime', voice: 'marin', transcribeModel: 'gpt-live-transcribe', silenceMs: 500, ttsModel: 'gpt-4o-mini-tts' },
+    gemini: { model: 'gemini-3.8-live', voice: 'Puck', silenceMs: 500, ttsModel: 'gemini-3.8-flash-lite-tts' },
     fake: { replyDelayMs: 300 },
   },
   persona:
@@ -75,11 +76,19 @@ export const DEFAULTS = {
   // Where real work and deeper questions are handed over: argv with the note appended; env is added.
   queue: { command: [], env: {} },
   // Answers to hand-offs come back with `<replyCommand> <id> "<answer>"` (see handoff.mjs).
-  handoff: { dir: '', replyCommand: 'voice-mode reply' },
+  // A conversation stays open while an answer is coming (up to waitMin), and says once that
+  // it is still coming when it takes longer than stillComingSec (0: never).
+  handoff: { dir: '', replyCommand: 'voice-mode reply', waitMin: 15, stillComingSec: 20 },
   // The live briefing (see briefing.mjs), rebuilt at start, every refreshMin minutes and when
-  // a source changes. parts: { name, transcript: <Claude Code project folder>, messages?,
-  // maxChars? } | { name, path, sections?: ['In flight'], maxChars? } | { name, glob, hours?, maxChars? }.
-  briefing: { enabled: true, refreshMin: 3, maxChars: 24000, parts: [] },
+  // a source changes. parts, each with maxChars:
+  //   { name, transcript: <Claude Code project folder>, messages?, skip?: [regex] }
+  //   { name, path, sections?: ['In flight'], lineChars? }
+  //   { name, files: <glob>, except?: [file names] }     whole files, such as memories
+  //   { name, glob, hours? }                              the newest line of each log
+  //   { name, tasks: <glob or [globs] of <id>.meta>, days? }   who is working on what
+  // Gemini Live takes up to its whole 131,072-token context as instructions, but every turn
+  // bills the whole context again: see docs/voice-mode.md before raising maxChars.
+  briefing: { enabled: true, refreshMin: 3, maxChars: 120000, parts: [] },
   logDir: path.join(CONFIG_DIR, 'logs'),
   // Also write what was said and answered to the run log (never to the metrics file).
   logTranscripts: false,

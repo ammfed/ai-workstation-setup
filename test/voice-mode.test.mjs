@@ -17,12 +17,12 @@ const { merge, parseEnvFile, readKey, expandGlob, loadConfig, DEFAULTS } = await
 const { Records, runTool } = await import(path.join(bin, 'records.mjs'));
 const { Chooser, buildCatalog, criteria, perform, controlActions, spans, focusScript, describe, typeable, SYSTEM } = await import(path.join(bin, 'desk.mjs'));
 const { OpenAIRealtime, GeminiLive, FakeProvider } = await import(path.join(bin, 'providers.mjs'));
-const { Session, PROMISE, streamClip, speechBounds, acquireLock, claimLock, releaseLock, lockHolder, decisionLine } = await import(path.join(bin, 'voice-mode.mjs'));
+const { Session, Live, PROMISE, streamClip, speechBounds, acquireLock, claimLock, releaseLock, lockHolder, decisionLine, doRequest, sayText, makeLogger } = await import(path.join(bin, 'voice-mode.mjs'));
 const net = await import('node:net');
 const { spawn } = await import('node:child_process');
-const { resample, tone, Speaker } = await import(path.join(bin, 'audio.mjs'));
+const { resample, tone, Speaker, wavToPcm } = await import(path.join(bin, 'audio.mjs'));
 const { startOrb, toLevel } = await import(path.join(bin, 'orb.mjs'));
-const { redact, transcriptTail, sections, buildBriefing, briefingChanges } = await import(path.join(bin, 'briefing.mjs'));
+const { redact, transcriptTail, sections, buildBriefing, briefingChanges, briefingStamp, plain } = await import(path.join(bin, 'briefing.mjs'));
 const { noteText, savePending, saveReply, waitingReplies, markSpoken, handoffDir, Deliveries } = await import(path.join(bin, 'handoff.mjs'));
 const { parseCommand, qtKey } = await import(path.join(repoRoot, 'modules', 'voice-mode', 'module.mjs'));
 
@@ -350,6 +350,9 @@ test('session: without a queue command there is no hand_off tool', () => {
   assert.doesNotMatch(session.provider.instructions, /hand_off|hand them off|Answer arrived/);
   assert.match(session.provider.instructions, /voice mode cannot do that/);
   assert.match(new Session(config(), { script: [] }).provider.instructions, /call hand_off in that same reply/);
+  // Records come before a hand-off, and without one, before the refusal.
+  assert.match(new Session(config(), { script: [] }).provider.instructions, /look it up yourself first, in the same reply: search_records[^\n]*\n- Only when those do not answer \(after you looked\)/);
+  assert.match(session.provider.instructions, /look it up yourself first[^\n]*\n- You cannot do work/);
   session.close();
 });
 
@@ -436,12 +439,13 @@ test('briefing: transcript text only, sections, globs, budgets, and redaction', 
     { name: 'Gone', path: path.join(dir, 'missing.md') },
   ] } }));
   assert.deepEqual(b.missing, ['Gone']);
-  assert.match(b.text, /## Recent conversation\nUser: what is left on the login fix\?\n\nAssistant: Only the review\. Key \[redacted key\]\./);
-  assert.match(b.text, /## Current work\n## In flight\n- login fix/);
+  assert.match(b.text, /## Recent conversation\n\(Your own session new, last active \d+ \w{3} \d\d:\d\d\.\)\n\nUser: what is left on the login fix\?\n\nAssistant: Only the review\. Key \[redacted key\]\./);
+  // A part's own headings sit under its heading.
+  assert.match(b.text, /## Current work\n#### In flight\n- login fix/);
   assert.match(b.text, /## Live status\n- login: working: tests green/);
   assert.doesNotMatch(b.text, /older session|private|tool output|side|hidden|old thing|long ago|sk-proj/);
   // A budget keeps the newest messages.
-  const small = buildBriefing(config({ briefing: { parts: [{ name: 'c', transcript: proj, maxChars: 80 }] } }));
+  const small = buildBriefing(config({ briefing: { parts: [{ name: 'c', transcript: proj, maxChars: 130 }] } }));
   assert.doesNotMatch(small.text, /User:/);
   assert.match(small.text, /Assistant: Only the review/);
 });
@@ -850,6 +854,327 @@ await fetch(url + '/stop', { method: 'POST', body: '{}' });
 test('orb: nothing is started without a desktop session', () => {
   const config = loadConfig(path.join(tmp, 'no-such-config.json'));
   assert.equal(startOrb(config, { state: () => ({}), stop() {}, env: {} }), null);
+});
+
+// ------------------------------------------------------------------ the voice as the assistant
+
+test('briefing: the conversation keeps what the user said and each final reply; notices, automated input and narration go', () => {
+  const dir = path.join(tmp, 'brief-clean');
+  fs.mkdirSync(dir, { recursive: true });
+  const u = (content) => ({ type: 'user', message: { content } });
+  const a = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
+  const tool = { type: 'user', message: { content: [{ type: 'tool_result', content: 'x' }] } };
+  const long = 'All done: the report is filed and the summary went out to the team this afternoon, with nothing left open.';
+  const lines = [
+    u('status please'),
+    a('Checking the backlog first.'),
+    tool,
+    a('Reading the reports now:'),
+    tool,
+    a('| Item | State |\n|---|---|\n| Login fix | \u2705 **Merged** |\n| Summary | \u23f3 waiting |\n\nSee [the PR](https://github.com/acme/app/pull/12) and https://example.com/a/b/c?x=1.\n\n```sh\nrm -rf /tmp/x\n```'),
+    u('<task-notification>\n<summary>Stop hook feedback</summary>\n</task-notification>'),
+    a('All good.'),
+    u('\u2063FIRSTMATE_OP: v1 away-supervisor: escalate'),
+    a(long),
+    u('FIRSTMATE_OP: v1 away-supervisor: another'),
+    a('Noted.'),
+    u('[Request interrupted by user]'),
+    u('This session is being continued from a previous conversation that ran out of context. Summary...'),
+    u('<command-message>ahoy</command-message>\n<command-name>/ahoy</command-name>\n<command-args>what is on today?</command-args>'),
+    u('<command-message>kun</command-message>\n<command-name>/kun</command-name>'),
+    u('<pasted_content id="1">\nFIRSTMATE_OP: v1 pasted escalation'),
+    u('look at this <pasted_content id="2">\nerror: disk full\n</pasted_content>'),
+    u('ping from a bot'),
+  ];
+  const file = path.join(dir, 'chat.jsonl');
+  fs.writeFileSync(file, `${lines.map((l) => JSON.stringify(l)).join('\n')}\n`);
+  assert.deepEqual(transcriptTail(file, { skip: ['^ping from a bot'] }), [
+    { who: 'User', text: 'status please' },
+    { who: 'Assistant', text: '- Login fix: Merged\n- Summary: waiting\n\nSee the PR and example.com/a/b.' },
+    { who: 'Assistant', text: long },
+    { who: 'User', text: '/ahoy what is on today?' },
+    { who: 'User', text: 'look at this\nerror: disk full' },
+  ]);
+  assert.equal(
+    plain('https://github.com/acme/app/issues/3, https://github.com/acme/app/blob/main/docs/README.md and https://github.com/acme/app'),
+    'app issue 3, app README.md and app on GitHub',
+  );
+});
+
+test('briefing: whole memory files, lines cut short, and who is working on what', () => {
+  const dir = path.join(tmp, 'brief-parts');
+  const mem = path.join(dir, 'memory');
+  const main = path.join(dir, 'home', 'state');
+  const mate = path.join(dir, 'mate-home');
+  for (const d of [mem, main, path.join(mate, 'state')]) fs.mkdirSync(d, { recursive: true });
+  fs.writeFileSync(path.join(mem, 'MEMORY.md'), '- [Deploys](deploys.md)\n');
+  fs.writeFileSync(path.join(mem, 'deploys.md'), '---\nname: deploys\ndescription: Deploys go out on Tuesdays\nmetadata:\n  type: project\n---\n\nThe release train leaves at noon.\n');
+  fs.writeFileSync(path.join(dir, 'mates.md'), `- web - ${'owns the website '.repeat(20)}\n- api - owns the api\n`);
+  fs.writeFileSync(path.join(main, 'site-mate.meta'), `kind=secondmate\nproject=/x/site\nworktree=${mate}\nhome=${mate}\n`);
+  fs.writeFileSync(path.join(main, 'site-mate.status'), 'working: on it\ndone [key=deploy-1] corr=ab12cd34: shipped the banner\n');
+  fs.writeFileSync(path.join(mate, 'state', 'banner.meta'), `kind=ship\nproject=/repos/site\nworktree=${path.join(os.homedir(), 'copies', 'site-1')}\n`);
+  fs.writeFileSync(path.join(mate, 'state', 'banner.status'), 'paused: PR open, waiting on review\n');
+  fs.writeFileSync(path.join(main, 'old.meta'), 'kind=scout\n');
+  fs.utimesSync(path.join(main, 'old.meta'), new Date(0), new Date(0));
+  const c = config({ briefing: { parts: [
+    { name: 'Memory', files: path.join(mem, '*.md'), except: ['MEMORY.md'] },
+    { name: 'Mates', path: path.join(dir, 'mates.md'), lineChars: 60 },
+    { name: 'Who is working on what', tasks: [path.join(main, '*.meta'), path.join(mate, 'state', '*.meta')] },
+  ] } });
+  const b = buildBriefing(c);
+  assert.deepEqual(b.missing, []);
+  assert.match(b.text, /## Memory\n##### deploys\nDeploys go out on Tuesdays\nThe release train leaves at noon\./);
+  assert.doesNotMatch(b.text, /MEMORY|metadata|type: project/);
+  const web = /\n(- web - [^\n]*)\n- api - owns the api/.exec(b.text)?.[1];
+  assert.ok(web && web.length <= 60 && web.endsWith('[...]'), web);
+  const when = '\\d+ \\w{3} \\d\\d:\\d\\d';
+  assert.match(b.text, new RegExp(`- site-mate \\(secondmate on site\\); working copy ${mate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}; latest, ${when}: done: shipped the banner`));
+  assert.match(b.text, new RegExp(`- banner \\(ship on site under site-mate\\); working copy ~/copies/site-1; latest, ${when}: paused: PR open, waiting on review`));
+  assert.doesNotMatch(b.text, /old/);
+  // A task's new status line counts as a change to rebuild for.
+  const before = briefingStamp(c);
+  fs.utimesSync(path.join(mate, 'state', 'banner.status'), new Date(), new Date(Date.now() + 60000));
+  assert.ok(briefingStamp(c) > before);
+});
+
+test('gemini adapter: records calls hold the reply until their answer, a hand-off does not, and its quiet result asks for no speech', async () => {
+  const tools = [
+    { name: 'search_records', description: 'd', parameters: {} },
+    { name: 'hand_off', description: 'd', parameters: {}, async: true },
+  ];
+  const p = new GeminiLive(DEFAULTS.providers.gemini, { instructions: 'x', tools, key: 'k' });
+  const sent = [];
+  p.open = async () => {};
+  p.send = (m) => sent.push(m);
+  const connecting = p.connect();
+  await new Promise((r) => setImmediate(r));
+  const decl = sent[0].setup.tools[0].functionDeclarations;
+  assert.deepEqual(decl.map((f) => [f.name, f.behavior]), [['search_records', 'BLOCKING'], ['hand_off', 'NON_BLOCKING']]);
+  assert.ok(!('async' in decl[1]));
+  p.onMessage({ setupComplete: {} });
+  await connecting;
+  const ev = [];
+  p.on('tool-call', (c) => ev.push(c.name));
+  p.on('reply-done', () => ev.push('reply-done'));
+  p.onMessage({ toolCall: { functionCalls: [{ id: 's1', name: 'search_records', args: { query: 'x' } }] } });
+  p.onMessage({ serverContent: { turnComplete: true } });
+  assert.deepEqual(ev, ['search_records'], 'the model is still waiting on the records');
+  p.toolResult({ id: 's1', name: 'search_records' }, { results: [] });
+  assert.ok(!('scheduling' in sent[1].toolResponse.functionResponses[0]));
+  p.onMessage({ serverContent: { turnComplete: true } });
+  assert.deepEqual(ev, ['search_records', 'reply-done']);
+  p.onMessage({ toolCall: { functionCalls: [{ id: 'h1', name: 'hand_off', args: {} }] } });
+  p.onMessage({ serverContent: { turnComplete: true } });
+  assert.deepEqual(ev.slice(2), ['hand_off', 'reply-done']);
+  p.toolResult({ id: 'h1', name: 'hand_off' }, { handed_off: true }, { quiet: true });
+  assert.equal(sent.at(-1).toolResponse.functionResponses[0].scheduling, 'SILENT');
+  p.toolResult({ id: 'h2', name: 'hand_off' }, { handed_off: true });
+  assert.equal(sent.at(-1).toolResponse.functionResponses[0].scheduling, 'WHEN_IDLE');
+  // A call the server cancels (the user talked over it) no longer holds the reply.
+  p.onMessage({ toolCall: { functionCalls: [{ id: 's2', name: 'search_records', args: {} }] } });
+  p.onMessage({ toolCallCancellation: { ids: ['s2'] } });
+  p.onMessage({ serverContent: { turnComplete: true } });
+  assert.equal(ev.at(-1), 'reply-done');
+  // OpenAI gets its own tool shape, without the async mark.
+  const o = new OpenAIRealtime(DEFAULTS.providers.openai, { instructions: 'x', tools, key: 'k' });
+  const osent = [];
+  o.open = async () => {};
+  o.send = (m) => osent.push(m);
+  o.wait = async () => {};
+  await o.connect();
+  const otools = osent.find((m) => m.type === 'session.update').session.tools;
+  assert.deepEqual(otools[1], { type: 'function', name: 'hand_off', description: 'd', parameters: {} });
+});
+
+test('session: a reply that looked in the records is not handed off, even when it starts with "let me check"', async () => {
+  fs.rmSync(queued, { force: true });
+  const script = [{ text: 'what did the vendor say', tools: [{ name: 'search_records', args: { query: 'vendor' } }], reply: 'Let me check. The vendor said yes on Monday.' }];
+  const session = new Session(config(), { script, performImpl: async () => assert.fail('nothing to open') });
+  session.chooser.key = 'test';
+  session.chooser.fetch = fakeDecisions([]);
+  await session.connect();
+  const turn = await streamClip(session, clip(session.provider.inputRate), { timeoutMs: 8000 });
+  await new Promise((r) => setTimeout(r, 200));
+  session.close();
+  assert.deepEqual(turn.tools, ['search_records']);
+  assert.ok(!fs.existsSync(queued), 'nothing was handed off');
+});
+
+test('live: while an answer is coming the conversation stays open and says once that it is still coming', async () => {
+  const c = config({ handoff: { stillComingSec: 1, waitMin: 15 } });
+  fs.rmSync(handoffDir(c), { recursive: true, force: true });
+  const live = new Live(c, () => {});
+  const said = [];
+  const session = { provider: { say: (t) => (said.push(t), true) }, speaker: { busy: () => false }, lastLoud: performance.now() - 10000, quiet: () => true };
+  live.session = session;
+  live.mic = {};
+  assert.equal(live.answersComing(), false);
+  // A hand-off from this conversation is recorded as waiting.
+  const s = new Session(c, { script: [] });
+  s.onHandOff = (h) => live.waiting.set(h.id, { ...h, at: Date.now() - 2000 });
+  assert.equal((await s.handOff({ request: 'is the build green' })).handed_off, true);
+  s.close();
+  assert.equal(live.answersComing(), true, 'no idle exit now');
+  // Not while the user is talking; then once.
+  session.lastLoud = performance.now();
+  live.stillComing();
+  assert.equal(said.length, 0);
+  session.lastLoud = performance.now() - 10000;
+  live.stillComing();
+  live.stillComing();
+  assert.equal(said.length, 1);
+  assert.match(said[0], /still on "is the build green"\. Tell the user in one short sentence that the answer is still coming and that you will say it here as soon as it lands\./);
+  // An answer that has arrived is spoken, not announced as still coming.
+  savePending(c, { id: 'vq-bbbbbb', request: 'x', at: Date.now() });
+  saveReply(c, 'vq-bbbbbb', 'yes');
+  live.waiting.set('vq-bbbbbb', { id: 'vq-bbbbbb', request: 'x', at: Date.now() - 2000 });
+  live.stillComing();
+  assert.equal(said.length, 1);
+  // One asked too long ago is not waited for.
+  live.waiting.clear();
+  live.waiting.set('vq-cccccc', { id: 'vq-cccccc', request: 'y', at: Date.now() - 16 * 60000 });
+  assert.equal(live.answersComing(), false);
+});
+
+test('session: a message from the assistant is said word for word, redacted', () => {
+  const s = new Session(config(), { script: [] });
+  const sent = [];
+  s.provider.say = (t) => (sent.push(t), true);
+  assert.equal(s.speakAnswer({ id: 'vs-abcdef', text: `Build is green. Key sk-${'proj'}-AbC123dEf456GhI789jKl0`, verbatim: true }), true);
+  assert.equal(sent[0], 'A message from your working session, to say out loud now. Say exactly these words, and nothing before or after them: "Build is green. Key [redacted key]"');
+  s.close();
+});
+
+test('do: the assistant asks in words; the chooser picks from the same catalog and it is carried out, or nothing is', async () => {
+  const c = config();
+  const records = new Records(c);
+  const catalog = buildCatalog(c, records, KDE);
+  const done = [];
+  const logs = [];
+  const performImpl = async (item, opts) => done.push([item.kind, opts.slot]);
+  const chooser = (rules) => {
+    const ch = new Chooser(c, catalog, { fetchImpl: fakeDecisions(rules), log: (r) => logs.push(r) });
+    ch.key = 'test';
+    return ch;
+  };
+  let r = await doRequest(c, 'open firefox please', { performImpl, records, catalog, chooser: chooser([[/firefox/, 'app:firefox', 0.95]]), log: (x) => logs.push(x) });
+  assert.deepEqual([r.key, r.name, r.done], ['app:firefox', 'Firefox web browser', 'opened Firefox web browser']);
+  assert.ok(r.ms >= 0);
+  assert.deepEqual(done, [['app', '']]);
+  assert.ok(logs.some((l) => l.event === 'action' && l.target === 'app:firefox' && l.ms_from_request >= 0));
+  // Nothing fits: nothing is done.
+  r = await doRequest(c, 'what is the weather', { performImpl, records, catalog, chooser: chooser([]) });
+  assert.equal(r.key, null);
+  assert.equal(done.length, 1);
+  // A dry run goes through the real checks and only says what would run.
+  r = await doRequest(c, 'turn the volume up', { records, catalog, chooser: chooser([[/volume up/, 'system:volume-up', 0.99]]), dryRun: true });
+  assert.equal(r.dry_run, true);
+  assert.deepEqual(r.would_run.slice(0, 4), ['gdbus', 'call', '--session', '--dest']);
+  r = await doRequest(c, 'show the escape record', { records, catalog: new Map([['record:escape', { kind: 'record', name: 'escape', path: path.join(data, 'escape.md') }]]), chooser: (() => {
+    const ch = new Chooser(c, new Map([['record:escape', { kind: 'record', name: 'escape', path: path.join(data, 'escape.md') }]]), { fetchImpl: fakeDecisions([[/escape/, 'record:escape', 0.99]]) });
+    ch.key = 'test';
+    return ch;
+  })(), dryRun: true });
+  assert.match(r.error, /outside the allowed folders/, 'a record that leads outside the sources is refused, dry run or not');
+  // Without a key there is no chooser: an error, not a guess.
+  const none = new Chooser(c, catalog, {});
+  none.key = '';
+  assert.match((await doRequest(c, 'open firefox', { records, catalog, chooser: none })).error, /no key/);
+  // Logged as the assistant's: readable in decisions.log, JSON in the given file, not in metrics.
+  const lc = config({ logDir: path.join(tmp, 'do-logs') });
+  const file = path.join(lc.logDir, 'voice-mode.log');
+  const log = makeLogger(lc, { file, extra: { from: 'assistant' } });
+  log({ event: 'chooser', words: 2, final: true, choice: 'app:firefox', p: 0.95, ms: 300, text: 'open firefox' });
+  log({ event: 'action', target: 'app:firefox', done: 'opened Firefox web browser', ms_from_request: 812 });
+  const decisions = fs.readFileSync(path.join(lc.logDir, 'decisions.log'), 'utf8');
+  assert.match(decisions, /app:firefox \(p 0\.95, 300 ms, typed request\)/);
+  assert.match(decisions, /-> opened Firefox web browser, asked by the assistant \(voice-mode do\), 812 ms after the request/);
+  const json = fs.readFileSync(file, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.ok(json.every((l) => l.from === 'assistant' && !('text' in l)));
+  assert.ok(!fs.existsSync(path.join(lc.logDir, 'metrics.jsonl')));
+});
+
+/** A WAV file of `pcm` at `rate`, as a speech API returns it. */
+function wavOf(pcm, rate) {
+  const h = Buffer.alloc(44);
+  h.write('RIFF', 0);
+  h.writeUInt32LE(36 + pcm.length, 4);
+  h.write('WAVEfmt ', 8);
+  h.writeUInt32LE(16, 16);
+  h.writeUInt16LE(1, 20);
+  h.writeUInt16LE(1, 22);
+  h.writeUInt32LE(rate, 24);
+  h.writeUInt32LE(rate * 2, 28);
+  h.writeUInt16LE(2, 32);
+  h.writeUInt16LE(16, 34);
+  h.write('data', 36);
+  h.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([h, pcm]);
+}
+
+test('say: the words as given, in the configured voice, or said by a running conversation instead of a second stream', async () => {
+  const keys = path.join(tmp, 'say-keys.env');
+  fs.writeFileSync(keys, 'GEMINI_API_KEY=g-test\n');
+  const c = config({ provider: 'gemini', keysFile: keys, providers: { gemini: { voice: 'Sulafat' } } });
+  fs.rmSync(handoffDir(c), { recursive: true, force: true });
+  const pcm = tone(24000, 300, 100);
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, headers: init.headers, body: JSON.parse(init.body) });
+    return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'audio/wav', data: wavOf(pcm, 24000).toString('base64') } }] } }] }) };
+  };
+  const played = [];
+  const playImpl = async (audio, o) => played.push([audio.length, o.rate]);
+  let r = await sayText(c, `The  build is green; key sk-${'proj'}-AbC123dEf456GhI789jKl0`, { running: false, fetchImpl, playImpl });
+  assert.deepEqual([r.delivered, r.provider, r.model, r.voice, r.seconds], ['speech', 'gemini', 'gemini-3.8-flash-lite-tts', 'Sulafat', 0.1]);
+  assert.match(calls[0].url, /\/models\/gemini-3\.8-flash-lite-tts:generateContent$/);
+  assert.equal(calls[0].headers['x-goog-api-key'], 'g-test', 'the key goes in a header, never the URL');
+  assert.equal(calls[0].body.contents[0].parts[0].text, 'The build is green; key [redacted key]');
+  assert.equal(calls[0].body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, 'Sulafat');
+  assert.deepEqual(played, [[pcm.length, 24000]]);
+  // A dry run makes the speech and plays nothing.
+  r = await sayText(c, 'quiet check', { running: false, fetchImpl, playImpl, dryRun: true });
+  assert.equal(r.dry_run, true);
+  assert.equal(played.length, 1);
+  // A running conversation says it itself, word for word, through the answer queue.
+  r = await sayText(c, 'Heads up: the deploy finished.', { running: true, fetchImpl: () => assert.fail('no speech call'), playImpl: () => assert.fail('no second stream') });
+  assert.equal(r.delivered, 'conversation');
+  const [msg] = waitingReplies(c);
+  assert.deepEqual([msg.id, msg.text, msg.verbatim], [r.id, 'Heads up: the deploy finished.', true]);
+  // Only when the configured provider has no key does the other one speak.
+  fs.writeFileSync(keys, 'OPENAI_API_KEY=o-test\n');
+  const oa = [];
+  r = await sayText(c, 'hello', { running: false, playImpl, fetchImpl: async (url, init) => (oa.push({ url, init }), { ok: true, arrayBuffer: async () => new ArrayBuffer(480) }) });
+  assert.deepEqual([r.provider, r.model, r.voice], ['openai', 'gpt-4o-mini-tts', 'marin']);
+  assert.equal(oa[0].url, 'https://api.openai.com/v1/audio/speech');
+  assert.deepEqual(JSON.parse(oa[0].init.body), { model: 'gpt-4o-mini-tts', voice: 'marin', input: 'hello', response_format: 'pcm' });
+  assert.equal(oa[0].init.headers.authorization, 'Bearer o-test');
+  fs.writeFileSync(keys, '');
+  await assert.rejects(sayText(c, 'hello', { running: false, playImpl, fetchImpl }), /no provider key for speech/);
+  await assert.rejects(sayText(c, '  ', { running: false }), /nothing to say/);
+  // Raw 16-bit audio at a stated rate is taken as is; a WAV gives its own rate.
+  assert.deepEqual(wavToPcm(wavOf(pcm, 16000)).rate, 16000);
+  assert.equal(wavToPcm(pcm, 24000).pcm, pcm);
+});
+
+test('cli: help, no command or an unknown option print the usage and never open the mic', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const dir = fs.mkdtempSync(path.join(tmp, 'cli-'));
+  const cfg = path.join(dir, 'config.json');
+  fs.writeFileSync(cfg, JSON.stringify({ provider: 'fake', orb: { enabled: false }, audio: { earcons: false, echoCancel: false }, actions: { enabled: false }, briefing: { enabled: false }, logDir: path.join(dir, 'logs') }));
+  // No audio tools on PATH, so a wrongly started conversation fails instead of listening.
+  const env = { HOME: dir, XDG_RUNTIME_DIR: dir, VOICE_MODE_CONFIG: cfg, PATH: path.dirname(process.execPath) };
+  const run = (...a) => spawnSync(process.execPath, [path.join(bin, 'voice-mode.mjs'), ...a], { env, encoding: 'utf8', timeout: 10000 });
+  for (const a of [['help'], ['--help'], ['-h'], ['start', '--help']]) {
+    const r = run(...a);
+    assert.equal(r.status, 0, a.join(' '));
+    assert.match(r.stdout, /voice-mode start {2,}talk/);
+  }
+  let r = run();
+  assert.deepEqual([r.status, /voice-mode toggle/.test(r.stderr)], [2, true]);
+  r = run('start', '--halp');
+  assert.deepEqual([r.status, r.stderr.trim()], [2, 'voice-mode: unknown option --halp (see voice-mode help)']);
+  assert.equal(fs.existsSync(path.join(dir, 'logs')), false, 'nothing started');
 });
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));

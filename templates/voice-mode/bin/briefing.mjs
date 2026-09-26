@@ -1,11 +1,14 @@
 // The live briefing: what the voice needs to sound like the assistant you work with, not a
 // stranger. It is built from the assistant's own current conversation (the newest Claude
-// Code transcript: user and assistant text only, never tool output), notes such as a
-// profile or a memory index, sections of a backlog, and the latest line of each live status
-// log. Every part has its own size budget. Everything passes the redactor before it leaves
-// the machine: keys, tokens, passwords, credentials in URLs and env-style secret lines.
+// Code transcript: what the user said and the assistant's final reply to each message, with
+// harness notices, automated input and tool narration left out), notes such as a profile,
+// learnings or whole memory files, sections of a backlog, the latest line of each live status
+// log, and who is working on what. Every part has its own size budget. Everything passes the
+// redactor before it leaves the machine: keys, tokens, passwords, credentials in URLs and
+// env-style secret lines.
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { expandGlob, expandHome } from './config.mjs';
 
@@ -48,8 +51,19 @@ export function redact(text) {
 
 const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 20).trimEnd()} [...]` : s);
 
-// Wrappers the harness adds around what the user typed, and notices that are not the user.
-const NOT_USER = /^\s*<(task-notification|command-name|command-message|command-args|local-command-stdout|local-command-caveat|bash-input|bash-stdout|bash-stderr)\b/;
+// Messages in the user's place that the user did not type: harness notices, a compacted
+// session's summary, shell escapes, and automated input from a supervising agent (marked
+// with an invisible separator, U+2063, or an operational prefix such as FIRSTMATE_OP:). A part's `skip`
+// adds patterns of its own.
+const NOT_USER = [
+  /^<(task-notification|local-command-stdout|local-command-caveat|bash-input|bash-stdout|bash-stderr|user-prompt-submit-hook)\b/,
+  /^\[Request interrupted/,
+  /^This session is being continued from a previous conversation/,
+  /^Caveat: /,
+  /^Stop hook feedback/,
+  /^⁣/,
+  /^FIRSTMATE_OP:/,
+];
 
 function messageText(r) {
   const content = r.message?.content;
@@ -59,14 +73,91 @@ function messageText(r) {
   return content.filter((c) => c?.type === 'text').map((c) => c.text).join('\n');
 }
 
-/** The last exchanges of a Claude Code transcript (.jsonl), as [{ who, text }]. */
-export function transcriptTail(file, { maxBytes = 3_000_000, perMessage = 1500 } = {}) {
+/** A link as a few words: "repo pull request 12", "repo README.md", or host and path. */
+function linkText(url) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return url;
+  }
+  const host = u.host.replace(/^www\./, '');
+  const segs = u.pathname.split('/').filter(Boolean);
+  if (host === 'github.com' && segs.length >= 2) {
+    const [, repo, kind, n] = segs;
+    if ((kind === 'pull' || kind === 'issues') && /^\d+$/.test(n || '')) return `${repo} ${kind === 'pull' ? 'pull request' : 'issue'} ${n}`;
+    if (kind === 'blob' || kind === 'tree') return `${repo} ${segs[segs.length - 1]}`;
+    return `${repo} on GitHub`;
+  }
+  return segs.length ? `${host}/${segs.slice(0, 2).join('/')}` : host;
+}
+
+/** Spoken-style text: no tables, code, markdown marks, emoji or long links. */
+export function plain(text) {
+  const out = [];
+  const lines = String(text).replace(/```[\s\S]*?(```|$)/g, '').split('\n');
+  const rule = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    if (/^\s*\|/.test(line)) {
+      // A table: the header row and the rule under it go; each row becomes "first: rest".
+      if (rule.test(line) || rule.test(lines[i + 1] || '')) continue;
+      const cells = line.split('|').map((c) => c.trim()).filter(Boolean);
+      line = cells.length > 1 ? `- ${cells[0]}: ${cells.slice(1).join('; ')}` : `- ${cells[0] || ''}`;
+    }
+    out.push(line.replace(/^\s*#{1,6}\s+/, ''));
+  }
+  return out
+    .join('\n')
+    .replace(/\[([^\]]+)\]\((?:https?:\/\/)?[^)\s]+\)/g, '$1')
+    .replace(/https?:\/\/[^\s)<>\]]+/g, (m) => {
+      const url = m.replace(/[.,;:!?'"]+$/, '');
+      return linkText(url) + m.slice(url.length);
+    })
+    .replace(/\*\*([^*\n]+)\*\*|__([^_\n]+)__/g, '$1$2')
+    .replace(/`([^`\n]*)`/g, '$1')
+    .replace(/\p{Extended_Pictographic}️?/gu, '')
+    .replace(/(\S)[ \t]{2,}/g, '$1 ')
+    .replace(/[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** What the user typed, or null for a message that is not the user (see NOT_USER). */
+function userWords(text, skip) {
+  let t = text.trim();
+  // A slash command: its arguments are the user's words.
+  if (/^<command-(name|message)>/.test(t)) {
+    const name = /<command-name>([^<]*)<\/command-name>/.exec(t)?.[1]?.trim();
+    const args = /<command-args>([\s\S]*?)<\/command-args>/.exec(t)?.[1]?.trim();
+    return args ? `${name ? `${name} ` : ''}${args}` : null;
+  }
+  // Pasted text stays unless it is automated input itself.
+  t = t.replace(/<pasted_content[^>]*>([\s\S]*?)(?:<\/pasted_content>|$)/g, (m, inner) => (skip.some((re) => re.test(inner.trim())) ? '' : inner)).trim();
+  return t && !skip.some((re) => re.test(t)) ? t : null;
+}
+
+/**
+ * The conversation in a Claude Code transcript (.jsonl), as [{ who, text }]: each thing the
+ * user said, and the assistant's final reply to each message (its narration between tool
+ * calls is left out). A short reply to something the user did not say (an acknowledgement of
+ * a notice) is left out too.
+ */
+export function transcriptTail(file, { maxBytes = 3_000_000, perMessage = 1500, skip = [] } = {}) {
   const size = fs.statSync(file).size;
   const fd = fs.openSync(file, 'r');
   const buf = Buffer.alloc(Math.min(size, maxBytes));
   fs.readSync(fd, buf, 0, buf.length, size - buf.length);
   fs.closeSync(fd);
+  const notUser = [...NOT_USER, ...skip.map((p) => new RegExp(p))];
   const out = [];
+  let reply = null;
+  let toUser = false;
+  const flush = () => {
+    const text = reply && plain(reply);
+    if (text && (toUser || text.length > 80)) out.push({ who: 'Assistant', text: clip(text, perMessage) });
+    reply = null;
+  };
   for (const line of buf.toString('utf8').split('\n')) {
     let r;
     try {
@@ -75,12 +166,22 @@ export function transcriptTail(file, { maxBytes = 3_000_000, perMessage = 1500 }
       continue; // also the first, partial line
     }
     if ((r.type !== 'user' && r.type !== 'assistant') || r.isMeta || r.isSidechain) continue;
-    let text = messageText(r);
-    if (r.type === 'user' && NOT_USER.test(text)) continue;
-    text = text.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').replace(/\n{3,}/g, '\n\n').trim();
+    const text = messageText(r).replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
+    // Tool results carry no text: they do not end the assistant's turn.
     if (!text) continue;
-    out.push({ who: r.type === 'user' ? 'User' : 'Assistant', text: clip(text, perMessage) });
+    if (r.type === 'assistant') {
+      if (!notUser.some((re) => re.test(text))) reply = text;
+      continue;
+    }
+    const said = userWords(text, notUser);
+    // A notice that comes before any reply leaves the user's message still the one answered.
+    if (!said && !reply) continue;
+    flush();
+    toUser = !!said;
+    const words = said && plain(said);
+    if (words) out.push({ who: 'User', text: clip(words, perMessage) });
   }
+  flush();
   return out;
 }
 
@@ -126,25 +227,92 @@ function latestLines(glob, hours) {
   return out.sort((a, b) => b.at - a.at).map((l) => `- ${l.text}`).join('\n');
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** A local time as "26 Sep 22:31". */
+export function when(ms) {
+  const d = new Date(ms);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+const tilde = (p) => (p.startsWith(os.homedir() + path.sep) ? `~${p.slice(os.homedir().length)}` : p);
+const globs = (g) => [].concat(g).flatMap((x) => expandGlob(expandHome(x)));
+
+/** Whole files matching a glob, newest first, each under its own name; front matter becomes its description. */
+function wholeFiles(p) {
+  const skip = new Set(p.except || []);
+  const files = globs(p.files)
+    .filter((f) => !skip.has(path.basename(f)))
+    .map((f) => ({ f, st: fs.statSync(f) }))
+    .filter(({ st }) => st.isFile())
+    .sort((a, b) => b.st.mtimeMs - a.st.mtimeMs);
+  return files
+    .map(({ f }) => {
+      let text = fs.readFileSync(f, 'utf8').trim();
+      const fm = /^---\n([\s\S]*?)\n---\n?/.exec(text);
+      if (fm) text = [/^description:\s*(.+)$/m.exec(fm[1])?.[1], text.slice(fm[0].length).trim()].filter(Boolean).join('\n');
+      return `### ${path.basename(f).replace(/\.[^.]+$/, '')}\n${text}`;
+    })
+    .join('\n\n');
+}
+
+const kv = (text) => Object.fromEntries(text.split('\n').map((l) => /^([A-Za-z0-9_]+)=(.*)$/.exec(l)).filter(Boolean).map((m) => [m[1], m[2].trim()]));
+
+/**
+ * Who is working on what, from task records: one `<id>.meta` file of key=value lines per
+ * task (project, kind, worktree, and home when the task is itself an agent with its own
+ * folder of task records), with its `<id>.status` log beside it. A task is listed while its
+ * record or log changed within `days`, newest first, with its working copy and latest line.
+ */
+function tasks(p) {
+  const since = Date.now() - (p.days || 14) * 86400_000;
+  const all = globs(p.tasks)
+    .filter((f) => f.endsWith('.meta'))
+    .map((f) => ({ f, id: path.basename(f, '.meta'), home: path.dirname(path.dirname(f)), meta: kv(fs.readFileSync(f, 'utf8')) }));
+  // An agent's own folder of task records is named after it: its tasks are "under" it.
+  const owner = new Map(all.filter((t) => t.meta.home).map((t) => [path.resolve(expandHome(t.meta.home)), t.id]));
+  const out = [];
+  for (const t of all) {
+    const log = path.join(path.dirname(t.f), `${t.id}.status`);
+    let at = fs.statSync(t.f).mtimeMs;
+    let latest = '';
+    try {
+      const lines = fs.readFileSync(log, 'utf8').trim().split('\n');
+      at = Math.max(at, fs.statSync(log).mtimeMs);
+      latest = lines[lines.length - 1].replace(/\s*\[(?:key|corr)=[^\]]*\]|\s*\bcorr=[0-9a-f]+/g, '').trim();
+    } catch {}
+    if (at < since) continue;
+    const under = owner.get(path.resolve(t.home));
+    const what = [t.meta.kind || 'task', t.meta.project && `on ${path.basename(t.meta.project)}`, under && `under ${under}`].filter(Boolean).join(' ');
+    const copy = t.meta.worktree ? `; working copy ${tilde(t.meta.worktree)}` : '';
+    out.push({ at, text: `- ${t.id} (${what})${copy}; latest, ${when(at)}: ${clip(latest || 'no status yet', 240)}` });
+  }
+  return out.sort((a, b) => b.at - a.at).map((l) => l.text).join('\n');
+}
+
 function part(p) {
   const max = p.maxChars || 4000;
   if (p.transcript) {
     const newest = newestTranscript(expandHome(p.transcript));
     if (!newest) return '';
     // Newest exchanges first until the budget is spent, then back into reading order.
+    const head = `(Your own session ${path.basename(newest.file, '.jsonl').slice(0, 8)}, last active ${when(newest.mtimeMs)}.)`;
     const lines = [];
-    let used = 0;
-    for (const m of transcriptTail(newest.file, { perMessage: p.perMessage || 1500 }).slice(-(p.messages || 30)).reverse()) {
+    let used = head.length;
+    for (const m of transcriptTail(newest.file, { perMessage: p.perMessage || 1500, skip: p.skip || [] }).slice(-(p.messages || 30)).reverse()) {
       const line = `${m.who}: ${m.text}`;
       if (used + line.length > max) break;
       lines.unshift(line);
       used += line.length + 2;
     }
-    return lines.join('\n\n');
+    return lines.length ? [head, ...lines].join('\n\n') : '';
   }
+  if (p.tasks) return clip(tasks(p), max);
+  if (p.files) return clip(wholeFiles(p), max);
   if (p.glob) return clip(latestLines(p.glob, p.hours || 24), max);
   let text = fs.readFileSync(expandHome(p.path), 'utf8');
   if (p.sections) text = sections(text, p.sections);
+  if (p.lineChars) text = text.split('\n').map((l) => clip(l, p.lineChars)).join('\n');
   return clip(text.trim(), max);
 }
 
@@ -164,9 +332,10 @@ export function buildBriefing(config) {
       missing.push(p.name);
       continue;
     }
-    if (text) out.push(`## ${p.name}\n${text}`);
+    // A part's own headings sit under its "## name" heading.
+    if (text) out.push(`## ${p.name}\n${text.replace(/^(#{1,4}) /gm, '##$1 ')}`);
   }
-  const text = redact(clip(out.join('\n\n'), b.maxChars || 24000));
+  const text = redact(clip(out.join('\n\n'), b.maxChars || 120000));
   return { text, missing, chars: text.length };
 }
 
@@ -196,10 +365,19 @@ export function briefingChanges(before, after, max = 4000) {
 /** Newest modification time among the briefing's sources, to rebuild when one changes. */
 export function briefingStamp(config) {
   let stamp = 0;
+  const newest = (files) => {
+    for (const f of files) {
+      try {
+        stamp = Math.max(stamp, fs.statSync(f).mtimeMs);
+      } catch {}
+    }
+  };
   for (const p of config.briefing.parts || []) {
     try {
       if (p.transcript) stamp = Math.max(stamp, newestTranscript(expandHome(p.transcript))?.mtimeMs || 0);
-      else if (p.path) stamp = Math.max(stamp, fs.statSync(expandHome(p.path)).mtimeMs);
+      else if (p.path) newest([expandHome(p.path)]);
+      else if (p.files || p.glob) newest(globs(p.files || p.glob));
+      else if (p.tasks) newest(globs(p.tasks).flatMap((f) => [f, f.replace(/\.meta$/, '.status')]));
     } catch {}
   }
   return stamp;

@@ -6,12 +6,19 @@
 //   voice-mode reply <id> "<answer>"
 //                                  answer a hand-off; the voice speaks it (now, or at the next start)
 //   voice-mode briefing            print the live briefing the voice gets (after redaction)
+//   voice-mode do "<request>" [--dry-run]
+//                                  for the assistant's own session: the chooser picks one desktop
+//                                  action from the same safe list and it is carried out
+//   voice-mode say "<text>" [--dry-run]
+//                                  speak text aloud, word for word, in the configured voice (into
+//                                  a running conversation when there is one)
 //   voice-mode stop | status
 //   voice-mode check               what is configured and what is missing (never prints keys)
 //   voice-mode pick "<words>"      which desktop action the chooser would take (opens nothing)
 //   voice-mode bench [--clip f.wav] [--runs N] [--play]
 //                                  measure first-audio and action latency from a recorded clip
 //   voice-mode latency             median latencies from the metrics log
+//   voice-mode help                this text
 //
 // Config: ~/.config/ai-workstation-setup/voice/config.json (VOICE_MODE_CONFIG overrides).
 // Exit status: 0 ok, 1 a run failed, 2 usage or config error.
@@ -22,14 +29,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { CONFIG_DIR, loadConfig, readKey } from './config.mjs';
+import { CONFIG_DIR, loadConfig, merge, readKey } from './config.mjs';
 import { Records, TOOLS, runTool } from './records.mjs';
 import { Chooser, TEXT_KINDS, buildCatalog, describe, perform } from './desk.mjs';
-import { Mic, Speaker, audioTools, has, resample, rms, startEchoCancel, tone } from './audio.mjs';
-import { PROVIDERS, createProvider } from './providers.mjs';
+import { Mic, Speaker, audioTools, has, play, resample, rms, startEchoCancel, tone, wavToPcm } from './audio.mjs';
+import { PROVIDERS, createProvider, synthesize } from './providers.mjs';
 import { orbRunner, startOrb, toLevel } from './orb.mjs';
 import { briefingChanges, briefingStamp, buildBriefing, redact } from './briefing.mjs';
-import { Deliveries, newId, noteText, savePending, saveReply } from './handoff.mjs';
+import { Deliveries, handoffDir, newId, noteText, saveMessage, savePending, saveReply } from './handoff.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 
@@ -107,20 +114,22 @@ export function releaseLock(file = LOCK) {
 }
 
 const RULES = `How you work:
-- Your knowledge comes from the briefing below (when there is one) and the records. When the briefing answers a question, answer at once without tools. For detail it lacks, use search_records, list_records and read_record. Never make up a status.
-- When the briefing and records do not answer a question (including anything outside them: mail, messages, the web, other people's replies), or the user asks for real work (changing, renaming, moving or deleting files, code, tasks or messages, running or checking anything now, research, anything that takes effort), say one short line such as "Let me check" or "On it" and call hand_off in that same reply, with the request in the user's words. Saying you will check without calling hand_off leaves the user waiting for nothing. It goes to your own working session, which can do it; never say the work is done until an answer says so. Every new request needs its own hand_off, even one asked before.
+- The briefing below (when there is one) is your own memory: your recent conversation with the user, the work under way and who is doing it, your notes and what you have learned. Speak from it as yourself; never call it a briefing.
+- When the briefing answers a question, answer at once without tools, unless the user asks you to read, look up or check notes, files or records: then always read them with the tools, since they are newer than your memory.
+- For anything else about notes, files, documents, the notes vault, memories, records, people, projects, plans, decisions or work, look it up yourself first, in the same reply: search_records with a few keywords (and the source, when the user names one), list_records for what is newest in a source, read_record to read one in full. Then answer from what they return, the newest record first when they disagree. Never make up a status.
+- Only when those do not answer (after you looked), or the user asks for real work (changing, renaming, moving or deleting files, code, tasks or messages, running or checking anything now, research, anything that takes effort), or for something outside your records (mail, messages, the web, other people's replies), say one short line such as "Let me check; I'll tell you here as soon as it's back" and call hand_off in that same reply, with the request in the user's words. Saying you will check without calling a tool leaves the user waiting for nothing. It goes to your own working session, which can do it; never say the work is done until an answer says so. Every new request needs its own hand_off, even one asked before.
 - When an answer to a hand-off arrives (a line starting "Answer arrived"), tell the user at once, briefly, as your own answer. You are one assistant: never say that someone else, another session or another assistant answered.
 - A separate desktop helper acts on the computer while the user is still talking: it opens apps, websites, folders and records, switches to an open app, minimizes, maximizes or moves the window in front, shows the desktop or the overview, turns the volume up or down or mutes it, plays, pauses or skips media, changes screen brightness, takes a screenshot, locks the screen, writes a note, searches the web, and types dictated text. What it did may already be in the conversation as a line starting "Desktop helper:"; then confirm it in a few words. Otherwise, when the user asked for one of those, call desktop_action to learn what it did. If it did nothing, say you could not tell what to do.
 - The helper itself never deletes or moves files, sends messages or email, buys anything, changes settings, runs commands, or closes or quits apps. That limits only the helper: such requests are real work, so hand them off.
 - You are heard, not read: short spoken sentences, no lists, no markdown, no links read aloud. Keep an answer under about twenty seconds unless asked for more.`;
 
 // Without a queue command there is no hand-off: those rules give way to a plain refusal.
-const NO_HANDOFF = '- You cannot do work, and you know only the briefing and the records. When asked for more, say plainly that voice mode cannot do that.';
+const NO_HANDOFF = '- You cannot do work, and you know only the briefing and the records. When they do not answer, or you are asked for more, say plainly that voice mode cannot do that.';
 
 function rules(handoff) {
   if (handoff) return RULES;
   const lines = RULES.split('\n').filter((l) => !/hand_off|Answer arrived/.test(l));
-  lines.splice(2, 0, NO_HANDOFF);
+  lines.splice(lines.findIndex((l) => l.includes('look it up yourself')) + 1, 0, NO_HANDOFF);
   return lines.join('\n').replace('That limits only the helper: such requests are real work, so hand them off.', 'Neither do you.');
 }
 
@@ -132,9 +141,11 @@ export const PROMISE = /\b(let me (check|find out|look into)|i('| wi)ll (check|f
 
 const HANDOFF_TOOL = {
   name: 'hand_off',
+  // The conversation goes on while it runs (Gemini: a non-blocking call).
+  async: true,
   description:
-    'Send a question the briefing and records cannot answer, or any real work, to your own working session, which has the full context and can act. ' +
-    'Its answer comes back into this conversation later; speak it then. Say a short line like "Let me check" before calling this.',
+    'Send a question that the briefing and your records (search_records, list_records, read_record) do not answer, or any real work, to your own working session, which has the full context and can act. ' +
+    'Its answer comes back into this conversation later; speak it then. Say a short line like "Let me check; I\'ll tell you here as soon as it\'s back" before calling this.',
   parameters: {
     type: 'object',
     properties: {
@@ -160,18 +171,21 @@ const median = (xs) => {
 export function decisionLine(rec, { withText = false } = {}) {
   const time = rec.at.replace('T', ' ').slice(0, 21);
   const heard = withText && rec.text ? `  "${rec.text}"` : '';
-  const turn = rec.final ? 'end of sentence' : `${rec.words} word${rec.words === 1 ? '' : 's'} in`;
+  const turn = rec.from === 'assistant' ? 'typed request' : rec.final ? 'end of sentence' : `${rec.words} word${rec.words === 1 ? '' : 's'} in`;
   if (rec.event === 'chooser-error') return `${time}  FAILED ${rec.cause || rec.error} after ${rec.ms} ms (${rec.final ? 'end of sentence' : 'mid-sentence'})${heard}`;
+  if (rec.event === 'action' && rec.from === 'assistant') return `${time}  -> ${rec.done}, asked by the assistant (voice-mode do), ${rec.ms_from_request} ms after the request${rec.dry_run ? ' (dry run: nothing ran)' : ''}`;
   if (rec.event === 'action') return `${time}  -> ${rec.done}, ${rec.ms_from_speech_start ?? '?'} ms after you started speaking`;
   if (rec.event === 'action-failed') return `${time}  -> could not open ${rec.target}: ${rec.error}`;
   return `${time}  ${rec.choice === 'none' ? 'nothing to open' : rec.choice} (p ${Number(rec.p).toFixed(2)}, ${rec.ms} ms, ${turn})${heard}`;
 }
 
-function makeLogger(config, { quiet = false } = {}) {
+/** Log records: decisions.log (readable), metrics.jsonl (numbers), and stderr or `file` (JSON lines). */
+export function makeLogger(config, { quiet = false, file = '', extra = {} } = {}) {
   fs.mkdirSync(config.logDir, { recursive: true });
   const metrics = path.join(config.logDir, 'metrics.jsonl');
   const decisions = path.join(config.logDir, 'decisions.log');
-  return (rec) => {
+  return (r) => {
+    const rec = { ...r, ...extra };
     let line = { at: new Date().toISOString(), ...rec };
     if (config.actions.decisionLog && ['chooser', 'chooser-error', 'action', 'action-failed'].includes(rec.event)) {
       fs.appendFileSync(decisions, `${decisionLine(line, { withText: config.logTranscripts })}\n`);
@@ -180,8 +194,9 @@ function makeLogger(config, { quiet = false } = {}) {
       const { text, ...rest } = line;
       line = rest;
     }
-    if (!quiet) process.stderr.write(`${JSON.stringify(line)}\n`);
-    if (rec.event === 'turn' || rec.event === 'action') {
+    if (file) fs.appendFileSync(file, `${JSON.stringify(line)}\n`);
+    else if (!quiet) process.stderr.write(`${JSON.stringify(line)}\n`);
+    if (rec.event === 'turn' || (rec.event === 'action' && !rec.from)) {
       const { text, reply, ...numbers } = line;
       fs.appendFileSync(metrics, `${JSON.stringify(numbers)}\n`);
     }
@@ -405,6 +420,7 @@ export class Session {
     const r = await this.records.queue(noteText({ id, kind: k, request: text, replyCommand: this.config.handoff.replyCommand }));
     this.log({ event: 'handoff', id, kind: k, sent: !!r.queued, ...(r.error ? { error: r.error } : {}) });
     if (!r.queued) return { handed_off: false, error: r.error };
+    this.onHandOff?.({ id, request: text });
     return { handed_off: true, note: 'Sent. The answer will arrive in this conversation; you already said you are on it, so say nothing more about it now unless asked.' };
   }
 
@@ -414,10 +430,15 @@ export class Session {
     return !this.aside && !this.speaker?.busy(300) && now - this.lastLoud > 1200 && (!this.turn || this.turn.logged) && !this.provider.responseActive;
   }
 
-  /** Speak an answer that came back from a hand-off. False when the provider is busy. */
+  /**
+   * Speak an answer that came back from a hand-off, or a message from the assistant's own
+   * session (`voice-mode say`), which is said word for word. False when the provider is busy.
+   */
   speakAnswer(entry) {
     const q = entry.question?.request;
-    const text = redact(`Answer arrived${q ? ` to what the user asked earlier ("${q}")` : ''}: ${entry.text}`) + `\nTell the user now, briefly, in your own words, as your own answer.`;
+    const text = entry.verbatim
+      ? `A message from your working session, to say out loud now. Say exactly these words, and nothing before or after them: "${redact(entry.text)}"`
+      : redact(`Answer arrived${q ? ` to what the user asked earlier ("${q}")` : ''}: ${entry.text}`) + `\nTell the user now, briefly, in your own words, as your own answer.`;
     if (!this.provider.say?.(text)) return false;
     this.aside = { id: entry.id, text, askedAt: entry.question?.askedAt, sentAt: performance.now() };
     return true;
@@ -445,8 +466,8 @@ export class Session {
     const t = this.turn;
     if (!t || t.logged) return;
     t.logged = true;
-    // Said it would check but never called hand_off: hand off the user's own words.
-    if (this.handoff && t.text && !(t.tools || []).includes('hand_off') && PROMISE.test(t.reply || '')) {
+    // Said it would check but called no tool at all: hand off the user's own words.
+    if (this.handoff && t.text && !(t.tools || []).length && PROMISE.test(t.reply || '')) {
       (t.tools ||= []).push('hand_off (auto)');
       this.handOff({ request: t.text }).catch(() => {});
     }
@@ -476,12 +497,14 @@ export class Session {
 
 // ------------------------------------------------------------------ live daemon
 
-class Live {
+export class Live {
   constructor(config, log) {
     this.config = config;
     this.log = log;
     this.stopping = false;
     this.micLevel = 0;
+    // Hand-offs from this conversation whose answers have not been heard yet, by id.
+    this.waiting = new Map();
   }
 
   /** One conversation, mic open from start to stop: the hotkey starts it and ends it. */
@@ -515,9 +538,10 @@ class Live {
       this.session.feed(pcm);
       if (this.micLevel > 800) this.lastSpeech = Date.now();
     });
-    // A session nobody talks to ends itself, so nothing lingers in the background.
+    // A session nobody talks to ends itself, so nothing lingers in the background; not while
+    // an answer it handed off is still coming.
     this.idle = setInterval(() => {
-      if (!this.session.speaker.busy() && Date.now() - this.lastSpeech > c.listen.exitAfterMin * 60000) {
+      if (!this.session.speaker.busy() && Date.now() - this.lastSpeech > c.listen.exitAfterMin * 60000 && !this.answersComing()) {
         this.log({ event: 'idle-exit' });
         this.stop();
       }
@@ -526,6 +550,7 @@ class Live {
     // in the first quiet moment; the briefing is refreshed when its sources change.
     this.watch = setInterval(() => {
       this.deliverAnswers();
+      this.stillComing();
       this.refreshBriefing();
       this.sendBriefingChanges();
     }, 250);
@@ -578,9 +603,15 @@ class Live {
     // What the decision model just did shows on the orb for a few seconds.
     session.onAction = (done) => (this.lastAction = { label: done[0].toUpperCase() + done.slice(1), at: Date.now() });
     // A hand-off's answer leaves the queue once heard; one not heard is tried again.
-    session.onAnswer = (a) => this.deliveries?.heard(a.id);
+    session.onHandOff = (h) => this.waiting.set(h.id, { ...h, at: Date.now() });
+    session.onAnswer = (a) => {
+      this.waiting.delete(a.id);
+      this.deliveries?.heard(a.id);
+    };
     session.onUnheard = (a) => {
-      if (this.deliveries?.failed(a.id)) this.log({ event: 'handoff-gave-up', id: a.id });
+      if (!this.deliveries?.failed(a.id)) return;
+      this.waiting.delete(a.id);
+      this.log({ event: 'handoff-gave-up', id: a.id });
     };
     session.speaker = speaker || new Speaker({ rate: session.provider.outputRate, device: this.ec?.output || c.audio.output });
     if (resume) session.provider.resumeHandle = resume;
@@ -625,6 +656,30 @@ class Live {
     const changes = briefingChanges(this.briefKnown || '', this.briefing);
     this.briefKnown = this.briefing;
     if (changes && s.provider.note?.(`Briefing update, what changed just now:\n${changes}`)) this.log({ event: 'briefing-update', chars: changes.length });
+  }
+
+  /** True while an answer handed off in this conversation (within handoff.waitMin) is not heard yet. */
+  answersComing(now = Date.now()) {
+    for (const [id, w] of this.waiting) if (now - w.at > this.config.handoff.waitMin * 60000) this.waiting.delete(id);
+    return this.waiting.size > 0;
+  }
+
+  /**
+   * Once per hand-off whose answer is slow (handoff.stillComingSec): in a quiet moment, the
+   * voice says the answer is still coming and will be said here, so the user stays on.
+   */
+  stillComing() {
+    const s = this.session;
+    const after = this.config.handoff.stillComingSec * 1000;
+    if (!s || !this.mic || !after || !this.answersComing() || !s.quiet() || s.speaker.busy(3000) || performance.now() - s.lastLoud < 5000) return;
+    const now = Date.now();
+    const replies = path.join(handoffDir(this.config), 'replies');
+    const due = [...this.waiting.values()].filter((w) => !w.nudged && now - w.at > after && !fs.existsSync(path.join(replies, `${w.id}.json`)));
+    if (!due.length) return;
+    const what = due.map((w) => `"${w.request}"`).join(' and ');
+    if (!s.provider.say?.(redact(`Your working session is still on ${what}. Tell the user in one short sentence that the answer is still coming and that you will say it here as soon as it lands.`))) return;
+    for (const w of due) w.nudged = true;
+    this.log({ event: 'still-coming', ids: due.map((w) => w.id) });
   }
 
   deliverAnswers() {
@@ -678,7 +733,8 @@ class Live {
     releaseLock();
     this.session?.speaker.cut();
     this.cue(440);
-    this.log({ event: 'stopped' });
+    // Answers still coming are spoken at the next start.
+    this.log({ event: 'stopped', ...(this.answersComing() ? { answers_waiting: this.waiting.size } : {}) });
     // Let the closing tone play, then let go of the provider and the echo canceller.
     setTimeout(() => {
       this.session?.close();
@@ -704,27 +760,12 @@ function send(cmd) {
 
 /** Read a WAV (16-bit PCM, mono or stereo) or headerless PCM at `rate`, as mono PCM at `rate`. */
 export function readClip(file, rate) {
-  const buf = fs.readFileSync(file);
-  if (buf.toString('ascii', 0, 4) !== 'RIFF') return buf;
-  let off = 12;
-  let fmt = null;
-  while (off + 8 <= buf.length) {
-    const id = buf.toString('ascii', off, off + 4);
-    const size = buf.readUInt32LE(off + 4);
-    if (id === 'fmt ') fmt = { channels: buf.readUInt16LE(off + 10), rate: buf.readUInt32LE(off + 12), bits: buf.readUInt16LE(off + 22) };
-    if (id === 'data') {
-      if (!fmt || fmt.bits !== 16) throw new Error(`${file}: only 16-bit PCM WAV is supported`);
-      let pcm = buf.subarray(off + 8, off + 8 + size);
-      if (fmt.channels > 1) {
-        const mono = Buffer.alloc(Math.floor(pcm.length / 2 / fmt.channels) * 2);
-        for (let i = 0; i < mono.length / 2; i++) mono.writeInt16LE(pcm.readInt16LE(i * 2 * fmt.channels), i * 2);
-        pcm = mono;
-      }
-      return resample(pcm, fmt.rate, rate);
-    }
-    off += 8 + size + (size % 2);
+  try {
+    const { pcm, rate: from } = wavToPcm(fs.readFileSync(file), rate);
+    return resample(pcm, from, rate);
+  } catch (err) {
+    throw new Error(`${file}: ${err.message}`);
   }
-  throw new Error(`${file}: no audio data`);
 }
 
 /** Speech onset and end in a clip, in ms, by loudness in 20 ms frames. */
@@ -792,6 +833,8 @@ async function bench(config, args, log) {
       log,
       script: [{ text: args.say || 'please open the documents folder', tools: [{ name: 'desktop_action' }], reply: 'Opened it.' }],
       performImpl: args.open ? perform : async () => {},
+      // The same instructions a conversation starts with.
+      briefing: config.briefing.enabled && (config.briefing.parts || []).length ? buildBriefing(config).text : '',
     });
     if (args.play) session.speaker = new Speaker({ rate: session.provider.outputRate, device: config.audio.output });
     await session.connect();
@@ -858,6 +901,64 @@ async function pick(config, text) {
   return 0;
 }
 
+/**
+ * `voice-mode do "<request>"`: the assistant's own session asks for one desktop action in
+ * plain words. The chooser picks from the same fixed catalog as the voice, with the same
+ * checks, and it is carried out (or, with dryRun, only described). Nothing is done when no
+ * action fits. Returns { key, name, done, ms } or { key: null, ... }.
+ */
+export async function doRequest(config, text, { log = () => {}, performImpl = perform, records, catalog, chooser, dryRun = false } = {}) {
+  records ||= new Records(config);
+  catalog ||= buildCatalog(config, records);
+  const roots = [config.actions.documents, ...records.roots].filter(Boolean);
+  const t0 = performance.now();
+  const ms = () => Math.round(performance.now() - t0);
+  let result = null;
+  const execute = async (key, info) => {
+    const item = catalog.get(key);
+    const slot = info.slot || '';
+    const done = describe(item, slot);
+    const logged = config.logTranscripts ? done : describe(item, slot, { words: false });
+    const argv = [];
+    // A dry run goes through the same checks and only records what would have run.
+    const stub = dryRun ? { run: async (a) => argv.push(a), exec: async (a) => (argv.push(a), '(0,)'), note: (folder) => path.join(folder, '(dry run).md') } : {};
+    try {
+      await performImpl(item, { roots, has, slot, ...stub });
+      result = { key, name: item.name, done, ms: ms(), ...(dryRun ? { dry_run: true, would_run: argv[0] || null } : {}) };
+      log({ event: 'action', target: key, done: logged, p: info.p, ms_from_request: result.ms, ...(dryRun ? { dry_run: true } : {}) });
+    } catch (err) {
+      result = { key, name: item.name, error: err.message, ms: ms() };
+      log({ event: 'action-failed', target: key, error: err.message });
+    }
+  };
+  // Nobody is mid-sentence here, so a slow first call (a cold connection) may take longer.
+  chooser ||= new Chooser(merge(config, { actions: { chooser: { timeoutMs: Math.max(config.actions.chooser.timeoutMs, 10000) } } }), catalog, { execute, log });
+  chooser.execute = execute;
+  if (!chooser.ready) return { key: null, error: `the chooser has no key (${config.actions.chooser.keyName}) or there are no actions` };
+  await chooser.ask(String(text).trim(), true);
+  return result || { key: null, note: 'no action in the catalog fits; nothing was done', ms: ms() };
+}
+
+/**
+ * `voice-mode say "<text>"`: the words, as given and redacted, spoken aloud. A running
+ * conversation says them itself (through the hand-off queue), so there is never a second
+ * audio stream; otherwise they are turned into speech once and played.
+ */
+export async function sayText(config, text, { running, fetchImpl = fetch, playImpl = play, dryRun = false } = {}) {
+  const words = redact(String(text || '').replace(/\s+/g, ' ').trim());
+  if (!words) throw new Error('nothing to say');
+  if (running) {
+    if (dryRun) return { delivered: 'conversation', dry_run: true, chars: words.length };
+    return { delivered: 'conversation', id: saveMessage(config, words), chars: words.length };
+  }
+  const t0 = performance.now();
+  const speech = await synthesize(config, words, { fetchImpl });
+  const out = { delivered: 'speech', provider: speech.provider, model: speech.model, voice: speech.voice, chars: words.length, seconds: Math.round((speech.pcm.length / 2 / speech.rate) * 10) / 10, synth_ms: Math.round(performance.now() - t0) };
+  if (dryRun) return { ...out, dry_run: true };
+  await playImpl(speech.pcm, { rate: speech.rate, device: config.audio.output });
+  return out;
+}
+
 function latency(config) {
   const file = path.join(config.logDir, 'metrics.jsonl');
   const rows = fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
@@ -886,9 +987,27 @@ function parseArgs(argv) {
   return out;
 }
 
+const FLAGS = ['clip', 'runs', 'play', 'say', 'config', 'dry-run', 'help'];
+
+/** The usage at the top of this file. */
+function usage() {
+  const head = fs.readFileSync(SELF, 'utf8').split('\n').slice(1);
+  return head.slice(0, head.findIndex((l) => !l.startsWith('//'))).map((l) => l.replace(/^\/\/ ?/, '')).join('\n');
+}
+
 async function main(argv) {
   const args = parseArgs(argv);
-  const cmd = args._[0] || 'start';
+  const cmd = args._[0];
+  // Opening the mic takes an explicit start: no command, help or an unknown flag never does.
+  if (!cmd || cmd === 'help' || cmd === '-h' || args.help) {
+    (cmd || args.help ? console.log : console.error)(usage());
+    return cmd || args.help ? 0 : 2;
+  }
+  const unknown = cmd === 'say' ? [] : Object.keys(args).filter((k) => k !== '_' && !FLAGS.includes(k));
+  if (unknown.length) {
+    console.error(`voice-mode: unknown option --${unknown[0]} (see voice-mode help)`);
+    return 2;
+  }
   if (args.config) process.env.VOICE_MODE_CONFIG = args.config;
   let config;
   try {
@@ -965,6 +1084,36 @@ async function main(argv) {
       console.error(`\n${b.chars} characters${b.missing.length ? `; could not read: ${b.missing.join(', ')}` : ''}`);
       return 0;
     }
+    case 'do': {
+      const words = args._.slice(1).join(' ');
+      if (!words.trim()) {
+        console.error('voice-mode do: say what to do, e.g. voice-mode do "open the documents folder"');
+        return 2;
+      }
+      fs.mkdirSync(config.logDir, { recursive: true });
+      const log = makeLogger(config, { file: path.join(config.logDir, 'voice-mode.log'), extra: { from: 'assistant' } });
+      const r = await doRequest(config, words, { log, dryRun: !!args['dry-run'] });
+      console.log(JSON.stringify(r));
+      return r.key && !r.error ? 0 : r.error && !r.key ? 2 : 1;
+    }
+    case 'say': {
+      // Raw words, so the text may contain anything, "--" included; only a leading --dry-run is read.
+      const rest = argv.slice(argv.indexOf('say') + 1);
+      const dryRun = rest[0] === '--dry-run';
+      const text = (dryRun ? rest.slice(1) : rest).join(' ');
+      fs.mkdirSync(config.logDir, { recursive: true });
+      const log = makeLogger(config, { file: path.join(config.logDir, 'voice-mode.log'), extra: { from: 'assistant' } });
+      try {
+        const r = await sayText(config, text, { running: !!(await send('status')), dryRun });
+        log({ event: 'say', ...r, ...(config.logTranscripts ? { text } : {}) });
+        console.log(JSON.stringify(r));
+        return 0;
+      } catch (err) {
+        log({ event: 'say-failed', error: err.message });
+        console.error(`voice-mode say: ${err.message}`);
+        return err.message === 'nothing to say' ? 2 : 1;
+      }
+    }
     case 'status': {
       const r = await send('status');
       console.log(r || (lockHolder() ? 'starting' : 'not running'));
@@ -979,7 +1128,7 @@ async function main(argv) {
     case 'latency':
       return latency(config);
     default:
-      console.error(`voice-mode: unknown command "${cmd}" (start, toggle, stop, status, reply, briefing, check, pick, bench, latency)`);
+      console.error(`voice-mode: unknown command "${cmd}" (start, toggle, stop, status, reply, briefing, do, say, check, pick, bench, latency, help)`);
       return 2;
   }
 }

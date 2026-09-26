@@ -276,7 +276,7 @@ export class Chooser {
         this.picked?.(answer.choice);
         if (TEXT_KINDS.has(item.kind)) {
           this.textAction = { key: answer.choice, p };
-          if (final) this.fill(text);
+          if (final) await this.fill(text);
           return;
         }
         await this.execute(answer.choice, { text, p, final });

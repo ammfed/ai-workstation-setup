@@ -15,6 +15,9 @@ file run by Qt 6's `qml` tool) shows the conversation while it runs.
 voice-mode toggle           # the hotkey: start a conversation, or end the one running
 voice-mode start            # the same conversation, in this terminal (Ctrl+C ends it)
 voice-mode check            # what is configured and what is missing (never prints keys)
+voice-mode do "<request>"   # for your assistant: one desktop action from the same safe list
+voice-mode say "<text>"     # for your assistant: say these words aloud, as they are
+voice-mode help             # every command
 ```
 
 A conversation is one continuous speech-to-speech exchange: the mic stays open from start
@@ -52,13 +55,13 @@ points at another one). Everything not in the file takes the defaults in `bin/co
 | --- | --- |
 | `provider` | **The one line that switches providers**: `openai`, `gemini`, or `fake` (no network, for tests). |
 | `keysFile` | Env file holding `OPENAI_API_KEY` and `GEMINI_API_KEY`; default `~/.config/ai-workstation-setup/voice/.env` (mode 600). Read at run time only. |
-| `providers.openai` | `model` (`gpt-realtime`), `voice`, `transcribeModel` (`gpt-live-transcribe`, which streams words while you speak), `silenceMs`, `vad` (`server` or `semantic`). |
-| `providers.gemini` | `model` (`gemini-3.8-live`), `voice`, `silenceMs`. Gemini resets each connection after about ten minutes; voice mode reconnects with the session's resumption handle, so the conversation carries on where it was. |
+| `providers.openai` | `model` (`gpt-realtime`), `voice`, `transcribeModel` (`gpt-live-transcribe`, which streams words while you speak), `silenceMs`, `vad` (`server` or `semantic`), `ttsModel` (`gpt-4o-mini-tts`, for `voice-mode say`). |
+| `providers.gemini` | `model` (`gemini-3.8-live`), `voice`, `silenceMs`, `ttsModel` (`gemini-3.8-flash-lite-tts`, for `voice-mode say`). Gemini resets each connection after about ten minutes; voice mode reconnects with the session's resumption handle, so the conversation carries on where it was. |
 | `persona` / `personaFile` | Who the voice is. The shipped default is neutral and brief; put your own in a file. |
 | `sources` | What it may read: `{ "name", "path", "about"?, "show"? }` for a file or folder (a `*` in a path segment makes one source per match), or `{ "name", "command": [..., "{query}"] }` for a read-only search command (`{regex}` gives the keywords as `a\|b`). `about` tells the model what the source holds; `show: true` lets its top-level notes be shown on screen by voice. |
 | `queue` | `{ "command": [...], "env": {} }`: how a hand-off reaches your assistant; the note is added as the last argument. Never run through a shell. Without it there is no hand-off. |
-| `handoff` | `replyCommand` (default `voice-mode reply`: the command written into each note; give the full path if your assistant's shell does not have it on PATH), `dir` (the reply queue; default `handoff/` next to the config). |
-| `briefing` | `enabled`, `refreshMin` (3), `maxChars` (24000 in all), `parts` (see Briefing and hand-off). |
+| `handoff` | `replyCommand` (default `voice-mode reply`: the command written into each note; give the full path if your assistant's shell does not have it on PATH), `dir` (the reply queue; default `handoff/` next to the config), `waitMin` (15: how long a conversation stays open for an answer that is still coming), `stillComingSec` (20: when it says, once, that the answer is still coming; 0 never). |
+| `briefing` | `enabled`, `refreshMin` (3), `maxChars` (120000 in all; see What a big briefing costs), `parts` (see Briefing and hand-off). |
 | `actions` | `enabled`, `chooser` (`model`, `keyName`, `keyFile`, `threshold` 0.9 mid-sentence, `finalThreshold` 0.7 once you stop), `apps` (extra `{ id, name, desktop \| mac \| command }`), `discoverApps` (installed desktop apps on Linux), `sites` (`{ id, name, url }`, http and https only), `documents` (its folders can be opened), `files`, `decisionLog` (default on: one line per decision in `logs/decisions.log`), `control` (default on: the PC control below), `notes.folder`, `searchUrl` (`{q}` is replaced by the words), `dryRun`. |
 | `audio` | `duplex`: `full` (default: talk over a reply to cut in) or `half` (the mic is muted while a reply plays), `echoCancel` (default on; it wraps the `input` and `output` devices, or the default ones), `input` and `output` device names, `earcons` (a short tone when a conversation starts and ends). |
 | `listen.exitAfterMin` | End the conversation after this many minutes without speech (default 10). |
@@ -136,15 +139,52 @@ that changed, as context, in the next quiet moment. Each part has its own budget
 
 | Part | What it takes |
 | --- | --- |
-| `{ "name", "transcript": "<folder>", "messages"? }` | The newest `.jsonl` in a Claude Code project folder (`~/.claude/projects/<project>`): only what you typed and what the assistant wrote back, never tool calls, tool output, thinking or harness notices; the newest `messages` (30) that fit. |
-| `{ "name", "path", "sections"? }` | A text file, or only its named `## ` sections (a backlog's open work, say). |
+| `{ "name", "transcript": "<folder>", "messages"?, "skip"? }` | The newest `.jsonl` in a Claude Code project folder (`~/.claude/projects/<project>`), headed with when it was last active: what you typed and the assistant's final reply to it, the newest `messages` (30) that fit. |
+| `{ "name", "path", "sections"?, "lineChars"? }` | A text file, or only its named `## ` sections (a backlog's open work, say); `lineChars` cuts each long line. |
+| `{ "name", "files": "<glob>", "except"? }` | Whole files, newest first, each under its own name (a folder of memory notes, say); front matter is reduced to its `description`. |
+| `{ "name", "tasks": "<glob>" \| [...], "days"? }` | Who is working on what, from task records: one `<id>.meta` file of `key=value` lines per task (`kind`, `project`, `worktree`, and `home` for an agent with its own folder of task records, whose tasks are listed under it) and its `<id>.status` log beside it. Each task changed within `days` (14) is one line: kind, project, working copy and latest status line. |
 | `{ "name", "glob", "hours"? }` | The newest line of each matching log changed within `hours` (24): live status logs. |
+
+A transcript is cleaned for speech. It keeps what you typed (a slash command as its name and
+arguments) and the one reply that ends each of the assistant's runs, never tool calls, tool
+output, thinking, the narration between tool calls, harness notices, hook feedback, or
+messages another program typed into the session (`skip` adds your own patterns for those).
+Markdown is flattened as a person would read it aloud: a table row becomes "first cell:
+the rest", a link becomes its text (a bare GitHub link becomes "repo pull request 12"), code
+blocks, emphasis and emoji go.
 
 `voice-mode briefing` prints exactly what the model would get, redacted, with its size.
 
-**Hand-off.** When the briefing and records do not answer, or you ask for something to be
-done, the voice says one short line ("Let me check") and calls `hand_off`. That sends your
-assistant one note through `queue`:
+**What a big briefing costs.** Gemini Live takes up to its whole context, 131,072 tokens, as
+instructions (measured: an instruction of 131,014 tokens was accepted and a word planted at
+each end was recalled; about 133,000 closed the connection as an invalid argument). English
+prose runs at about four characters a token, so the default `maxChars` of 120,000 is about
+30,000 tokens. A bigger briefing is slower to start answering and dearer:
+
+| Instruction size | First audio (a one-line question) |
+| --- | --- |
+| 9,000 tokens | 0.6 s |
+| 43,000 tokens | 0.77 s |
+| 86,000 tokens | 0.97 s |
+| 103,000 to 120,000 tokens | 1.1 s |
+| 131,000 tokens | 1.5 s |
+
+Every turn is billed for the whole context again, briefing included (measured: the second
+turn of a conversation with a 43,000-token briefing counted 42,944 prompt tokens). At the
+text-input price when this was written (0.75 USD a million tokens), that is about 3 cents a
+turn at 43,000 tokens, and about 10 cents at the full context. Large briefings also meet the
+per-minute token quota sooner: two back-to-back conversations near the limit were refused
+until a minute had passed.
+
+**Records first.** The voice answers at once from the briefing. For anything the briefing does
+not hold, it looks in your records itself, in the same reply (`search_records` with a few
+keywords, and the source when you name one; `list_records` for the newest; `read_record`),
+and answers from what they return, the newest record first when two disagree. Asked to
+read, look up or check something, it always reads it, even when the briefing seems to know.
+
+**Hand-off.** Only when the records do not answer either, or you ask for something to be
+done, the voice says one short line ("Let me check; I'll tell you here as soon as it's
+back") and calls `hand_off`. That sends your assistant one note through `queue`:
 
 ```
 Voice question vq-3f9a2c: "<your request>" -- the user is waiting in voice mode; answer in one to three short spoken sentences with: voice-mode reply vq-3f9a2c "<answer>"
@@ -158,16 +198,52 @@ voice-mode reply vq-3f9a2c "It merged this morning; CI is green."
 
 The answer lands in a file-based reply queue (`handoff/replies/`, no server). A running
 conversation speaks it in the next quiet moment, as its own answer, and the orb shows
-"Answer ready"; if no conversation is running, the next one starts with it. Spoken answers
-move to `handoff/spoken/`. A wrong id, or one already answered, makes `reply` fail.
+"Answer ready". Spoken answers move to `handoff/spoken/`. A wrong id, or one already
+answered, makes `reply` fail.
+
+While an answer is coming, the conversation stays open, even past `listen.exitAfterMin`
+(for up to `handoff.waitMin`, 15 minutes). If the answer takes longer than
+`handoff.stillComingSec` (20 s) and you are both quiet, the voice says once that it is still
+coming and that it will say it here as soon as it lands. On Gemini the hand-off is a
+non-blocking call, so the conversation carries on while it waits. Only if you end the
+conversation yourself first does the answer wait for the next one, which starts with it.
 
 Two safety nets: a reply that promises to check ("Let me check", "On it") without calling
-`hand_off` hands off your words anyway, and an answer that gets a reply with no sound is said
-once more. An answer you talk over is not repeated; it stays in the conversation for the model.
+`hand_off` or reading any record hands off your words anyway, and an answer that gets a reply
+with no sound is said once more. An answer you talk over is not repeated; it stays in the
+conversation for the model.
 
 The run log records `handoff` (id, sent), `handoff-answer` with `round_trip_ms` (the end of
 your question to the first sound of the answer) and `speak_ms` (answer queued to heard), and
 `handoff-unheard` when an answer was not heard.
+
+## From your assistant's session: `do` and `say`
+
+Two commands let your assistant use voice mode from its own session, without a conversation.
+
+`voice-mode do "<request in plain words>"` asks the same decision model, with the same
+catalog, to pick one desktop action, and plain code carries it out exactly as it would for
+your voice, with the same limits (see Controlling the computer): nothing deletes, sends,
+closes or runs a command. It prints one JSON line and logs the action in `logs/voice-mode.log` and
+`logs/decisions.log`, marked as asked by the assistant:
+
+```sh
+$ voice-mode do "turn the volume up a notch"
+{"key":"system:volume-up","name":"Turn the sound volume up","done":"turned the volume up","ms":704}
+$ voice-mode do "delete my downloads"
+{"key":null,"note":"no action in the catalog fits; nothing was done","ms":838}     # exit 1
+```
+
+Exit status 0 when the action was carried out, 1 when nothing fits or it failed, 2 when the
+decision model has no key or there are no words. `--dry-run` shows what it would run.
+
+`voice-mode say "<text>"` says the text aloud, word for word, in the configured provider's
+voice. Nothing rewrites it: the words are redacted and spoken as they are. With no
+conversation running it is one plain text-to-speech call (`ttsModel`; the other provider is
+used only when the configured one has no key) played on `audio.output`. While a conversation
+is running it is not a second voice: the text goes into the answer queue and the conversation
+says it, word for word, in the next quiet moment. `--dry-run` makes the speech and plays
+nothing.
 
 ## Barge-in (cutting in on a reply)
 
@@ -291,6 +367,22 @@ Measured on 2026-09-25 on a Linux desktop, over a few thousand local notes, with
   only promised to check was handed off by the safety net in both runs where that happened.
   In 4 of 13 hand-offs the provider returned a failed reply for the answer; answers are now
   kept and tried again until heard.
+- Records first, Gemini Live, five spoken questions (the newest notes, where a piece of work
+  lives, the version a design note gives, the configured voice, a project's stage), measured
+  on 2026-09-26. With the earlier rules and a 23,000-character briefing, one question was
+  handed off and two answered from the model's own memory, one of them with an outdated
+  version. With records first and a 167,000-character briefing (about 43,000 tokens), none
+  was handed off: the two questions that needed records read them (`list_records` then
+  `read_record` three times; `search_records`), and the other three came from the briefing.
+  First audio: 1.7 to 2.4 s from the briefing, 2.4 to 6.4 s after a chain of record reads.
+- Hand-off while talking, Gemini Live, with a stand-in for the assistant that answered after
+  55 s: "Let me check" at once, "still coming" said once at 20 s, the answer heard 0.69 s
+  after it arrived (58.5 s from the end of the question), and the conversation held open past
+  its idle limit until then. `voice-mode say` during that conversation was spoken word for
+  word 0.73 s after it was queued; outside a conversation, `gemini-3.8-flash-lite-tts` took
+  2.3 to 3.1 s to return the speech.
+- `voice-mode do`: about 0.65 to 0.73 s from the request to the action carried out (one
+  decision call and the shortcut).
 - Launching itself (`kstart`, `gtk-launch`, `xdg-open`, `open`) takes about 10 ms to hand
   off. The window appears when the app has started, which the numbers above do not include.
 - Not included: your microphone and speaker buffers (about 20 and 40 ms as configured).
@@ -309,5 +401,6 @@ Measured on 2026-09-25 on a Linux desktop, over a few thousand local notes, with
 - `voice-mode bench` with `"provider": "fake"` runs the whole pipeline with no network, and
   `test/voice-mode.test.mjs` covers the read boundary, the queue, the action refusals, the
   chooser, barge-in, both provider adapters, the one-conversation lock, the orb's routes,
-  every PC-control action's exact command, the redactor, the briefing's parts and the
-  hand-off round trip with its reply queue.
+  every PC-control action's exact command, the redactor, the briefing's parts and cleaning,
+  the hand-off round trip with its reply queue, a conversation staying open for an answer,
+  and `do` and `say`.

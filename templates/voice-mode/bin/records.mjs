@@ -174,21 +174,29 @@ export class Records {
     return path.isAbsolute(clean) ? inside(clean, this.roots) : null;
   }
 
-  async search(query, { limit = 8 } = {}) {
+  /** Sources called `name`, or named after it ("second mate" covers "second mate web"); all without a name. */
+  pick(name) {
+    const want = String(name || '').trim().toLowerCase();
+    return this.sources.filter((s) => !want || s.name.toLowerCase() === want || s.name.toLowerCase().startsWith(`${want} `));
+  }
+
+  async search(query, { limit = 8, source = '' } = {}) {
     const words = String(query || '').toLowerCase().split(/[^\p{L}\p{N}_-]+/u).filter((w) => w.length > 2);
     if (!words.length) return { results: [], note: 'give a few keywords' };
+    const sources = this.pick(source);
+    if (!sources.length) return { results: [], note: `no source called "${source}"; the sources are: ${this.sources.map((s) => s.name).join(', ')}` };
     const hits = [];
     const candidates = [];
     const deadline = Date.now() + 4000;
     // Command sources run while the files are searched.
     const regex = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-    const commands = this.sources
+    const commands = sources
       .filter((s) => s.command)
       .map(async (s) => {
         const text = (await runRead(s.command.map((a) => a.replace('{query}', () => words.join(' ')).replace('{regex}', () => regex)))).trim();
         if (text) hits.push({ score: words.length, source: s.name, text: text.slice(0, 1500) });
       });
-    for (const s of this.sources) {
+    for (const s of sources) {
       if (!s.path) continue;
       for (const f of walk(s.path)) {
         if (Date.now() > deadline) break;
@@ -261,8 +269,17 @@ export class Records {
 export const TOOLS = [
   {
     name: 'search_records',
-    description: 'Search the assistant records, notes, memories and files for keywords. Use before answering any question about work, status, people, plans or past decisions.',
-    parameters: { type: 'object', properties: { query: { type: 'string', description: 'a few keywords' } }, required: ['query'] },
+    description:
+      'Search your own records, notes, memories, documents and notes vault for keywords; returns matching lines and the name of each record. ' +
+      'Use it first for any question about work, projects, people, plans, decisions, notes or files, before saying you do not know or handing anything off.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'a few keywords' },
+        source: { type: 'string', description: 'optional: search only this source (a name from the record sources), such as the notes vault when the user names it' },
+      },
+      required: ['query'],
+    },
   },
   {
     name: 'read_record',
@@ -271,7 +288,7 @@ export const TOOLS = [
   },
   {
     name: 'list_records',
-    description: 'List the record sources, or the most recently changed records in one source.',
+    description: 'List the record sources, or the most recently changed records in one source, newest first: for "what is new", "what did I write lately" or "the latest notes".',
     parameters: { type: 'object', properties: { source: { type: 'string', description: 'optional source name' } } },
   },
 ];
@@ -279,7 +296,7 @@ export const TOOLS = [
 export async function runTool(records, name, args = {}) {
   switch (name) {
     case 'search_records':
-      return records.search(args.query);
+      return records.search(args.query, { source: args.source });
     case 'read_record':
       return records.read(args.name, { tail: !!args.tail });
     case 'list_records':

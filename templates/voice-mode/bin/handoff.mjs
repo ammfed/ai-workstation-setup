@@ -2,10 +2,11 @@
 // goes to the assistant's own session through the queue command, as one line carrying an
 // id and the exact command that answers it. The answer comes back as a file (one reply
 // queue, no server); the running conversation speaks it as its own, or, when no
-// conversation is running, the next one does.
+// conversation is running, the next one does. `voice-mode say` uses the same queue for a
+// message the running conversation says word for word.
 //
 //   <dir>/pending/<id>.json   written when the voice hands something off
-//   <dir>/replies/<id>.json   written by `voice-mode reply <id> "<answer>"`
+//   <dir>/replies/<id>.json   written by `voice-mode reply <id> "<answer>"` (or `say`: vs-<hex>)
 //   <dir>/spoken/<id>.json    moved here once the answer has been spoken
 
 import crypto from 'node:crypto';
@@ -60,6 +61,13 @@ export function saveReply(config, id, text) {
     throw new Error(spoken ? `${id} was already answered and spoken` : `no voice hand-off ${id} is waiting for an answer`);
   }
   writeAtomic(path.join(sub(config, 'replies'), `${id}.json`), { id, text: answer, at: Date.now() });
+}
+
+/** `voice-mode say` while a conversation runs: a message for it to say word for word. */
+export function saveMessage(config, text) {
+  const id = `vs-${crypto.randomBytes(3).toString('hex')}`;
+  writeAtomic(path.join(sub(config, 'replies'), `${id}.json`), { id, text: String(text).trim(), at: Date.now(), verbatim: true });
+  return id;
 }
 
 /** Answers waiting to be spoken, oldest first, each with its question. */
