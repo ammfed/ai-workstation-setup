@@ -3,6 +3,9 @@
 // is filtered out of the transcripts while your words stay exact, secrets are redacted, the Now
 // page has its sections, concurrent `add`s all land, and the service rebuilds the page from a
 // watched change well inside the periodic rescan.
+// The live board: holds split into "needs you now" and "parked" by the /bearings rule, names
+// from the backlog, live dots from `herdr agent list` (a stand-in here), and a server that only
+// answers GET for 127.0.0.1 or localhost.
 // Run: node --test test/ledger.test.mjs
 
 import assert from 'node:assert/strict';
@@ -10,6 +13,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import http from 'node:http';
 import { test, after } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -27,7 +31,7 @@ const append = (file, text) => fs.appendFileSync(file, text);
 
 let n = 0;
 /** A world: a main home with one second mate, a Claude projects folder, and a ledger config. */
-function world({ backfillHours = 0, rescanSeconds = 60 } = {}) {
+function world({ backfillHours = 0, rescanSeconds = 60, board } = {}) {
   const root = path.join(tmp, `w${++n}`);
   const main = path.join(root, 'main-home');
   const clone = path.join(root, 'firstmate-clone');
@@ -48,7 +52,7 @@ function world({ backfillHours = 0, rescanSeconds = 60 } = {}) {
       '',
       '## In flight',
       '- [ ] pick-colour - Pick the header colour (kind: task) (since 2026-01-02) (hold: Which colour should the header use, blue or green?) (hold-kind: captain)',
-      '  Captain hold set: 2026-01-03T10:00:00Z',
+      `  Captain hold set: ${new Date(Date.now() - 86_400_000).toISOString().slice(0, 19)}Z`,
       '- [ ] later-thing - Something parked (since 2026-01-02) (hold: Parked by the captain until the launch.) (hold-kind: captain)',
       '- [ ] plain-work - Ordinary work (since 2026-01-02)',
       '',
@@ -74,6 +78,7 @@ function world({ backfillHours = 0, rescanSeconds = 60 } = {}) {
       rescanSeconds,
       debounceMs: 50,
       redact: ['PROJECT-[0-9]+'],
+      ...(board ? { board } : {}),
     }),
   );
   const run = (...args) => spawnSync(process.execPath, [script, ...args, '--config', config], { encoding: 'utf8', input: '' });
@@ -303,7 +308,7 @@ test('the Now page shows what waits on you, what is in flight, your latest words
   assert.match(waiting, /\*\*pick-colour\*\* \(main\): Which colour should the header use, blue or green\? _\(held since/);
   assert.match(waiting, /\*\*blue-task\*\* \(main\) asks: small or large build\?/);
   assert.doesNotMatch(waiting, /answered already|old-call|plain-work/);
-  assert.match(waiting, /Parked by you: later-thing/);
+  assert.match(waiting, /Parked: later-thing \(held \d+ days\)/);
   const flight = section('In flight');
   assert.match(flight, /\*\*blue-task\*\* \(main\) · demo-app · copy `[^`]*demo-app` · working: building the blue header/);
   assert.match(flight, /Second mates \(1\):[\s\S]*\*\*mate-one\*\* \(main\) · resolved: done/);
@@ -346,4 +351,194 @@ test('the service rebuilds the Now page from a watched change within seconds, an
   const r = w.run('check');
   assert.equal(r.status, 1);
   assert.match(r.stdout, /FAILED ledger: the service \(pid \d+\) is not running/);
+});
+
+// ---------------------------------------------------------------- the live board
+
+const { backlogRows, buildBoard, timeline } = await import(script);
+
+test('needs you now versus parked follows the /bearings hold buckets exactly', () => {
+  // Mirrors hold_bucket in Firstmate's bin/fm-fleet-snapshot.sh: structured fields only.
+  const now = Date.parse('2026-09-27T12:00:00Z');
+  const text = [
+    '# Backlog',
+    '## In flight',
+    '- [ ] live-one - A live call (since 2026-09-20) (hold: Pick A or B?) (hold-kind: captain)',
+    '- [ ] aged-one - An old call (since 2026-09-01) (hold: Still open?) (hold-kind: captain)',
+    '- [ ] edge-age - Exactly the threshold (since 2026-09-13) (hold: q) (hold-kind: captain)',
+    '- [ ] stamped - An old row held again (since 2026-08-01) (hold: q) (hold-kind: captain)',
+    '  Captain hold set: 2026-09-26T10:00:00Z',
+    '',
+    '  more body',
+    '- [ ] dated-one - Later (since 2026-09-26) (hold: q) (hold-kind: captain) (hold-until: 2026-10-05)',
+    '- [ ] date-came - The date arrived (since 2026-08-01) (hold: q) (hold-kind: captain) (hold-until: 2026-09-27)',
+    '- [ ] blocked-one - Waits on open work (since 2026-09-26) blocked-by: dep-open (hold: q) (hold-kind: captain)',
+    '- [ ] missing-dep - Waits on an unknown id (since 2026-09-26) blocked-by: no-such-task (hold: q) (hold-kind: captain)',
+    '- [ ] freed - Its blocker is done (since 2026-09-26) blocked-by: dep-done (hold: q) (hold-kind: captain)',
+    '- [ ] prose-parked - Prose is never read (since 2026-09-26) (hold: Parked by the captain until the launch) (hold-kind: captain)',
+    '- [ ] no-reason - A captain row without a hold reason (since 2026-09-26) (hold-kind: captain)',
+    '- [ ] worker-hold - Held for someone else (since 2026-09-26) (hold: q) (hold-kind: maintainer)',
+    '## Queued',
+    '- [ ] dep-open - Open work (since 2026-09-20)',
+    '## Notes',
+    '- [ ] not-a-row - Outside the three sections (hold: q) (hold-kind: captain)',
+    '## Done',
+    '- [x] dep-done - Finished (done 2026-09-27)',
+    '- [x] closed-call - Answered (done 2026-09-27) (hold: q) (hold-kind: captain)',
+  ].join('\n');
+  const bucket = Object.fromEntries(backlogRows(text, { now }).map((r) => [r.id, r.bucket]));
+  assert.deepEqual(bucket, {
+    'live-one': 'live',
+    'aged-one': 'aged',
+    'edge-age': 'aged',
+    stamped: 'live',
+    'dated-one': 'dated',
+    'date-came': 'live',
+    'blocked-one': 'blocked',
+    'missing-dep': 'blocked',
+    freed: 'live',
+    'prose-parked': 'live',
+    'no-reason': null,
+    'worker-hold': null,
+    'dep-open': null,
+    'dep-done': null,
+    'closed-call': null,
+  });
+  // The age threshold is a setting (FM_SNAPSHOT_UNDATED_HOLD_AGE_DAYS in Firstmate).
+  assert.equal(backlogRows(text, { now, ageDays: 30 }).find((r) => r.id === 'aged-one').bucket, 'live');
+  const title = backlogRows(text, { now }).find((r) => r.id === 'blocked-one').title;
+  assert.equal(title, 'Waits on open work');
+});
+
+/** A world for the board: holds of each kind, a landed row, and agents from a stand-in herdr. */
+function boardWorld(extra = {}) {
+  const today = new Date();
+  const ymd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const recent = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const root = path.join(tmp, `b${++n}`);
+  const agentsFile = path.join(root, 'agents.json');
+  const stub = path.join(root, 'herdr-stub.mjs');
+  write(stub, `import fs from 'node:fs';\nprocess.stdout.write(fs.readFileSync(${JSON.stringify(agentsFile)}, 'utf8'));\n`);
+  const w = world({ board: { enabled: true, port: 0, agents: [process.execPath, stub], ...extra } });
+  write(agentsFile, '[]');
+  write(
+    path.join(w.main, 'data', 'backlog.md'),
+    [
+      '# Backlog',
+      '## In flight',
+      `- [ ] blue-task - Build the blue header (repo: demo-app) (kind: ship) (since ${recent})`,
+      `- [ ] pick-colour - Pick the header colour (since ${recent}) (hold: Blue or green?) (hold-kind: captain)`,
+      `- [ ] wait-launch - After the launch (since ${recent}) (hold: q) (hold-kind: captain) (hold-until: 2999-01-01)`,
+      '## Done',
+      `- [x] shipped - The footer shipped (merged ${ymd})`,
+      '- [x] old-ship - An older one (merged 2020-01-01)',
+    ].join('\n'),
+  );
+  write(path.join(w.main, 'state', 'blue-task.meta'), `kind=ship\nproject=${path.join(w.root, 'projects', 'demo-app')}\nworktree=${path.join(w.root, 'pool', '1', 'demo-app')}\nherdr_pane_id=w1:p7\n`);
+  write(path.join(w.main, 'state', 'mate-one.meta'), `kind=secondmate\nhome=${w.mate}\nherdr_pane_id=w2:p1\n`);
+  write(path.join(w.mate, 'data', 'backlog.md'), `# Backlog\n## In flight\n- [ ] mate-call - A question from the mate (since ${recent}) (hold: Ship on Friday?) (hold-kind: captain)\n- [ ] mate-job - Tidy the docs (since ${recent})\n`);
+  write(path.join(w.mate, 'state', 'mate-job.meta'), `kind=task\nproject=${path.join(w.root, 'projects', 'docs-site')}\nworktree=${path.join(w.root, 'pool', '2', 'docs-site')}\n`);
+  write(path.join(w.mate, 'state', 'mate-job.status'), 'paused: waiting for the docs build\n');
+  return { ...w, agentsFile };
+}
+
+const homesOf = (w) => [
+  { name: 'main', path: w.main, sessions: [], main: true },
+  { name: 'mate-one', path: w.mate, sessions: [] },
+];
+
+test('the board snapshot: counts, a lane per mate, names from the backlog, live dots', () => {
+  const w = boardWorld();
+  const agents = [
+    { pane_id: 'w1:p7', agent_status: 'working', cwd: '/elsewhere', foreground_cwd: '/elsewhere', terminal_title: 'Firstmate operational input' },
+    { pane_id: 'w2:p1', agent_status: 'idle', cwd: w.mate, foreground_cwd: w.mate, terminal_title: 'Firstmate operational input' },
+  ];
+  const b = buildBoard(homesOf(w), agents);
+  assert.deepEqual(b.counts, { needs: 2, working: 1, landed: 1, parked: 1 });
+  assert.equal(b.live, 'ok');
+  assert.deepEqual(b.lanes.map((l) => [l.id, l.dot]), [['main', 'stopped'], ['mate-one', 'idle']]);
+  assert.equal(b.lanes[1].word, 'Working');
+  const blue = b.rows.find((r) => r.task === 'blue-task');
+  assert.equal(blue.name, 'Build the blue header', 'the name comes from the task record, not the terminal title');
+  assert.equal(blue.project, 'demo-app');
+  assert.equal(blue.dot, 'working');
+  assert.equal(blue.word, 'Working');
+  const job = b.rows.find((r) => r.task === 'mate-job');
+  assert.deepEqual([job.lane, job.name, job.dot, job.word, job.text], ['mate-one', 'Tidy the docs', 'stopped', 'Waiting', 'waiting for the docs build']);
+  assert.ok(!b.rows.some((r) => r.task === 'mate-one'), 'a second mate is a lane, not a card');
+  assert.deepEqual(b.needs.map((x) => [x.lane, x.task, x.question]).sort(), [['main', 'pick-colour', 'Blue or green?'], ['mate-one', 'mate-call', 'Ship on Friday?']]);
+  assert.deepEqual(b.parked.map((x) => [x.task, x.why]), [['wait-launch', 'until 2999-01-01']]);
+  assert.deepEqual(b.landed.map((x) => [x.task, x.verb]), [['shipped', 'merged']]);
+  // Without live status, dots say so instead of claiming stopped.
+  const blind = buildBoard(homesOf(w), null);
+  assert.equal(blind.live, 'unavailable');
+  assert.ok(blind.rows.every((r) => r.dot === 'unknown'));
+});
+
+test('a task asking a question shows it on its card; its timeline comes from the ledger, newest first', () => {
+  const w = boardWorld();
+  append(path.join(w.main, 'state', 'blue-task.status'), 'needs-decision [key=size]: small or large build?\n');
+  const b = buildBoard(homesOf(w), []);
+  const blue = b.rows.find((r) => r.task === 'blue-task');
+  assert.equal(blue.word, 'Asking');
+  assert.equal(blue.asks, 'small or large build?');
+  const entries = [
+    { home: 'main', task: 'blue-task', time: '2026-01-01T00:00:00Z', state: 'working', kind: 'status', text: 'first' },
+    { home: 'mate-one', task: 'blue-task', time: '2026-01-01T00:01:00Z', state: 'working', kind: 'status', text: 'another home' },
+    { home: 'main', task: 'blue-task', time: '2026-01-01T00:02:00Z', state: 'done', kind: 'status', text: 'second' },
+  ];
+  assert.deepEqual(timeline(entries, 'main', 'blue-task').map((e) => [e.word, e.text]), [['Done', 'second'], ['Working', 'first']]);
+});
+
+function request(port, pathname, { method = 'GET', host = `127.0.0.1:${port}` } = {}) {
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port, path: pathname, method, headers: { Host: host } }, (res) => {
+      let body = '';
+      res.on('data', (d) => (body += d));
+      res.on('end', () => resolve({ status: res.statusCode, type: res.headers['content-type'], body }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+test('the service serves the board on 127.0.0.1 only, read only, with the theme and its files', async (t) => {
+  const themeDir = path.join(tmp, `theme${++n}`);
+  write(path.join(themeDir, 'look.css'), ':root { --accent: #123456; }\n');
+  write(path.join(themeDir, 'face.woff2'), 'font-bytes');
+  const w = boardWorld({ theme: path.join(themeDir, 'look.css') });
+  write(w.agentsFile, JSON.stringify({ result: { agents: [{ pane_id: 'w1:p7', agent_status: 'working', cwd: '/x', foreground_cwd: '/x' }] } }));
+  const svc = spawn(process.execPath, [script, 'serve', '--config', w.config], { stdio: 'ignore' });
+  t.after(() => svc.kill('SIGKILL'));
+  const hbFile = path.join(w.data, 'serve.json');
+  let url = null;
+  for (const end = Date.now() + 5000; !url && Date.now() < end; await new Promise((r) => setTimeout(r, 25))) {
+    url = fs.existsSync(hbFile) ? JSON.parse(fs.readFileSync(hbFile, 'utf8')).board : null;
+  }
+  assert.match(url || '', /^http:\/\/127\.0\.0\.1:\d+\/$/, 'the heartbeat names the board');
+  const port = Number(new URL(url).port);
+  const page = await request(port, '/');
+  assert.equal(page.status, 200);
+  assert.match(page.body, /Needs you now[\s\S]*Working now[\s\S]*Landed today/);
+  const snap = await request(port, '/api/board');
+  const b = JSON.parse(snap.body);
+  assert.deepEqual(b.counts, { needs: 2, working: 1, landed: 1, parked: 1 });
+  assert.ok(b.generated_at && b.poll_seconds > 0);
+  append(path.join(w.main, 'state', 'blue-task.status'), 'working: painting it blue\n');
+  const end = Date.now() + 5000;
+  let tl = [];
+  while (Date.now() < end && !tl.some((e) => e.text === 'painting it blue')) {
+    tl = JSON.parse((await request(port, '/api/timeline?home=main&task=blue-task')).body).entries;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  assert.equal(tl[0].text, 'painting it blue', 'a new status line reaches the timeline');
+  assert.equal((await request(port, '/theme.css')).body, ':root { --accent: #123456; }\n');
+  const font = await request(port, '/theme/face.woff2');
+  assert.deepEqual([font.status, font.type, font.body], [200, 'font/woff2', 'font-bytes']);
+  assert.equal((await request(port, '/theme/..%2Fsecret.css')).status, 404);
+  assert.equal((await request(port, '/theme/config.json')).status, 404, 'only style and font files');
+  assert.equal((await request(port, '/api/board', { host: 'attacker.example' })).status, 403, 'another host name is refused');
+  assert.equal((await request(port, '/api/board', { method: 'POST' })).status, 405, 'read only');
+  assert.equal(w.run('check').status, 0);
+  assert.match(w.run('check').stdout, /board http:\/\/127\.0\.0\.1:/);
 });
