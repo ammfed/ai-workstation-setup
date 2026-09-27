@@ -19,7 +19,9 @@
 // Usage:
 //   node backpass-gate.mjs                      every allowed project, one after another
 //   node backpass-gate.mjs --project <path>     one allowed project
-//   node backpass-gate.mjs --scheduled          the allowed project that is most overdue
+//   node backpass-gate.mjs --scheduled          the most overdue allowed project that passes the
+//                                               checks, so a project that is always skipped
+//                                               does not hold up the others
 //   add --dry-run to do every check without calling a model
 //
 // Logs one line per run to runs.log next to this script (counts only, never content).
@@ -120,11 +122,22 @@ function gate(project, pattern) {
   return { ok: true, count: paths.length };
 }
 
+// Returns true when the project passed the checks (and ran, unless this is a dry run).
 function runProject(project, config, pattern) {
-  if (!fs.existsSync(project)) return log(project, 'skipped: folder not found');
+  if (!fs.existsSync(project)) {
+    log(project, 'skipped: folder not found');
+    return false;
+  }
   const checked = gate(project, pattern);
-  if (!checked.ok) return log(project, `skipped: ${checked.why}`);
-  if (dryRun) return log(project, `gate passed: ${checked.count} sessions clean`);
+  if (!checked.ok) {
+    log(project, `skipped: ${checked.why}`);
+    return false;
+  }
+  if (dryRun) {
+    log(project, `gate passed: ${checked.count} sessions clean`);
+    return true;
+  }
+  const started = Date.now();
   const r = backpass(project, [
     '--host', 'none',
     '--analysis-agent', config.agent, '--analysis-model', config.model,
@@ -134,9 +147,15 @@ function runProject(project, config, pattern) {
   const state = readJson(FILES.state, {});
   state[project] = { lastRun: Date.now() };
   fs.writeFileSync(FILES.state, JSON.stringify(state, null, 2));
-  if (r.status !== 0) return log(project, `failed: backpass exited ${r.status}`);
-  const proposals = /(\d+)\s+proposals?/i.exec(r.stdout + r.stderr)?.[1] ?? '?';
-  log(project, `done: ${proposals} proposals from ${checked.count} sessions; review them with \`backpass apply\` in that project`);
+  if (r.status !== 0) {
+    log(project, `failed: backpass exited ${r.status}`);
+    return true;
+  }
+  // backpass prints no count; its proposal file is rewritten only when a run produces one.
+  const proposal = readJson(path.join(project, '.backpass', 'proposal.json'), null);
+  const edits = proposal && Date.parse(proposal.generatedAt) >= started ? (proposal.edits || []).length : 0;
+  log(project, `done: ${edits} proposed edits from ${checked.count} sessions; review them with \`backpass apply\` in that project`);
+  return true;
 }
 
 function main() {
@@ -164,13 +183,14 @@ function main() {
     const cooldown = (Number(config.cooldownDays) || 7) * 24 * 60 * 60 * 1000;
     const due = projects.filter((p) => Date.now() - (state[p]?.lastRun || 0) >= cooldown);
     if (!due.length) return log(null, 'skipped: every project ran recently');
-    due.sort((a, b) => (state[a]?.lastRun || 0) - (state[b]?.lastRun || 0));
-    targets = [due[0]];
+    targets = due.sort((a, b) => (state[a]?.lastRun || 0) - (state[b]?.lastRun || 0));
   }
 
   if (!lock()) return log(null, 'skipped: another run is in progress');
   try {
-    for (const project of targets) runProject(project, config, pattern);
+    for (const project of targets) {
+      if (runProject(project, config, pattern) && flag('--scheduled')) break;
+    }
   } finally {
     fs.rmSync(FILES.lock, { force: true });
   }
