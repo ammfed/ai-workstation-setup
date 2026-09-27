@@ -55,7 +55,8 @@ done >"$tmp/tree.txt"
 
 if [ "$tree_only" -eq 0 ] && git rev-parse -q --verify HEAD >/dev/null; then
   # The two lines after each commit line are its author and committer, then its message.
-  git log -p --no-color --no-ext-diff --format='commit %H%n%an <%ae>%n%cn <%ce>%n%B' HEAD | awk '
+  # core.quotepath=false keeps a non-ASCII file name unquoted, so the patterns below match it.
+  git -c core.quotepath=false log -p --no-color --no-ext-diff --format='commit %H%n%an <%ae>%n%cn <%ce>%n%B' HEAD | awk '
     /^commit [0-9a-f]{40}$/ { c = substr($2, 1, 12); n = 0; next }
     { n++ }
     n == 1 { w = "author" }

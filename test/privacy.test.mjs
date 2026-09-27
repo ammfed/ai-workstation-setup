@@ -111,4 +111,18 @@ test('a denylisted term in a commit author name is reported', () => {
   assert.ok(!/zorblax/i.test(out), out);
 });
 
+test('a history hit in a file with a non-ASCII name is reported under that file\'s real name', () => {
+  const dir = makeRepo();
+  const denylist = path.join(tmp, 'denylist-non-ascii.txt');
+  fs.writeFileSync(denylist, 'zorblax\n');
+  const file = 'notes-café.md';
+  const added = commit(dir, { files: { [file]: 'met zorblax today\n' } });
+  const removed = commit(dir, { remove: [file] });
+  const { code, out, stdout } = runScan(dir, denylist);
+  assert.equal(code, 1, out);
+  const hits = stdout.split('\n').filter((line) => line.startsWith('  [denylist] ')).sort();
+  assert.deepEqual(hits, [`  [denylist] commit ${added}:${file}`, `  [denylist] commit ${removed}:${file}`].sort(), out);
+  assert.ok(!/zorblax/i.test(out), out);
+});
+
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
