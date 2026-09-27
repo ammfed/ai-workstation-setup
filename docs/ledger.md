@@ -67,12 +67,51 @@ rewritten only when its content changed, so its modification time means somethin
 
 - **Waiting on you**: open backlog items held for you (`(hold-kind: captain)` in each home's
   `data/backlog.md`) with their question, and `needs-decision` lines no `resolved` line has
-  closed yet. Holds you parked are listed on one line.
+  closed yet. Parked holds (see the board below for the rule) are listed on one line with why.
 - **In flight**: every task with a live record, its project, the worker's working copy
   (`worktree=`), and what it is doing from its last status line; second mates below.
 - **Latest from you and rulings**: your messages, inbox notes and `resolved` lines, newest
   first.
 - **Latest status per task**, newest first.
+
+## The live board (optional)
+
+The same picture as a web page, live: turn it on with `LEDGER_BOARD=yes` (or `"board":
+{"enabled": true}` in `config.json`) and the ledger service serves it at
+`http://127.0.0.1:4391/`, on this machine only. It is read only: it never answers, steers or
+writes anything.
+
+- **Top strip**: *Needs you now* (captain holds you can answer now), *Working now* (tasks whose
+  agent is working this second) and *Landed today* (backlog items done, merged or reported
+  today).
+- **Parked**: holds that wait on other work, on a date, or that nobody raised again for
+  `holdAgeDays` (14) days, each with why.
+- **One lane per mate**, the main home first, then each second mate with its own dot and last
+  status. A card per task: its name from the backlog (never a terminal title), project, a dot
+  (working, idle, stopped: no agent runs for it), the last status line and how long ago.
+  Stopped cards fold under one line. Clicking a card, or a second mate's name, opens its
+  timeline from the ledger.
+
+*Needs you now* and *Parked* use Firstmate's own rule for `/bearings` (`hold_bucket` in
+`bin/fm-fleet-snapshot.sh`), from structured fields only: a captain hold is parked when any
+`blocked-by` item is not done, else while its `hold-until` date is after today, else when an
+undated hold was set `holdAgeDays` or more ago; otherwise it needs you now. So the two agree on
+the same backlog. The Now page's "Waiting on you" uses the same rule and also lists questions a
+worker raised that are not yet a hold.
+
+The page polls `/api/board` every `pollSeconds` (2.5): `generated_at`, `counts`, `lanes`,
+`rows` (the cards), `needs`, `parked`, `landed`. `/api/timeline?home=H&task=T` gives one
+task's entries. The live dots come from `herdr agent list` (`board.agents` sets another
+command, `false` turns it off; without it every dot shows unknown). The server answers GET only
+and only for the host names 127.0.0.1 and localhost.
+
+Your own look: `board.theme` names a CSS file served after the default styles, so it can
+override any of the `--` variables at the top of `board.html` (colours, fonts, radius) or add
+rules; files next to it (fonts, images) are served under `theme/`. Keep it outside this clone.
+
+```json
+"board": { "enabled": true, "port": 4391, "theme": "~/.config/my-look/board.css", "pollSeconds": 2.5 }
+```
 
 ## Commands
 
@@ -82,6 +121,7 @@ ledger now                        # print now.md (--rebuild rebuilds it from the
 ledger tail -n 20                 # the last entries (--json, --kind decision)
 ledger add --source voice --kind fact "The demo moved to Friday"   # "-" reads stdin
 ledger scan --dry-run             # what a capture pass would record, writing nothing
+ledger board                      # the board on its own when no service serves it (--json: one snapshot)
 ```
 
 `ledger` is a small wrapper in `~/.local/bin`; without it run

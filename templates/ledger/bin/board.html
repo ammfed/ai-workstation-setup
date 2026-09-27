@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fleet board</title>
+<link rel="icon" href="data:,">
+<!--
+  The ledger's live board: read only, served on 127.0.0.1 by `ledger serve` (or `ledger board`).
+  It polls /api/board and draws it; a card opens its timeline from /api/timeline.
+  Look: the variables below are the neutral default. A theme file (board.theme in config.json)
+  is served as theme.css after them and may override any of them; files next to it are served
+  under theme/ (fonts, for instance).
+-->
+<style>
+:root {
+  --bg: #f6f7f9; --surface: #ffffff; --surface-2: #f0f2f5; --border: #dde1e7; --border-strong: #c5cbd4;
+  --text: #1d2330; --muted: #5d6675; --accent: #2f5bd3; --accent-soft: #e8eefc; --focus: #2f5bd3;
+  --working: #1f9d55; --idle: #c28a12; --stopped: #9aa3b0; --unknown: #9aa3b0;
+  --needs: #c2410c; --needs-soft: #fff1e8; --parked: #6b7280; --landed: #1f9d55; --asks: #b45309;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; --font-head: var(--font);
+  --radius: 10px; --radius-sm: 6px; --shadow: 0 1px 2px rgba(16, 24, 40, .06);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111418; --surface: #1a1e24; --surface-2: #22272e; --border: #2d333c; --border-strong: #3b424d;
+    --text: #e6e9ee; --muted: #9aa3b0; --accent: #7aa2ff; --accent-soft: #1f2a44; --focus: #7aa2ff;
+    --working: #3ccf7a; --idle: #e0b04a; --stopped: #5d6675; --unknown: #5d6675;
+    --needs: #ff8a4c; --needs-soft: #2e1d14; --parked: #9aa3b0; --landed: #3ccf7a; --asks: #f0b35a;
+    --shadow: none; color-scheme: dark;
+  }
+}
+</style>
+<link rel="stylesheet" href="theme.css">
+<style>
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--text); font: 15px/1.45 var(--font); }
+h1, h2, h3 { font-family: var(--font-head); margin: 0; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.wrap { max-width: 1680px; margin: 0 auto; padding: 20px 24px 48px; }
+
+header { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
+header h1 { font-size: 22px; font-weight: 700; }
+.pulse { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.pulse .dot { width: 8px; height: 8px; }
+.banner { display: none; margin-bottom: 14px; padding: 10px 14px; border-radius: var(--radius-sm); background: var(--needs-soft); color: var(--needs); font-weight: 600; }
+.banner.on { display: block; }
+
+.strip { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); min-height: 140px; }
+.tile h2 { font-size: 13px; font-weight: 600; color: var(--muted); display: flex; align-items: baseline; gap: 10px; }
+.tile .n { font-size: 34px; font-weight: 700; color: var(--text); line-height: 1; }
+.tile.needs { border-color: var(--needs); }
+.tile.needs .n { color: var(--needs); }
+.tile.needs.none { border-color: var(--border); }
+.tile.needs.none .n { color: var(--text); }
+.tile ul { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.tile li { font-size: 14px; overflow-wrap: anywhere; }
+.tile li.clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-height: calc(1.45em * 2); }
+.tile li b { font-weight: 600; }
+.tile li .q { max-height: calc(1.45em * 2); color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tile .more, .empty { color: var(--muted); font-size: 13px; }
+
+details.parked { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 18px; margin-bottom: 24px; }
+details.parked summary { cursor: pointer; font-weight: 600; color: var(--parked); }
+details.parked ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 8px 24px; }
+details.parked li { font-size: 14px; }
+details.parked .why { color: var(--muted); }
+
+.lanes { display: grid; gap: 14px; }
+.lane { display: grid; grid-template-columns: 220px 1fr; gap: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
+.lane.quiet { padding: 10px 16px; }
+.lane-head { display: grid; gap: 4px; align-content: start; text-align: left; background: none; border: 0; padding: 0; }
+.lane-head[data-home] { cursor: pointer; }
+.lane-head h3 { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.lane-head .say { overflow-wrap: anywhere; max-height: calc(1.45em * 3); color: var(--muted); font-size: 13px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; align-content: start; }
+.card { text-align: left; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; cursor: pointer; display: grid; gap: 6px; transition: border-color .2s; }
+.card:hover { border-color: var(--border-strong); }
+.card.stopped { opacity: .62; }
+.card .top { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.card .top .ago { margin-left: auto; }
+.card .word { font-weight: 600; color: var(--text); }
+.card h4 { max-height: calc(1.3em * 2); margin: 0; font-size: 15px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card .proj { font-size: 12px; color: var(--muted); }
+.card > * { min-width: 0; overflow-wrap: anywhere; }
+.card .text { max-height: calc(1.45em * 3); font-size: 13px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.card .asks { max-height: calc(1.45em * 4); overflow: hidden; font-size: 13px; color: var(--asks); font-weight: 600; }
+.lane-body { display: grid; gap: 10px; align-content: start; }
+details.stopped-group summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+details.stopped-group[open] summary { margin-bottom: 10px; }
+.lane .none { color: var(--muted); font-size: 13px; align-self: center; }
+
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; background: var(--unknown); }
+.dot.working { background: var(--working); box-shadow: 0 0 0 3px color-mix(in srgb, var(--working) 25%, transparent); animation: beat 1.6s ease-in-out infinite; }
+.dot.idle { background: var(--idle); }
+.dot.stopped { background: transparent; border: 2px solid var(--stopped); }
+@keyframes beat { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--working) 8%, transparent); } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+aside.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 100vw); background: var(--surface); border-left: 1px solid var(--border); box-shadow: -8px 0 24px rgba(0, 0, 0, .12); transform: translateX(100%); transition: transform .25s; display: grid; grid-template-rows: auto 1fr; z-index: 5; }
+aside.drawer.open { transform: none; }
+.drawer-head { padding: 18px 20px; border-bottom: 1px solid var(--border); display: grid; gap: 4px; }
+.drawer-head .row { display: flex; align-items: center; gap: 10px; }
+.drawer-head h3 { font-size: 18px; }
+.drawer-head .sub { color: var(--muted); font-size: 13px; }
+.drawer-head button { margin-left: auto; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 12px; cursor: pointer; }
+.drawer ol { list-style: none; margin: 0; padding: 12px 20px 40px; overflow: auto; }
+.drawer li { padding: 10px 0 10px 16px; border-left: 2px solid var(--border); position: relative; }
+.drawer li::before { content: ""; position: absolute; left: -6px; top: 16px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--border-strong); }
+.drawer li .when { font-size: 12px; color: var(--muted); }
+.drawer li .what { font-weight: 600; margin-right: 6px; }
+.drawer li .body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Fleet</h1>
+    <div class="legend"><span><i class="dot working"></i>Working</span><span><i class="dot idle"></i>Idle</span><span><i class="dot stopped"></i>Stopped</span></div>
+    <div class="pulse"><i class="dot" id="pulse"></i><span id="updated">Loading</span></div>
+  </header>
+  <div class="banner" id="banner"></div>
+  <section class="strip">
+    <div class="tile needs" id="t-needs"><h2><span class="n">-</span>Needs you now</h2><ul></ul></div>
+    <div class="tile" id="t-working"><h2><span class="n">-</span>Working now</h2><ul></ul></div>
+    <div class="tile" id="t-landed"><h2><span class="n">-</span>Landed today</h2><ul></ul></div>
+  </section>
+  <details class="parked" id="parked"><summary>Parked</summary><ul></ul></details>
+  <section class="lanes" id="lanes"></section>
+</div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <div class="row"><i class="dot" id="d-dot"></i><h3 id="d-name"></h3><button type="button" id="d-close">Close</button></div>
+    <div class="sub" id="d-sub"></div>
+  </div>
+  <ol id="d-list"></ol>
+</aside>
+<script>
+'use strict';
+// Every text from the records goes in through textContent, never as markup.
+const $ = (s) => document.querySelector(s);
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === 'class') el.className = v;
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) if (kid !== null && kid !== undefined && kid !== false) el.append(kid instanceof Node ? kid : String(kid));
+  return el;
+}
+const dot = (state) => h('i', { class: `dot ${state || ''}`, title: { working: 'Working', idle: 'Idle', stopped: 'Stopped' }[state] || 'Unknown' });
+function ago(t) {
+  if (!t) return '';
+  const s = Math.max(0, (Date.now() - Date.parse(t)) / 1000);
+  if (s < 45) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  const d = Math.round(s / 86400);
+  return d === 1 ? 'yesterday' : `${d} days ago`;
+}
+const stamp = (t) => (t ? new Date(t).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
+
+let board = null;
+let lastOk = 0;
+let open = null; // { home, task, name, sub, dot }
+const folds = new Set(); // lanes whose stopped cards are unfolded
+
+function tile(id, n, items, empty, limit = 5) {
+  const t = $(id);
+  t.querySelector('.n').textContent = n;
+  const ul = t.querySelector('ul');
+  ul.replaceChildren(...(items.length ? items.slice(0, limit) : [h('li', { class: 'empty' }, empty)]));
+  if (items.length > limit) ul.append(h('li', { class: 'more' }, `and ${items.length - limit} more`));
+}
+
+function render() {
+  const b = board;
+  tile('#t-needs', b.counts.needs, b.needs.map((x) => h('li', {}, h('b', {}, x.name), ` · ${x.lane}`, h('div', { class: 'q' }, x.question))), 'Nothing waits on you');
+  $('#t-needs').classList.toggle('none', !b.counts.needs);
+  const working = b.rows.filter((r) => r.dot === 'working');
+  tile('#t-working', b.counts.working, working.map((r) => h('li', { class: 'clamp' }, dot('working'), ' ', h('b', {}, r.name), ` · ${r.lane}`)), 'No one is working', 7);
+  tile('#t-landed', b.counts.landed, b.landed.map((x) => h('li', { class: 'clamp' }, h('b', {}, x.name), ` · ${x.lane}`)), 'Nothing yet today', 7);
+
+  const parked = $('#parked');
+  parked.querySelector('summary').textContent = `Parked (${b.counts.parked})`;
+  parked.querySelector('ul').replaceChildren(...b.parked.map((x) => h('li', { title: x.question || '' }, h('b', {}, x.name), ` · ${x.lane} `, h('span', { class: 'why' }, x.why))));
+  parked.hidden = !b.counts.parked;
+
+  const lanes = b.lanes.map((lane) => {
+    const cards = b.rows.filter((r) => r.lane === lane.id);
+    const head = h(
+      lane.home ? 'button' : 'div',
+      { class: 'lane-head', type: lane.home ? 'button' : null, 'data-home': lane.home || null, onclick: lane.home ? () => show({ home: lane.home, task: lane.task, name: lane.id, sub: 'second mate', dot: lane.dot }) : null },
+      h('h3', {}, dot(lane.dot), lane.main ? `${lane.id} (first mate)` : lane.id),
+      lane.word ? h('div', { class: 'say' }, `${lane.word}: ${lane.text || ''}`) : null,
+      lane.time ? h('div', { class: 'say' }, ago(lane.time)) : null,
+    );
+    // Stopped cards (no agent running for them) fold away under one line.
+    const live = cards.filter((r) => r.dot !== 'stopped');
+    const stopped = cards.filter((r) => r.dot === 'stopped');
+    const fold = stopped.length
+      ? h('details', { class: 'stopped-group', open: folds.has(lane.id) ? '' : null, ontoggle: (e) => (e.target.open ? folds.add(lane.id) : folds.delete(lane.id)) },
+          h('summary', {}, `Stopped (${stopped.length})`), h('div', { class: 'cards' }, stopped.map(card)))
+      : null;
+    const body = cards.length
+      ? h('div', { class: 'lane-body' }, live.length ? h('div', { class: 'cards' }, live.map(card)) : null, fold)
+      : h('div', { class: 'none' }, 'No tasks');
+    return h('div', { class: `lane${cards.length ? '' : ' quiet'}` }, head, body);
+  });
+  $('#lanes').replaceChildren(...lanes);
+  $('#banner').classList.toggle('on', b.live !== 'ok');
+  $('#banner').textContent = b.live !== 'ok' ? 'Live status is unavailable (herdr agent list did not answer); dots show as unknown.' : '';
+}
+
+function card(r) {
+  return h(
+    'button',
+    { type: 'button', class: `card ${r.dot}`, onclick: () => show({ home: r.lane, task: r.task, name: r.name, sub: [r.project, r.lane].filter(Boolean).join(' · '), dot: r.dot }) },
+    h('div', { class: 'top' }, dot(r.dot), h('span', { class: 'word' }, r.word), h('span', { class: 'ago' }, ago(r.time))),
+    h('h4', {}, r.name),
+    r.project ? h('div', { class: 'proj' }, r.project) : null,
+    r.asks ? h('div', { class: 'asks' }, `Asking: ${r.asks}`) : null,
+    r.text && r.state !== 'needs-decision' ? h('div', { class: 'text' }, r.text) : null,
+  );
+}
+
+async function show(item) {
+  open = item;
+  $('#d-name').textContent = item.name;
+  $('#d-sub').textContent = item.sub || '';
+  $('#d-dot').className = `dot ${item.dot || ''}`;
+  $('#drawer').classList.add('open');
+  $('#drawer').setAttribute('aria-hidden', 'false');
+  await loadTimeline();
+  $('#d-close').focus();
+}
+function hide() {
+  open = null;
+  $('#drawer').classList.remove('open');
+  $('#drawer').setAttribute('aria-hidden', 'true');
+}
+async function loadTimeline() {
+  if (!open) return;
+  const want = open;
+  try {
+    const r = await fetch(`api/timeline?home=${encodeURIComponent(want.home)}&task=${encodeURIComponent(want.task)}`, { cache: 'no-store' });
+    const data = await r.json();
+    if (open !== want) return;
+    const items = data.entries.map((e) => h('li', {}, h('div', { class: 'when' }, `${stamp(e.time)}${e.approx ? ' (about)' : ''} · ${ago(e.time)}`), h('div', { class: 'body' }, h('span', { class: 'what' }, e.word), e.text)));
+    $('#d-list').replaceChildren(...(items.length ? items : [h('li', {}, 'Nothing in the ledger for this task yet.')]));
+  } catch {
+    /* the next poll tries again */
+  }
+}
+$('#d-close').addEventListener('click', hide);
+document.addEventListener('keydown', (e) => e.key === 'Escape' && hide());
+
+async function poll() {
+  let wait = 2500;
+  try {
+    const r = await fetch('api/board', { cache: 'no-store' });
+    if (!r.ok) throw new Error(String(r.status));
+    board = await r.json();
+    lastOk = Date.now();
+    wait = (board.poll_seconds || 2.5) * 1000;
+    render();
+    if (open) loadTimeline();
+    $('#pulse').className = 'dot working';
+    $('#updated').textContent = 'Live';
+  } catch {
+    $('#pulse').className = 'dot stopped';
+    $('#updated').textContent = lastOk ? `Offline since ${new Date(lastOk).toLocaleTimeString()}` : 'Offline';
+  }
+  setTimeout(poll, wait);
+}
+poll();
+</script>
+</body>
+</html>

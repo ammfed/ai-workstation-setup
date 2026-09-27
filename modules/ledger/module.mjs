@@ -43,7 +43,21 @@ function buildConfig(ctx) {
     replyChars: 2000,
     now: { messages: 15, statuses: 25 },
     redact: [],
+    holdAgeDays: 14,
+    board: {
+      enabled: ctx.get('LEDGER_BOARD'),
+      port: boardPort(ctx),
+      theme: (ctx.get('LEDGER_BOARD') && ctx.get('LEDGER_BOARD_THEME')) || null,
+      pollSeconds: 2.5,
+    },
   };
+}
+
+function boardPort(ctx) {
+  if (!ctx.get('LEDGER_BOARD')) return 4391;
+  const port = Number(ctx.get('LEDGER_BOARD_PORT'));
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error(`LEDGER_BOARD_PORT must be a port number from 1024 to 65535, got "${ctx.get('LEDGER_BOARD_PORT')}"`);
+  return port;
 }
 
 // ------------------------------------------------------------------ service
@@ -122,7 +136,7 @@ async function service(ctx, script) {
 export default {
   name: NAME,
   title: 'Ledger (one running record and a live Now page)',
-  description: 'Opt-in: an always-on service that records what you say and decide and each status line, with a Now page rebuilt within seconds',
+  description: 'Opt-in: an always-on service that records what you say and decide and each status line, with a Now page rebuilt within seconds and an optional live board on 127.0.0.1',
   order: 91,
   platforms: ['linux', 'macos', 'wsl'],
   unsupported: { windows: 'it reads Firstmate homes, and Firstmate runs on Linux, macOS or WSL; set up WSL with .\\install.ps1 --modules wsl and add this module there' },
@@ -172,6 +186,21 @@ export default {
       ],
     },
     { key: 'LEDGER_COMMAND', type: 'confirm', message: 'Add a `ledger` command to ~/.local/bin?', default: true },
+    {
+      key: 'LEDGER_BOARD',
+      type: 'confirm',
+      message: 'Also serve the live board, a read-only page on this machine only (127.0.0.1) showing what needs you, who is working and what landed?',
+      default: false,
+    },
+    { key: 'LEDGER_BOARD_PORT', type: 'text', message: 'Port for the board on 127.0.0.1', default: '4391', when: (ctx) => ctx.get('LEDGER_BOARD') },
+    {
+      key: 'LEDGER_BOARD_THEME',
+      type: 'text',
+      path: true,
+      message: 'A CSS file that restyles the board (your own look; files next to it, such as fonts, are served too), or empty for the default',
+      default: '',
+      when: (ctx) => ctx.get('LEDGER_BOARD'),
+    },
   ],
 
   async install(ctx) {
@@ -183,6 +212,7 @@ export default {
     await ctx.step('script and config', async () => {
       const config = buildConfig(ctx);
       await ctx.writeFile(script, ctx.template('ledger/bin/ledger.mjs'), { onConflict: 'ask', mode: 0o755 });
+      await ctx.writeFile(path.join(base, 'board.html'), ctx.template('ledger/bin/board.html'), { onConflict: 'ask' });
       await ctx.writeFile(configFile, `${JSON.stringify(config, null, 2)}\n`, { onConflict: 'ask' });
     });
 
@@ -206,6 +236,7 @@ export default {
     if (ctx.get('LEDGER_SERVICE') === 'auto') await ctx.step('service', () => service(ctx, script));
 
     ctx.todo('prove it runs and the Now page is fresh: ledger check (then read it: ledger now)');
+    if (ctx.get('LEDGER_BOARD')) ctx.info(`the live board: http://127.0.0.1:${ctx.get('LEDGER_BOARD_PORT')}/ (served by the ledger service; \`ledger board\` serves it on its own)`);
     ctx.info(`the ledger and now.md live in ${ctx.get('LEDGER_DATA_DIR')}; other tools append with: ledger add --source <tool> "<text>"`);
   },
 };

@@ -15,6 +15,9 @@
 // rebuilds it within about a second of any change (fs.watch on the folders it reads, plus a
 // periodic rescan for dropped events), writing only when its content changed.
 //
+// The live board (optional, off unless config.json turns it on) is the same picture as a web
+// page on 127.0.0.1, with a live working dot per agent from `herdr agent list`; see board.html.
+//
 // Usage:
 //   node ledger.mjs serve                 the always-on service (capture, watch, rebuild now.md)
 //   node ledger.mjs scan [--dry-run]      one capture pass and rebuild, then exit
@@ -23,12 +26,16 @@
 //   node ledger.mjs tail [-n 20] [--json] [--kind K]
 //   node ledger.mjs now [--rebuild]       print now.md (optionally rebuilt from the records first)
 //   node ledger.mjs check                 exit 0 only when the service runs and now.md is fresh
+//   node ledger.mjs board [--json]        the live board on its own (the service serves it when
+//                                         config.json has "board": {"enabled": true}); --json prints one snapshot
 //   --config F                            another config file (default: config.json next to this script)
 //
 // Installed by ai-workstation-setup (ledger module). No dependencies.
 
+import { execFile } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -163,7 +170,17 @@ function loadConfig() {
     replyChars: Number(raw.replyChars) || 2000,
     now: { messages: 15, statuses: 25, ...(raw.now || {}) },
     redact,
+    holdAgeDays: Number.isInteger(raw.holdAgeDays) && raw.holdAgeDays >= 0 ? raw.holdAgeDays : 14,
+    board: boardConfig(raw.board),
   };
+}
+
+/** The live board is off unless config.json turns it on; it only ever listens on 127.0.0.1. */
+function boardConfig(b = {}) {
+  const port = Number(b.port ?? 4391);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) die(2, `${configFile}: board.port must be a port number, got "${b.port}"`);
+  const agents = b.agents === false ? null : Array.isArray(b.agents) && b.agents.length ? b.agents.map(String) : ['herdr', 'agent', 'list'];
+  return { enabled: b.enabled === true, port, theme: b.theme ? expandHome(b.theme) : null, agents, pollSeconds: Number(b.pollSeconds) > 0 ? Number(b.pollSeconds) : 2.5 };
 }
 
 let cfg;
@@ -721,53 +738,111 @@ const ADAPTERS = [
 
 // ---------------------------------------------------------------- the Now page
 
-/** Balanced "(label: ...)" groups of a backlog line. */
-function parenGroups(line) {
-  const out = {};
-  let depth = 0;
-  let start = -1;
-  for (let i = 0; i < line.length; i++) {
-    if (line[i] === '(') {
-      if (depth === 0) start = i;
-      depth++;
-    } else if (line[i] === ')' && depth > 0) {
-      depth--;
-      if (depth === 0) {
-        const m = /^([a-z-]+):\s*([\s\S]*)$/.exec(line.slice(start + 1, i));
-        if (m) out[m[1]] = m[2];
-      }
-    }
+// Backlog rows, read the way Firstmate's fleet snapshot reads them (bin/fm-fleet-snapshot.sh,
+// backlog_json), so a hold is "now" or "parked" here exactly when /bearings puts it in Captain's
+// Call or in Charted Next. Only rows under "## In flight", "## Queued" and "## Done" count; an
+// indented line under a row is its body.
+const rowMeta = (rest, key) => oneLine(new RegExp(`.*(?:\\(|,\\s*)${key}:\\s*([^,)]*)`).exec(rest)?.[1] ?? '') || null;
+const metaWord = (rest, key) => oneLine(new RegExp(`.*(?:\\(|,\\s*)${key}\\s+([^,)]*)`).exec(rest)?.[1] ?? '') || null;
+const SECTIONS = { 'In flight': 'in_flight', Queued: 'queued', Done: 'done' };
+
+function epochOf(d) {
+  if (typeof d !== 'string') return null;
+  const t = Date.parse(d.includes('T') ? d : `${d}T00:00:00Z`);
+  return Number.isFinite(t) ? t : null;
+}
+
+/** Title of a backlog row without its links, blockers and trailing (key: value) groups. */
+function rowTitle(rest) {
+  let t = rest.replace(/<?https?:\/\/[^\s)"<>]+>?/g, '').replace(/\s*blocked-by:\s+[^\s)]+\s+-\s+.*$/, '').replace(/\s*blocked-by:\s+\S+/g, '');
+  for (let i = 0; i < 20; i++) {
+    const next = t.replace(/\s*\(\s*(?:(?:repo|kind|priority|hold|hold-kind|hold-until):\s*[^)]*|(?:since|merged|reported|done)\s+[^)]*)\s*\)\s*$/, '');
+    if (next === t) break;
+    t = next;
   }
-  return out;
+  return oneLine(t.replace(/\s+-?\s*data\/[^\s)]+\/report\.md$/, '').replace(/\s+-?\s*local main$/, '').replace(/\s+-\s*$/, ''));
+}
+
+/**
+ * Every structured row of a backlog, each captain hold with its bucket: "blocked" when any
+ * blocked-by id is not Done, else "dated" while hold-until is after today (UTC), else "aged"
+ * when an undated hold was set at least `ageDays` ago, else "live" (it needs you now).
+ * Mirrors hold_bucket in bin/fm-fleet-snapshot.sh; prose is never read.
+ */
+export function backlogRows(text, { now = Date.now(), ageDays = 14 } = {}) {
+  const rows = [];
+  let section = null;
+  let last = null;
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const h = /^##\s+(.*)$/.exec(line);
+    if (h) {
+      section = SECTIONS[h[1].trim()] || null;
+      last = null;
+      continue;
+    }
+    if (!section || !line.trim()) continue;
+    const m = /^[-*]\s+\[[ xX]\]\s+(\S+)\s+-\s+(.*)$/.exec(line) || /^[-*]\s+\*\*([^*]+)\*\*\s+-\s+(.*)$/.exec(line);
+    if (m) {
+      const rest = m[2];
+      last = {
+        id: m[1].trim(),
+        state: section,
+        title: rowTitle(rest),
+        repo: rowMeta(rest, 'repo'),
+        holdReason: oneLine(/.*\(hold:\s*([^)]*)/.exec(rest)?.[1] ?? '') || null,
+        holdKind: rowMeta(rest, 'hold-kind'),
+        holdUntil: rowMeta(rest, 'hold-until'),
+        blockedBy: [...new Set([...rest.matchAll(/blocked-by:\s+([^\s)]+)/g)].map((x) => x[1]))],
+        since: metaWord(rest, 'since'),
+        completion: ['merged', 'reported', 'done'].map((verb) => ({ verb, date: metaWord(rest, verb) })).find((c) => c.date) || null,
+        body: [],
+      };
+      rows.push(last);
+    } else if (last && /^\s/.test(line)) last.body.push(line.trim());
+    else last = null;
+  }
+  const done = {};
+  for (const r of rows) done[r.id] = (done[r.id] ?? true) && r.state === 'done';
+  const today = new Date(now).toISOString().slice(0, 10);
+  for (const r of rows) {
+    r.holdSet = /^Captain hold set:\s*(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}Z)?)$/.exec(r.body[0] || '')?.[1] || null;
+    const from = epochOf(r.holdSet || r.since);
+    r.holdAgeDays = from === null ? null : Math.floor((now - from) / 86_400_000);
+    r.unresolved = r.blockedBy.filter((id) => done[id] !== true);
+    r.bucket =
+      r.holdKind !== 'captain' || r.holdReason === null || r.state === 'done'
+        ? null
+        : r.unresolved.length
+          ? 'blocked'
+          : r.holdUntil !== null && r.holdUntil > today
+            ? 'dated'
+            : r.holdUntil === null && r.holdAgeDays !== null && r.holdAgeDays >= ageDays
+              ? 'aged'
+              : 'live';
+  }
+  return rows;
+}
+
+/** Why a hold is parked, in plain words. */
+function parkedWhy(r) {
+  if (r.bucket === 'blocked') return `after ${r.unresolved.join(', ')}`;
+  if (r.bucket === 'dated') return `until ${r.holdUntil}`;
+  if (r.bucket === 'aged') return `held ${r.holdAgeDays} days`;
+  return null;
 }
 
 /** Open backlog items held for you (Firstmate captain holds) in a home's data/backlog.md. */
 function captainHolds(home) {
-  const text = readText(path.join(home.path, 'data', 'backlog.md'));
-  if (!text) return [];
-  const out = [];
-  const lines = text.split(/\r?\n/);
-  let done = false;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (/^##\s/.test(line)) done = /^##\s+done\b/i.test(line);
-    const m = /^- \[ \] (\S+) - (.*)$/.exec(line);
-    if (done || !m) continue;
-    const g = parenGroups(m[2]);
-    if (g['hold-kind'] !== 'captain') continue;
-    let since = null;
-    for (let j = i + 1; j < lines.length && /^\s+\S|^\s*$/.test(lines[j]) && !/^- \[/.test(lines[j]); j++) {
-      const s = /Captain hold set:\s*(\S+)/.exec(lines[j]);
-      if (s) since = Date.parse(s[1]) || null;
-    }
-    const title = m[2].replace(/\s*\([a-z-]+:[\s\S]*$/, '').trim();
-    const until = g['hold-until'] && Date.parse(g['hold-until']);
-    const question = g.hold || title;
-    // A hold the owner deferred (a future hold-until, or recorded as parked or postponed) is not a question now.
-    const parked = until && until > Date.now() ? g['hold-until'] : /^\W*(parked|postponed)\b/i.test(question) ? 'parked' : null;
-    out.push({ home: home.name, task: m[1], title, question, since, parked });
-  }
-  return out;
+  return backlogRows(readText(path.join(home.path, 'data', 'backlog.md')), { ageDays: cfg.holdAgeDays })
+    .filter((r) => r.bucket)
+    .map((r) => ({
+      home: home.name,
+      task: r.id,
+      title: r.title,
+      question: r.holdReason || r.title,
+      since: epochOf(r.holdSet || r.since),
+      parked: r.bucket === 'live' ? null : parkedWhy(r),
+    }));
 }
 
 /** Tasks with a live record (state/<id>.meta): what they do now, from the last status line. */
@@ -789,6 +864,7 @@ function tasksInFlight(home) {
       last: lines.at(-1) || null,
       updated: statOf(statusFile)?.mtimeMs || statOf(path.join(dir, name))?.mtimeMs || 0,
       open: openDecisions(lines),
+      pane: meta.herdr_pane_id || null,
     });
   }
   return out;
@@ -831,7 +907,7 @@ export function buildNow(homes, entries) {
   for (const r of raised) {
     out.push(`- **${md(r.task)}** (${md(r.home)}) asks: ${md(clip(r.decision.text, 400))} _(${stamp(r.updated)})_`);
   }
-  if (parked.length) out.push('', `Parked by you: ${parked.map((h) => (h.parked === 'parked' ? md(h.task) : `${md(h.task)} (until ${md(h.parked)})`)).join(', ')}.`);
+  if (parked.length) out.push('', `Parked: ${parked.map((h) => `${md(h.task)} (${md(h.parked)})`).join(', ')}.`);
   out.push('');
 
   const workers = tasks.filter((t) => !t.secondmate);
@@ -887,6 +963,197 @@ function writeNow(homes, entries) {
   return true;
 }
 
+// ---------------------------------------------------------------- the live board
+
+// A read-only page on 127.0.0.1 over the same records as the Now page, plus which agents are
+// working right now (`herdr agent list`). One JSON snapshot (/api/board) and one page that polls
+// it; a card's timeline comes from the ledger (/api/timeline). It never answers, steers or writes.
+
+const WORDS = { working: 'Working', 'needs-decision': 'Asking', blocked: 'Blocked', paused: 'Waiting', done: 'Done', failed: 'Failed', resolved: 'Answered', note: 'Note' };
+export const stateWord = (s) => WORDS[s] || (s ? s[0].toUpperCase() + s.slice(1).replace(/-/g, ' ') : 'Quiet');
+
+/** The agents in `herdr agent list` output, or null when it cannot be read. */
+export function parseAgents(text) {
+  try {
+    const d = JSON.parse(text);
+    const list = d?.result?.agents ?? d?.agents ?? d;
+    return Array.isArray(list) ? list : null;
+  } catch {
+    return null;
+  }
+}
+
+const iso = (ms) => (ms ? new Date(ms).toISOString() : null);
+// A status line's words without the correlation id a relay put in front of them.
+const plain = (text, n) => clip(String(text || '').replace(/^corr=\S+\s*/, ''), n);
+
+/**
+ * The board snapshot: counts, one lane per home (the main home first, then each second mate),
+ * one row per task with a live record, and the holds split into "needs you now" and "parked" by
+ * the same buckets as /bearings. Names come from the backlog, never from terminal titles.
+ * `agents` null means the live status could not be read: every dot is then "unknown".
+ */
+export function buildBoard(homes, agents, { now = Date.now(), ageDays = 14 } = {}) {
+  const panes = new Map((agents || []).map((a) => [a.pane_id, a]));
+  const dot = (a) => (!agents ? 'unknown' : !a ? 'stopped' : a.agent_status === 'working' ? 'working' : 'idle');
+  const today = stamp(now).slice(0, 10);
+  const lanes = [];
+  const rows = [];
+  const needs = [];
+  const parked = [];
+  const landed = [];
+  const mates = new Map();
+  const claimed = new Set();
+  const perHome = homes.map((home) => {
+    const tasks = tasksInFlight(home);
+    for (const t of tasks) if (t.pane) claimed.add(t.pane);
+    if (home.main) for (const t of tasks) if (t.secondmate) mates.set(t.task, t);
+    return { home, tasks, backlog: backlogRows(readText(path.join(home.path, 'data', 'backlog.md')), { now, ageDays }) };
+  });
+  for (const { home, tasks, backlog } of perHome) {
+    const titles = new Map(backlog.map((r) => [r.id, r]));
+    const name = (id) => titles.get(id)?.title || id;
+    // A home's own agent: the pane its record names, else one running in the home or its session folders.
+    const mate = mates.get(home.name);
+    const dirs = [home.path, ...home.sessions];
+    const free = (agents || []).filter((a) => !claimed.has(a.pane_id));
+    const own = (mate?.pane && panes.get(mate.pane)) || free.find((a) => dirs.includes(a.foreground_cwd)) || free.find((a) => dirs.includes(a.cwd));
+    const says = mate?.last;
+    lanes.push({
+      id: home.name,
+      main: !!home.main,
+      dot: dot(own),
+      ...(mate ? { home: mainName(homes), task: home.name } : {}),
+      word: says ? stateWord(says.state) : null,
+      text: says ? plain(says.text, 300) : null,
+      time: iso(mate?.updated),
+    });
+    for (const t of tasks.filter((x) => !x.secondmate)) {
+      const agent = (t.pane && panes.get(t.pane)) || (t.worktree && (agents || []).find((a) => a.foreground_cwd === t.worktree));
+      rows.push({
+        id: `${home.name}/${t.task}`,
+        lane: home.name,
+        task: t.task,
+        name: name(t.task),
+        project: t.project || titles.get(t.task)?.repo || null,
+        dot: dot(agent),
+        state: t.last?.state || null,
+        word: t.last ? stateWord(t.last.state) : 'Quiet',
+        text: t.last ? plain(t.last.text, 300) : null,
+        time: iso(t.updated),
+        asks: t.open.length ? plain(t.open.at(-1).text, 300) : null,
+      });
+    }
+    for (const r of backlog) {
+      const item = { lane: home.name, task: r.id, name: r.title || r.id };
+      if (r.bucket === 'live') needs.push({ ...item, question: clip(r.holdReason, 400), since: iso(epochOf(r.holdSet || r.since)) });
+      else if (r.bucket) parked.push({ ...item, why: parkedWhy(r), question: clip(r.holdReason, 400) });
+      if (r.state === 'done' && r.completion?.date === today) landed.push({ ...item, verb: r.completion.verb });
+    }
+  }
+  const rank = { working: 0, idle: 1, unknown: 1, stopped: 2 };
+  rows.sort((a, b) => rank[a.dot] - rank[b.dot] || String(b.time).localeCompare(String(a.time)));
+  needs.sort((a, b) => String(b.since).localeCompare(String(a.since)));
+  return {
+    generated_at: new Date(now).toISOString(),
+    counts: { needs: needs.length, working: rows.filter((r) => r.dot === 'working').length, landed: landed.length, parked: parked.length },
+    live: agents ? 'ok' : 'unavailable',
+    lanes,
+    rows,
+    needs,
+    parked,
+    landed,
+  };
+}
+
+const mainName = (homes) => homes.find((h) => h.main)?.name || 'main';
+
+/** One task's entries in the ledger, newest first. */
+export function timeline(entries, home, task, limit = 100) {
+  return entries
+    .filter((e) => e.home === home && e.task === task)
+    .slice(-limit)
+    .reverse()
+    .map((e) => ({ time: e.time, approx: !!e.approx, word: e.state ? stateWord(e.state) : stateWord(e.kind), text: e.text }));
+}
+
+const TYPES = { '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf', '.otf': 'font/otf', '.png': 'image/png', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.jpg': 'image/jpeg' };
+const CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+
+/**
+ * Serve the board on 127.0.0.1. `source()` gives the homes for a snapshot. Only GET,
+ * only a Host of 127.0.0.1 or localhost on this port (a page elsewhere cannot rebind a name to
+ * it), and the theme folder is the only other folder it reads files from.
+ */
+function startBoard(source, { onListen, onError } = {}) {
+  const page = readText(path.join(HERE, 'board.html'));
+  if (!page) {
+    onError?.(new Error(`${tilde(path.join(HERE, 'board.html'))} is missing; run the installer again`));
+    return null;
+  }
+  const b = cfg.board;
+  let agents = { at: 0, list: null, pending: null };
+  const readAgents = () => {
+    if (!b.agents) return Promise.resolve(null);
+    if (Date.now() - agents.at < 2000) return Promise.resolve(agents.list);
+    agents.pending ||= new Promise((resolve) => {
+      execFile(b.agents[0], b.agents.slice(1), { timeout: 3000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => {
+        agents = { at: Date.now(), list: err ? null : parseAgents(stdout), pending: null };
+        resolve(agents.list);
+      });
+    });
+    return agents.pending;
+  };
+  let snap = { at: 0, body: null };
+  const snapshot = async () => {
+    if (Date.now() - snap.at < 1000 && snap.body) return snap.body;
+    const list = await readAgents();
+    const homes = source();
+    const board = buildBoard(homes, list, { ageDays: cfg.holdAgeDays });
+    board.poll_seconds = b.pollSeconds;
+    snap = { at: Date.now(), body: JSON.stringify(board) };
+    return snap.body;
+  };
+  const themeDir = b.theme ? path.dirname(b.theme) : null;
+
+  const server = http.createServer(async (req, res) => {
+    const send = (code, type, body) => {
+      res.writeHead(code, { 'Content-Type': type, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': CSP });
+      res.end(req.method === 'HEAD' ? undefined : body);
+    };
+    const port = server.address()?.port;
+    if (![`127.0.0.1:${port}`, `localhost:${port}`].includes(req.headers.host)) return send(403, 'text/plain', 'forbidden\n');
+    if (req.method !== 'GET' && req.method !== 'HEAD') return send(405, 'text/plain', 'read only\n');
+    const url = new URL(req.url, `http://127.0.0.1:${port}`);
+    try {
+      if (url.pathname === '/') return send(200, 'text/html; charset=utf-8', page);
+      if (url.pathname === '/api/board') return send(200, 'application/json', await snapshot());
+      if (url.pathname === '/api/timeline') {
+        const home = url.searchParams.get('home');
+        const task = url.searchParams.get('task');
+        if (!home || !task) return send(400, 'text/plain', 'home and task are required\n');
+        return send(200, 'application/json', JSON.stringify({ home, task, entries: timeline(readRecent(), home, task) }));
+      }
+      if (url.pathname === '/theme.css') return send(200, 'text/css', (b.theme && readText(b.theme)) || '/* no theme set: board.theme in config.json */\n');
+      const file = /^\/theme\/([A-Za-z0-9_-][A-Za-z0-9._-]*)$/.exec(url.pathname)?.[1];
+      if (file && themeDir && TYPES[path.extname(file)]) {
+        try {
+          return send(200, TYPES[path.extname(file)], fs.readFileSync(path.join(themeDir, file)));
+        } catch {
+          return send(404, 'text/plain', 'not found\n');
+        }
+      }
+      return send(404, 'text/plain', 'not found\n');
+    } catch (err) {
+      console.error(`ledger: board: ${err.stack || err.message}`);
+      return send(500, 'text/plain', 'the board could not be built; see the ledger log\n');
+    }
+  });
+  server.on('error', (err) => onError?.(err));
+  server.listen(b.port, '127.0.0.1', () => onListen?.(`http://127.0.0.1:${server.address().port}/`));
+  return server;
+}
+
 // ---------------------------------------------------------------- commands
 
 /** One capturer at a time: the service, or a `scan` while no service runs. */
@@ -935,6 +1202,7 @@ function cmdServe() {
   let running = false;
   let again = false;
   let lastBeat = 0;
+  let boardUrl = null;
   const started = new Date().toISOString();
 
   // The heartbeat says the service is alive and how far into the ledger the Now page has read.
@@ -943,7 +1211,7 @@ function cmdServe() {
     if (!force && beatBytes === cap.viewOffset && Date.now() - lastBeat < 5000) return;
     lastBeat = Date.now();
     beatBytes = cap.viewOffset;
-    const hb = { pid: process.pid, started, beat: new Date().toISOString(), rescanSeconds: cfg.rescanSeconds, ledgerBytes: cap.viewOffset, homes: (cap.homes || []).map((h) => h.name) };
+    const hb = { pid: process.pid, started, beat: new Date().toISOString(), rescanSeconds: cfg.rescanSeconds, ledgerBytes: cap.viewOffset, homes: (cap.homes || []).map((h) => h.name), ...(boardUrl ? { board: boardUrl } : {}) };
     writeAtomic(FILES.heartbeat, `${JSON.stringify(hb)}\n`);
   };
 
@@ -1013,6 +1281,17 @@ function cmdServe() {
 
   scan();
   beat(true);
+  if (cfg.board.enabled) {
+    startBoard(() => cap.homes || [], {
+      onListen: (url) => {
+        boardUrl = url;
+        beat(true);
+        console.log(`ledger board: ${url}`);
+      },
+      // The board is a view: when it cannot start, capture and the Now page carry on.
+      onError: (err) => console.error(`ledger: the board is not served (${err.code === 'EADDRINUSE' ? `port ${cfg.board.port} is in use; set board.port in ${configFile}` : err.message})`),
+    });
+  }
   console.log(`ledger service ${process.pid}: ${cap.homes.length} home(s) (${cap.homes.map((h) => h.name).join(', ')}), ${watchers.size} watch(es), ledger ${tilde(FILES.ledger)}`);
   // The rescan catches events the kernel dropped; now and then every watch is renewed, in
   // case a watched folder was replaced underneath it.
@@ -1057,6 +1336,26 @@ function cmdAdd() {
   console.log(entry.id);
 }
 
+/** `board`: one snapshot as JSON (--json), or the board on its own while no service serves it. */
+async function cmdBoard() {
+  if (flag('--json')) {
+    const b = cfg.board;
+    const text = b.agents ? await new Promise((resolve) => execFile(b.agents[0], b.agents.slice(1), { timeout: 3000, maxBuffer: 8 * 1024 * 1024 }, (err, out) => resolve(err ? null : out))) : null;
+    const board = buildBoard(discoverHomes(), text === null ? null : parseAgents(text), { ageDays: cfg.holdAgeDays });
+    console.log(JSON.stringify(board, null, 2));
+    return;
+  }
+  const hb = readJson(FILES.heartbeat, null);
+  if (hb?.board && alive(hb.pid)) {
+    console.log(`the ledger service (pid ${hb.pid}) serves the board: ${hb.board}`);
+    return;
+  }
+  startBoard(discoverHomes, {
+    onListen: (url) => console.log(`ledger board: ${url} (read only; Ctrl-C stops it)`),
+    onError: (err) => die(2, err.code === 'EADDRINUSE' ? `port ${cfg.board.port} is in use; set board.port in ${configFile}` : err.message),
+  });
+}
+
 function cmdTail() {
   const n = Number(option('-n', 20)) || 20;
   const kind = option('--kind');
@@ -1084,6 +1383,7 @@ function cmdCheck() {
     const age = (now - Date.parse(hb.beat)) / 1000;
     if (!alive(hb.pid)) problems.push(`the service (pid ${hb.pid}) is not running`);
     else if (age > Math.max(60, (hb.rescanSeconds || 20) * 3)) problems.push(`the service's last heartbeat was ${Math.round(age)}s ago`);
+    else if (cfg.board.enabled && !hb.board) problems.push('the board is turned on but not served (restart the service; its log says why)');
   }
   const page = statOf(FILES.now);
   const ledger = statOf(FILES.ledger);
@@ -1098,7 +1398,7 @@ function cmdCheck() {
   const lines = ledger ? readRecent(1024 * 1024).length : 0;
   console.log(
     `ok: ledger service pid ${hb.pid} watching ${hb.homes.length} home(s), heartbeat ${Math.round((now - Date.parse(hb.beat)) / 1000)}s ago; ` +
-      `now.md rebuilt ${stamp(page.mtimeMs)}${ledger ? `, ledger ${Math.round(ledger.size / 1024)} KB (${lines} recent entries)` : ''}`,
+      `now.md rebuilt ${stamp(page.mtimeMs)}${ledger ? `, ledger ${Math.round(ledger.size / 1024)} KB (${lines} recent entries)` : ''}${hb.board ? `; board ${hb.board}` : ''}`,
   );
 }
 
@@ -1108,12 +1408,12 @@ function help() {
       'ledger - an append-only record of what you say and decide, with a live Now page',
       '',
       'usage: ledger serve | scan [--dry-run] | add [--kind K] [--source S] [--project P] [--home H] [--ref R] <text|-> |',
-      '       tail [-n N] [--json] [--kind K] | now [--rebuild] | check     (all take --config F)',
+      '       tail [-n N] [--json] [--kind K] | now [--rebuild] | check | board [--json]     (all take --config F)',
     ].join('\n'),
   );
 }
 
-const COMMANDS = { serve: cmdServe, scan: cmdScan, add: cmdAdd, tail: cmdTail, now: cmdNow, check: cmdCheck };
+const COMMANDS = { serve: cmdServe, scan: cmdScan, add: cmdAdd, tail: cmdTail, now: cmdNow, check: cmdCheck, board: cmdBoard };
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (command === 'help' || flag('--help') || flag('-h')) help();
   else if (!COMMANDS[command]) {
