@@ -151,6 +151,13 @@ export const TOOLS = {
     signIn: 'pixel-agents   (run it in a project; it asks before adding its Claude Code hooks)',
     // No check: see the list next to versionCheck.
   },
+  gnhf: {
+    name: 'gnhf',
+    about: 'overnight agent loop: one small committed change per iteration toward an objective (github.com/kunchenguid/gnhf)',
+    install: npm('gnhf'),
+    signIn: 'gnhf --max-iterations 5 --max-tokens 2000000 "<objective>"   (run it in a clean repo; it works on a gnhf/ branch and never pushes unless given --push)',
+    check: versionCheck('gnhf'),
+  },
   composio: {
     name: 'composio',
     about: 'Composio CLI: connect agents to SaaS apps (not on native Windows)',
