@@ -66,7 +66,7 @@ diverged, it stops, explains, and changes nothing. See
 | --- | --- | :-: | :-: | :-: | :-: |
 | `core` | git, Node.js check, GitHub CLI (and sign-in), jq | ✓ | ✓ | ✓ | ✓ |
 | `claude-code` | Claude Code (and the Claude desktop app on Windows); model, effort (also per model), theme, thinking summaries, Remote Control, view, auto-compact; ccstatusline or usage-gauges status line; diagram-design plugin; context and after-compaction reminders | ✓ | ✓ | ✓ | ✓ |
-| `agent-clis` | gh-axi, chrome-devtools-axi, lavish-axi, tasks-axi, quota-axi, ctx7, no-mistakes, treehouse; optional notion-axi, gws-axi, herdr, Codex, Antigravity, Composio (not native Windows), mermaid-ascii, pixel-agents; session hooks; `research-browser` launcher (not native Windows) | ✓ | ✓ | ✓ | ✓ |
+| `agent-clis` | gh-axi, chrome-devtools-axi, lavish-axi, tasks-axi, quota-axi, ctx7, no-mistakes, treehouse; optional notion-axi, gws-axi, herdr, Codex, Antigravity, Composio (not native Windows), mermaid-ascii, pixel-agents, gnhf; session hooks; `research-browser` launcher (not native Windows) | ✓ | ✓ | ✓ | ✓ |
 | `mcp-servers` | Optional context7, chrome-devtools and TickTick MCP servers for Claude Code | ✓ | ✓ | ✓ | ✓ |
 | `skills` | Claude Code skills: kun, grill-me, grilling, teach, to-questionnaire, find-docs; optional no-mistakes, composio-cli | ✓ | ✓ | ✓ | ✓ |
 | `backpass` | Opt-in [backpass](https://github.com/kunchenguid/backpass) behind a privacy gate: project allowlist, denylist check before any model call, one pinned model, never auto-applies; optional schedule (cron) | ✓ | ✓ | ✓ | ✓ |
