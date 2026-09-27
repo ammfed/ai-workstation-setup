@@ -15,8 +15,10 @@
 //   voice-mode stop | status
 //   voice-mode check               what is configured and what is missing (never prints keys)
 //   voice-mode pick "<words>"      which desktop action the chooser would take (opens nothing)
-//   voice-mode bench [--clip f.wav] [--runs N] [--play]
+//   voice-mode page                the choices the browser's current page offers (touches nothing)
+//   voice-mode bench [--clip f.wav] [--runs N] [--play] [--open] [--verbose]
 //                                  measure first-audio and action latency from a recorded clip
+//                                  (--open carries actions out; without it they are only logged)
 //   voice-mode latency             median latencies from the metrics log
 //   voice-mode help                this text
 //
@@ -27,11 +29,12 @@ import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CONFIG_DIR, loadConfig, merge, readKey } from './config.mjs';
 import { Records, TOOLS, runTool } from './records.mjs';
 import { Chooser, TEXT_KINDS, buildCatalog, describe, perform } from './desk.mjs';
+import { Browser, asksAbout, isYes, pageCatalog, performPage } from './browser.mjs';
 import { Mic, Speaker, audioTools, has, play, resample, rms, startEchoCancel, tone, wavToPcm } from './audio.mjs';
 import { PROVIDERS, createProvider, synthesize } from './providers.mjs';
 import { orbRunner, startOrb, toLevel } from './orb.mjs';
@@ -123,6 +126,14 @@ const RULES = `How you work:
 - The helper itself never deletes or moves files, sends messages or email, buys anything, changes settings, runs commands, or closes or quits apps. That limits only the helper: such requests are real work, so hand them off.
 - You are heard, not read: short spoken sentences, no lists, no markdown, no links read aloud. Keep an answer under about twenty seconds unless asked for more.`;
 
+// Only with browser control on (config.browser).
+const BROWSER_RULE =
+  '- A browser helper also acts on the page open in your own browser window while the user talks: it clicks links and buttons, types dictated words into a field, scrolls, goes back or forward, switches or closes tabs, and reads the page. ' +
+  'What it did arrives as a line starting "Browser helper:"; confirm it in a few words, and when it read the page, tell the user briefly what the page says. ' +
+  'Asked to press a button on the page, even one that sends, deletes or buys, never refuse it yourself: the helper handles it (call desktop_action when no line has come). ' +
+  'When a line or result says a button is not pressed yet, ask the user in one short question whether to press it, saying the button\'s name as written; it is pressed only when the user then answers yes, never on your word. ' +
+  'It never types into password, payment or identity fields and never downloads anything.';
+
 // Without a queue command there is no hand-off: those rules give way to a plain refusal.
 const NO_HANDOFF = '- You cannot do work, and you know only the briefing and the records. When they do not answer, or you are asked for more, say plainly that voice mode cannot do that.';
 
@@ -158,7 +169,7 @@ const HANDOFF_TOOL = {
 
 const DESKTOP_TOOL = {
   name: 'desktop_action',
-  description: 'Call when the user asked the computer to do something (open, switch, volume, media, a note, a search, typing...): returns what the desktop helper did this turn, if anything.',
+  description: 'Call when the user asked the computer or the browser page to do something (open, switch, volume, media, a note, a search, typing, click, scroll, read the page...): returns what the desktop and browser helpers did this turn, if anything.',
   parameters: { type: 'object', properties: {} },
 };
 
@@ -175,8 +186,21 @@ export function decisionLine(rec, { withText = false } = {}) {
   if (rec.event === 'chooser-error') return `${time}  FAILED ${rec.cause || rec.error} after ${rec.ms} ms (${rec.final ? 'end of sentence' : 'mid-sentence'})${heard}`;
   if (rec.event === 'action' && rec.from === 'assistant') return `${time}  -> ${rec.done}, asked by the assistant (voice-mode do), ${rec.ms_from_request} ms after the request${rec.dry_run ? ' (dry run: nothing ran)' : ''}`;
   if (rec.event === 'action') return `${time}  -> ${rec.done}, ${rec.ms_from_speech_start ?? '?'} ms after you started speaking`;
-  if (rec.event === 'action-failed') return `${time}  -> could not open ${rec.target}: ${rec.error}`;
+  if (rec.event === 'action-failed') return `${time}  -> could not do ${rec.target}: ${rec.error}`;
+  if (rec.event === 'action-held') return `${time}  -> held ${rec.target} for a spoken yes (it ${rec.why})`;
+  if (rec.event === 'confirm') return `${time}  -> not pressed: ${rec.why}`;
   return `${time}  ${rec.choice === 'none' ? 'nothing to open' : rec.choice} (p ${Number(rec.p).toFixed(2)}, ${rec.ms} ms, ${turn})${heard}`;
+}
+
+/** The assistant's own browser window, when browser control is on and actions are. */
+export function openBrowser(config, log = () => {}) {
+  if (!config.browser?.enabled || !config.actions.enabled) return null;
+  try {
+    return new Browser(config.browser);
+  } catch (err) {
+    log({ event: 'browser-off', error: err.message });
+    return null;
+  }
 }
 
 /** Log records: decisions.log (readable), metrics.jsonl (numbers), and stderr or `file` (JSON lines). */
@@ -187,7 +211,7 @@ export function makeLogger(config, { quiet = false, file = '', extra = {} } = {}
   return (r) => {
     const rec = { ...r, ...extra };
     let line = { at: new Date().toISOString(), ...rec };
-    if (config.actions.decisionLog && ['chooser', 'chooser-error', 'action', 'action-failed'].includes(rec.event)) {
+    if (config.actions.decisionLog && ['chooser', 'chooser-error', 'action', 'action-failed', 'action-held', 'confirm'].includes(rec.event)) {
       fs.appendFileSync(decisions, `${decisionLine(line, { withText: config.logTranscripts })}\n`);
     }
     if ('text' in line && !config.logTranscripts) {
@@ -206,7 +230,10 @@ export function makeLogger(config, { quiet = false, file = '', extra = {} } = {}
 export function instructionsFor(config, records, briefing = '') {
   const sources = records.describe();
   const brief = briefing ? `\n\nBriefing: what you currently know (your own recent conversation, current work and notes; newest last):\n${briefing}` : '';
-  return `${config.persona}\n\n${rules((config.queue.command || []).length > 0)}${sources ? `\n\nRecord sources:\n${sources}` : ''}${brief}`;
+  let rs = rules((config.queue.command || []).length > 0);
+  // The desktop helper's limits are not the browser helper's: a page button is asked about, not refused.
+  if (config.browser?.enabled) rs = `${rs.replace('- The helper itself never deletes', '- The desktop helper itself (not the browser helper, below) never deletes')}\n${BROWSER_RULE}`;
+  return `${config.persona}\n\n${rs}${sources ? `\n\nRecord sources:\n${sources}` : ''}${brief}`;
 }
 
 // ------------------------------------------------------------------ session
@@ -217,7 +244,7 @@ export function instructionsFor(config, records, briefing = '') {
  * same session runs from a clip (bench, tests) as from the laptop's audio devices.
  */
 export class Session {
-  constructor(config, { provider, records, catalog, chooser, speaker, log, performImpl = perform, script, briefing = '' } = {}) {
+  constructor(config, { provider, records, catalog, chooser, speaker, log, performImpl = perform, script, briefing = '', browser = null } = {}) {
     this.config = config;
     this.log = log || (() => {});
     this.records = records || new Records(config);
@@ -231,6 +258,9 @@ export class Session {
         log: (r) => this.log(r),
       });
     if (chooser) chooser.execute = (key, info) => this.act(key, info);
+    // The assistant's own browser window (browser.mjs); its current page joins the catalog each turn.
+    this.browser = browser;
+    this.confirm = null;
     this.handoff = (config.queue.command || []).length > 0;
     const tools = [...TOOLS, ...(this.handoff ? [HANDOFF_TOOL] : []), ...(this.chooser.ready ? [DESKTOP_TOOL] : [])];
     const keyName = PROVIDERS[config.provider].keyName;
@@ -262,7 +292,15 @@ export class Session {
       if (!this.turn) this.onSpeechStart();
       if (final) this.turn.text = text;
       this.log({ event: 'heard', final, words: text.trim().split(/\s+/).length, ms_from_speech_start: Math.round(performance.now() - this.turn.t0) });
-      this.chooser.hear(text, final);
+      if (final && this.confirm) this.answerConfirm(text).catch((err) => this.log({ event: 'action-failed', target: 'confirm', error: err.message }));
+      // The page's choices are read at the start of speech (a few ms); the words wait for them.
+      const t = this.turn;
+      const hear = () => {
+        this.chooser.hear(text, final);
+        if (final) t.heardFinal = true;
+      };
+      if (this.pageLoad) this.pageLoad.then(hear);
+      else hear();
     });
     p.on('audio', (pcm) => this.onReplyAudio(pcm));
     p.on('reply-text', (d) => {
@@ -301,6 +339,8 @@ export class Session {
       if (this.onset === null || now - this.lastLoud > 700) {
         this.onset = now;
         this.chooser.warm();
+        // Gemini's words come only after the speech: the page is read as soon as it starts.
+        this.refreshPage();
       }
       this.lastLoud = now;
     }
@@ -309,6 +349,8 @@ export class Session {
 
   onSpeechStart() {
     const now = performance.now();
+    // Talking while the voice plays: its own words could be what was heard, so a yes then does not count.
+    const overReply = !!this.speaker?.busy();
     // Barge-in: the user talks over a reply.
     if (this.speaker?.busy()) {
       this.provider.interrupt(this.speaker.playedMs());
@@ -327,12 +369,38 @@ export class Session {
     // The local loudness onset is the true start; a provider's own event can come late
     // (Gemini has none, and its first words arrive after the user stops).
     const t0 = this.onset !== null && (!this.turn || this.onset > this.turn.t0) && now - this.onset < 15000 ? this.onset : now;
-    this.turn = { t0, text: '', actions: [], firstAudio: null };
+    // Gemini's words arrive after the speech, so its turn also counts as over the reply when it began before the last reply audio.
+    this.turn = { t0, text: '', actions: [], firstAudio: null, overReply: overReply || (this.lastReplyAudio ?? -Infinity) > t0 };
     this.chooser.reset(t0);
+    // Already read at the loudness onset of this speech, unless that was long ago.
+    if (!this.pageLoad || !(this.pageAt >= t0 - 50)) this.refreshPage();
+  }
+
+  /** The current browser page as choices for this turn (about 10 to 20 ms). */
+  refreshPage() {
+    if (!this.browser) return null;
+    const started = performance.now();
+    const load = this.browser
+      .snapshot()
+      .then((snap) => {
+        if (load !== this.pageLoad) return;
+        const pairs = snap ? pageCatalog(snap, { maxItems: this.config.browser.maxItems }) : [];
+        this.chooser.setPage(pairs);
+        this.log({ event: 'page', choices: pairs.length, ms: Math.round(performance.now() - started) });
+      })
+      .catch((err) => {
+        if (load !== this.pageLoad) return;
+        this.chooser.setPage([]);
+        this.log({ event: 'page-failed', error: err.message });
+      });
+    this.pageLoad = load;
+    this.pageAt = started;
+    return load;
   }
 
   onReplyAudio(pcm) {
     const now = performance.now();
+    this.lastReplyAudio = now;
     const t = this.turn;
     // The first audio of an answer that came back from a hand-off: the round trip.
     const a = this.aside;
@@ -352,7 +420,9 @@ export class Session {
   }
 
   async act(key, info) {
-    const item = this.catalog.get(key);
+    const item = this.chooser.catalog.get(key) || this.catalog.get(key);
+    if (!item) return this.log({ event: 'action-failed', target: key, error: 'no longer offered' });
+    if (item.kind === 'page' || item.kind === 'field') return this.actPage(key, item, info);
     const started = performance.now();
     const turn = this.turn;
     const slot = info.slot || '';
@@ -366,7 +436,7 @@ export class Session {
     }
     this.lastAction = { key, at: started };
     try {
-      await this.performImpl(item, { roots: this.roots, has, slot, ...(this.config.actions.dryRun ? this.dryRun(slot) : {}) });
+      await this.performImpl(item, { roots: this.roots, has, slot, browser: this.browser, ...(this.config.actions.dryRun ? { ...this.dryRun(slot), browser: null } : {}) });
       this.provider.note?.(`Desktop helper: ${done} for the user.`);
       const rec = { event: 'action', target: key, done, words: info.text.split(/\s+/).length, final: info.final, p: info.p };
       if (!this.config.logTranscripts) rec.done = describe(item, slot, { words: false });
@@ -378,6 +448,97 @@ export class Session {
     } catch (err) {
       turn?.actions.push({ key, error: err.message });
       this.log({ event: 'action-failed', target: key, error: err.message });
+    }
+  }
+
+  /**
+   * A browser action. A button that sends or changes something is not pressed: the voice is
+   * told to ask, and a later turn's plain yes presses it (answerConfirm).
+   */
+  async actPage(key, item, info) {
+    const turn = this.turn;
+    const slot = info.slot || '';
+    const since = () => (turn ? Math.round(performance.now() - turn.t0) : null);
+    if (item.op === 'click' && item.risky) {
+      this.confirm = { item, at: Date.now(), turn };
+      this.provider.note?.(`Browser helper: "${item.label}" ${item.risky}, so it is not pressed yet. Ask the user whether to press "${item.label}"; it is pressed only if they say yes.`);
+      turn?.actions.push({ key, done: `not pressed yet: "${item.label}" ${item.risky}; ask the user whether to press "${item.label}"`, ms: since(), at: performance.now() });
+      this.log({ event: 'action-held', target: key, why: item.risky, p: info.p, ms_from_speech_start: since() });
+      return;
+    }
+    if (this.config.actions.dryRun) {
+      this.log({ event: 'dry-run', browser: item.op, target: key });
+      turn?.actions.push({ key, done: `${describe(item, slot)} (dry run)`, ms: since(), at: performance.now() });
+      return;
+    }
+    const started = performance.now();
+    try {
+      const r = await performPage(this.browser, item, { slot });
+      const done = describe(item, slot);
+      const read = item.op === 'read' && r ? redact(`${r.title}: ${r.text}`).slice(0, 1500) : '';
+      this.provider.note?.(read ? `Browser helper: the page says (tell the user briefly what it says): ${read}` : `Browser helper: ${done} for the user.`);
+      const rec = { event: 'action', target: key, done: this.config.logTranscripts ? done : describe(item, slot, { words: false }), words: info.text.split(/\s+/).length, final: info.final, p: info.p };
+      rec.ms_from_speech_start = since();
+      rec.launch_ms = Math.round(performance.now() - started);
+      turn?.actions.push({ key, done, ms: rec.ms_from_speech_start, at: performance.now(), ...(read ? { page: read } : {}) });
+      this.log(rec);
+      this.onAction?.(done);
+    } catch (err) {
+      turn?.actions.push({ key, error: err.message });
+      this.provider.note?.(`Browser helper: did not ${item.name.replace(/ on the browser page$/, '').toLowerCase()}: ${err.message}.`);
+      this.log({ event: 'action-failed', target: key, error: err.message });
+    }
+  }
+
+  /**
+   * The user's next words after a button was held back. Only a short plain yes, said in a
+   * later turn and not over the voice's own question, presses it, and only when the same
+   * button is still on the same page. Anything else leaves it unpressed.
+   */
+  async answerConfirm(text) {
+    const c = this.confirm;
+    if (!c || c.turn === this.turn) return;
+    const label = c.item.label;
+    if (!c.asked) {
+      this.confirm = null;
+      this.log({ event: 'confirm', pressed: false, why: 'the voice did not ask about it' });
+      return this.provider.note?.(`Browser helper: "${label}" was not pressed: it was not asked about, so a yes cannot count. The user can ask for it again.`);
+    }
+    if (this.turn?.overReply) {
+      this.log({ event: 'confirm-ignored', why: 'said over the reply' });
+      return;
+    }
+    this.confirm = null;
+    const say = (line) => this.provider.note?.(`Browser helper: ${line}`);
+    if (Date.now() - c.at > (this.config.browser.confirmSec || 30) * 1000) {
+      this.log({ event: 'confirm', pressed: false, why: 'too late' });
+      return say(`"${label}" was not pressed: the yes came too late. Ask again if it is still wanted.`);
+    }
+    if (!isYes(text)) {
+      this.log({ event: 'confirm', pressed: false, why: 'no clear yes' });
+      return say(`"${label}" was not pressed: the user did not say yes.`);
+    }
+    const snap = await this.browser.snapshot();
+    const same = pageCatalog(snap, { maxItems: this.config.browser.maxItems }).filter(
+      ([, it]) => it.op === 'click' && it.label === label && it.el === c.item.el && it.tab.id === c.item.tab.id && it.tab.url.split('#')[0] === c.item.tab.url.split('#')[0],
+    );
+    if (same.length !== 1) {
+      this.log({ event: 'confirm', pressed: false, why: 'the page changed' });
+      return say(`"${label}" was not pressed: the page changed.`);
+    }
+    if (this.config.actions.dryRun) {
+      this.log({ event: 'dry-run', browser: 'click', target: same[0][0], confirmed: true });
+      return;
+    }
+    try {
+      await performPage(this.browser, { ...same[0][1], confirmed: true });
+      this.log({ event: 'action', target: same[0][0], done: `pressed "${label}" after a spoken yes`, confirmed: true, ms_from_speech_start: this.turn ? Math.round(performance.now() - this.turn.t0) : null });
+      this.turn?.actions.push({ key: same[0][0], done: `pressed "${label}"` });
+      say(`pressed "${label}" after the user said yes.`);
+      this.onAction?.(`Pressed ${label}`);
+    } catch (err) {
+      this.log({ event: 'action-failed', target: same[0][0], error: err.message });
+      say(`"${label}" was not pressed: ${err.message}.`);
     }
   }
 
@@ -455,17 +616,26 @@ export class Session {
   /** What the chooser did this turn, waiting briefly for a decision still in flight. */
   async desktopResult() {
     const until = performance.now() + this.config.actions.chooser.timeoutMs + 500;
-    const busy = () => this.chooser.inflight > 0 || this.chooser.pending || (this.chooser.textAction && !this.chooser.textAction.done);
+    // The call can come before the words do (Gemini sends both at the end of speech): wait for them too.
+    const heard = performance.now() + 1500;
+    const busy = () => this.chooser.inflight > 0 || this.chooser.pending || (this.chooser.textAction && !this.chooser.textAction.done) || (!this.turn?.heardFinal && !this.turn?.actions.length && performance.now() < heard);
     while (busy() && performance.now() < until) await new Promise((r) => setTimeout(r, 50));
     const acts = this.turn?.actions || [];
     if (!acts.length) return { opened: null, note: 'Nothing was done: the request did not clearly match something the helper can do.' };
-    return { opened: acts.map((a) => a.done || `failed to open (${a.error})`) };
+    const page = acts.find((a) => a.page)?.page;
+    return { opened: acts.map((a) => a.done || `failed (${a.error})`), ...(page ? { page_says: page } : {}) };
   }
 
   finishTurn() {
     const t = this.turn;
     if (!t || t.logged) return;
     t.logged = true;
+    // A held button waits for a yes only when the voice's reply really asked about it.
+    const c = this.confirm;
+    if (c && c.turn === t) {
+      c.asked = asksAbout(t.reply, c.item.label);
+      this.log({ event: 'confirm-asked', asked: c.asked });
+    }
     // Said it would check but called no tool at all: hand off the user's own words.
     if (this.handoff && t.text && !(t.tools || []).length && PROMISE.test(t.reply || '')) {
       (t.tools ||= []).push('hand_off (auto)');
@@ -480,6 +650,7 @@ export class Session {
       action: t.actions[0]?.key || null,
       action_ms: t.actions[0]?.ms ?? null,
       action_before_speech_end: t.actions[0]?.at && end ? t.actions[0].at < end : null,
+      action_after_speech_end_ms: t.actions[0]?.at && end ? Math.round(t.actions[0].at - end) : null,
       tools: t.tools || [],
       interrupted: !!t.interrupted,
       chooser_calls: this.chooser.calls,
@@ -597,9 +768,10 @@ export class Live {
       this.records = new Records(c);
       this.log({ event: 'records-warm', ...this.records.warm() });
       this.catalog = c.actions.enabled ? buildCatalog(c, this.records) : new Map();
+      this.browser = openBrowser(c, this.log);
     }
     this.refreshBriefing(true);
-    const session = new Session(c, { log: this.log, records: this.records, catalog: this.catalog, briefing: this.briefing });
+    const session = new Session(c, { log: this.log, records: this.records, catalog: this.catalog, briefing: this.briefing, browser: this.browser });
     // What the decision model just did shows on the orb for a few seconds.
     session.onAction = (done) => (this.lastAction = { label: done[0].toUpperCase() + done.slice(1), at: Date.now() });
     // A hand-off's answer leaves the queue once heard; one not heard is tried again.
@@ -738,6 +910,7 @@ export class Live {
     // Let the closing tone play, then let go of the provider and the echo canceller.
     setTimeout(() => {
       this.session?.close();
+      this.browser?.close();
       this.ec?.stop();
       process.exit(this.exitCode ?? 0);
     }, 250);
@@ -828,9 +1001,13 @@ function syntheticClip(rate, ms = 1800) {
 async function bench(config, args, log) {
   const runs = Number(args.runs || 3);
   const results = [];
+  // Browser actions run only with --open too; the page is read either way.
+  if (!args.open) config = merge(config, { actions: { dryRun: true } });
+  const browser = openBrowser(config, log);
   for (let i = 0; i < runs; i++) {
     const session = new Session(config, {
       log,
+      browser,
       script: [{ text: args.say || 'please open the documents folder', tools: [{ name: 'desktop_action' }], reply: 'Opened it.' }],
       performImpl: args.open ? perform : async () => {},
       // The same instructions a conversation starts with.
@@ -845,6 +1022,7 @@ async function bench(config, args, log) {
     results.push(turn);
     process.stdout.write(`${JSON.stringify(turn)}\n`);
   }
+  await browser?.close();
   const fa = results.map((r) => r?.first_audio_ms).filter((x) => x != null);
   const ac = results.map((r) => r?.action_ms).filter((x) => x != null);
   process.stdout.write(`${JSON.stringify({ provider: config.provider, runs, answered: fa.length, first_audio_ms_median: median(fa), action_ms_median: median(ac), first_audio_ms: fa, action_ms: ac })}\n`);
@@ -881,8 +1059,39 @@ function check(config) {
     for (const it of catalog.values()) kinds[it.kind] = (kinds[it.kind] || 0) + 1;
     rows.push(`     ${catalog.size} actions: ${Object.entries(kinds).map(([k, n]) => `${n} ${k}`).join(', ')}`);
   }
+  if (config.browser.enabled) {
+    const up = spawnSync(process.execPath, ['-e', `fetch(${JSON.stringify(`${config.browser.endpoint.replace(/\/+$/, '')}/json/version`)}).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))`], { timeout: 4000 });
+    add(up.status === 0, `browser at ${config.browser.endpoint} (voice-mode page lists what its current page offers)`);
+  }
   console.log(rows.join('\n'));
   return rows.some((r) => r.startsWith('MISS')) ? 1 : 0;
+}
+
+/** `voice-mode page`: what the browser's current page offers the chooser, and how each is guarded. */
+async function showPage(config) {
+  if (!config.browser.enabled) {
+    console.error('browser control is off ("browser": { "enabled": true } in the config)');
+    return 2;
+  }
+  const browser = new Browser(config.browser);
+  try {
+    const t0 = performance.now();
+    const snap = await browser.snapshot();
+    const ms = Math.round(performance.now() - t0);
+    if (!snap) {
+      console.log('no open tab');
+      return 0;
+    }
+    const pairs = pageCatalog(snap, { maxItems: config.browser.maxItems });
+    console.log(`${snap.tab.title} (${snap.tab.url}): ${pairs.length} choices, read in ${ms} ms`);
+    for (const [key, it] of pairs) console.log(`${it.risky ? 'ASKS' : it.op === 'refuse' ? 'NO  ' : '    '} ${key}  ${it.name}${it.risky ? ` (${it.risky}: needs a spoken yes)` : it.why ? ` (${it.why})` : ''}`);
+    return 0;
+  } catch (err) {
+    console.error(`cannot reach the browser at ${config.browser.endpoint}: ${err.message}`);
+    return 1;
+  } finally {
+    browser.close();
+  }
 }
 
 async function pick(config, text) {
@@ -907,23 +1116,50 @@ async function pick(config, text) {
  * checks, and it is carried out (or, with dryRun, only described). Nothing is done when no
  * action fits. Returns { key, name, done, ms } or { key: null, ... }.
  */
-export async function doRequest(config, text, { log = () => {}, performImpl = perform, records, catalog, chooser, dryRun = false } = {}) {
+export async function doRequest(config, text, { log = () => {}, performImpl = perform, records, catalog, chooser, dryRun = false, browser = openBrowser(config, log) } = {}) {
   records ||= new Records(config);
   catalog ||= buildCatalog(config, records);
+  // The browser's current page joins the catalog; without a browser, or when it cannot be reached, it is left out.
+  let page = [];
+  if (browser) {
+    try {
+      page = pageCatalog(await browser.snapshot(), { maxItems: config.browser.maxItems });
+    } catch (err) {
+      log({ event: 'page-failed', error: err.message });
+    }
+  }
+  const items = page.length ? new Map([...catalog, ...page]) : catalog;
   const roots = [config.actions.documents, ...records.roots].filter(Boolean);
   const t0 = performance.now();
   const ms = () => Math.round(performance.now() - t0);
   let result = null;
   const execute = async (key, info) => {
-    const item = catalog.get(key);
+    const item = items.get(key);
     const slot = info.slot || '';
+    if (item.kind === 'page' || item.kind === 'field') {
+      // Nobody can say yes here: a button that sends or changes something is never pressed.
+      if (item.op === 'click' && item.risky) {
+        result = { key, name: item.name, error: `"${item.label}" ${item.risky}; it is pressed only after the user's spoken yes in a conversation`, ms: ms() };
+        log({ event: 'action-held', target: key, why: item.risky });
+        return;
+      }
+      try {
+        const r = dryRun ? null : await performPage(browser, item, { slot });
+        result = { key, name: item.name, done: describe(item, slot), ms: ms(), ...(dryRun ? { dry_run: true } : {}), ...(r?.text ? { page_says: redact(`${r.title}: ${r.text}`) } : {}) };
+        log({ event: 'action', target: key, done: config.logTranscripts ? result.done : describe(item, slot, { words: false }), p: info.p, ms_from_request: result.ms, ...(dryRun ? { dry_run: true } : {}) });
+      } catch (err) {
+        result = { key, name: item.name, error: err.message, ms: ms() };
+        log({ event: 'action-failed', target: key, error: err.message });
+      }
+      return;
+    }
     const done = describe(item, slot);
     const logged = config.logTranscripts ? done : describe(item, slot, { words: false });
     const argv = [];
     // A dry run goes through the same checks and only records what would have run.
     const stub = dryRun ? { run: async (a) => argv.push(a), exec: async (a) => (argv.push(a), '(0,)'), note: (folder) => path.join(folder, '(dry run).md') } : {};
     try {
-      await performImpl(item, { roots, has, slot, ...stub });
+      await performImpl(item, { roots, has, slot, browser: dryRun ? null : browser, ...stub });
       result = { key, name: item.name, done, ms: ms(), ...(dryRun ? { dry_run: true, would_run: argv[0] || null } : {}) };
       log({ event: 'action', target: key, done: logged, p: info.p, ms_from_request: result.ms, ...(dryRun ? { dry_run: true } : {}) });
     } catch (err) {
@@ -934,8 +1170,10 @@ export async function doRequest(config, text, { log = () => {}, performImpl = pe
   // Nobody is mid-sentence here, so a slow first call (a cold connection) may take longer.
   chooser ||= new Chooser(merge(config, { actions: { chooser: { timeoutMs: Math.max(config.actions.chooser.timeoutMs, 10000) } } }), catalog, { execute, log });
   chooser.execute = execute;
+  chooser.setPage(page);
   if (!chooser.ready) return { key: null, error: `the chooser has no key (${config.actions.chooser.keyName}) or there are no actions` };
   await chooser.ask(String(text).trim(), true);
+  await browser?.close();
   return result || { key: null, note: 'no action in the catalog fits; nothing was done', ms: ms() };
 }
 
@@ -987,7 +1225,7 @@ function parseArgs(argv) {
   return out;
 }
 
-const FLAGS = ['clip', 'runs', 'play', 'say', 'config', 'dry-run', 'help'];
+const FLAGS = ['clip', 'runs', 'play', 'open', 'verbose', 'say', 'config', 'dry-run', 'help'];
 
 /** The usage at the top of this file. */
 function usage() {
@@ -1123,12 +1361,14 @@ async function main(argv) {
       return check(config);
     case 'pick':
       return pick(config, args._.slice(1).join(' '));
+    case 'page':
+      return showPage(config);
     case 'bench':
       return bench(config, args, makeLogger(config, { quiet: !args.verbose }));
     case 'latency':
       return latency(config);
     default:
-      console.error(`voice-mode: unknown command "${cmd}" (start, toggle, stop, status, reply, briefing, do, say, check, pick, bench, latency, help)`);
+      console.error(`voice-mode: unknown command "${cmd}" (start, toggle, stop, status, reply, briefing, do, say, check, pick, page, bench, latency, help)`);
       return 2;
   }
 }

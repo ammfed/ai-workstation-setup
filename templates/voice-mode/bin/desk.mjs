@@ -103,7 +103,9 @@ export const SYSTEM = [
 const TEXT = {
   note: { what: 'Write down a new note with text they dictate (take a note, note down, write down, remind me in a note)', slot: 'the text of the note' },
   search: { what: 'Search the web for something they say (search for, google, look up online)', slot: 'what to search the web for' },
-  type: { what: 'Type text they dictate into the window in front (they say type)', slot: 'the text to type' },
+  type: { what: 'Type text they dictate into the window in front (they say type, and name no field of the browser page)', slot: 'the text to type' },
+  // A field on the browser page (browser.mjs); its catalog item names the field.
+  field: { slot: 'the text to type into the field, without the words that say where (such as "in the search box")' },
 };
 export const TEXT_KINDS = new Set(Object.keys(TEXT));
 
@@ -165,12 +167,28 @@ const VERB = { app: 'Open', site: 'Open the website', folder: 'Open', file: 'Ope
 export function criteria(catalog) {
   const out = {
     none:
-      'Anything else: a question (including a question about what a record says), small talk, asking about status or news, ' +
+      'Anything else: a question (including a question about what a record says, but not asking what the browser page says, which is reading the page), small talk, asking about status or news, ' +
       'asking for work to be done, or something the helper must not do: deleting or moving files, sending a message or email, ' +
-      'buying something, changing settings, running a command, closing or quitting an app. Also this when it is not yet clear what should be done.',
+      'buying something, changing settings, running a command, closing or quitting an app. Also this when it is not yet clear what should be done. ' +
+      'Pressing a named button or link on the browser page is its own choice, whatever the button does (the helper asks before pressing anything that sends or changes something).',
   };
   for (const [key, it] of catalog) out[key] = VERB[it.kind] ? `${VERB[it.kind]} ${it.name}` : it.name;
   return out;
+}
+
+/**
+ * Typing into the window in front and typing into a field of the browser page both mean
+ * "type these words"; the model often splits its certainty between them. When one of them
+ * is the top pick, their shares add up, and a field the model gave at least a quarter to
+ * is where the words go (the user named it).
+ */
+export function typingPick(answer, catalog) {
+  const probs = answer.probabilities || {};
+  const typing = Object.keys(probs).filter((k) => k === 'type:text' || catalog.get(k)?.kind === 'field');
+  if (!typing.includes(answer.choice) || typing.length < 2) return { choice: answer.choice, p: probs[answer.choice] ?? 0 };
+  const total = typing.reduce((n, k) => n + (probs[k] || 0), 0);
+  const field = typing.filter((k) => k !== 'type:text').sort((a, b) => probs[b] - probs[a])[0];
+  return { choice: field && probs[field] >= 0.25 ? field : answer.choice, p: Math.min(1, total) };
 }
 
 /** Candidate spans of the user's words for a text action: every tail, less up to two last words. */
@@ -181,6 +199,15 @@ export function spans(text, max = 40) {
   for (let i = 1; i < w.length && n < max; i++) {
     for (let cut = 0; cut <= 2 && w.length - cut > i && n < max; cut++, n++) out[`s${i}-${w.length - cut}`] = `"${w.slice(i, w.length - cut).join(' ')}"`;
   }
+  return out;
+}
+
+/** Every run of the user's words after the first (the command word), shortest runs last. */
+export function runs(text, max = 60) {
+  const w = String(text).trim().split(/\s+/).filter(Boolean);
+  const out = { none: 'None of these: nothing to type was said yet' };
+  let n = 0;
+  for (let i = 1; i < w.length; i++) for (let j = w.length; j > i && n < max; j--, n++) out[`s${i}-${j}`] = `"${w.slice(i, j).join(' ')}"`;
   return out;
 }
 
@@ -195,6 +222,7 @@ export class Chooser {
   constructor(config, catalog, { execute, log = () => {}, fetchImpl = fetch } = {}) {
     this.cfg = config.actions.chooser;
     this.key = readKey(this.cfg.keyFile, this.cfg.keyName) || process.env[this.cfg.keyName] || '';
+    this.base = catalog;
     this.catalog = catalog;
     this.criteria = criteria(catalog);
     this.execute = execute;
@@ -205,6 +233,12 @@ export class Chooser {
 
   get ready() {
     return !!this.key && this.catalog.size > 0;
+  }
+
+  /** Add the current browser page's choices (browser.mjs) to the fixed catalog, for the next picks. */
+  setPage(pairs = []) {
+    this.catalog = pairs.length ? new Map([...this.base, ...pairs]) : this.base;
+    this.criteria = criteria(this.catalog);
   }
 
   reset(t0 = null) {
@@ -265,21 +299,27 @@ export class Chooser {
     }
     if (turn !== this.turnId) return;
     this.inflight--;
-    if (this.done) return;
+    if (this.done) {
+      // The final words came while the pick of a note, search or typing was still in flight.
+      if (final && this.textAction && !this.textAction.filling) await this.fill(text);
+      return;
+    }
     if (answer) {
-      const p = answer.probabilities?.[answer.choice] ?? 0;
-      this.log({ event: 'chooser', words: text.split(/\s+/).length, final, choice: answer.choice, p, ms: Math.round(performance.now() - started), text });
-      const item = this.catalog.get(answer.choice);
-      if (answer.choice !== 'none' && item && p >= (final ? this.cfg.finalThreshold : this.cfg.threshold) && (final || !item.final || TEXT_KINDS.has(item.kind))) {
+      const { choice, p } = typingPick(answer, this.catalog);
+      this.log({ event: 'chooser', words: text.split(/\s+/).length, final, choice, p, ms: Math.round(performance.now() - started), text });
+      const item = this.catalog.get(choice);
+      // A button that sends or changes something is only asked about when picked, so the bar is lower.
+      const bar = final ? (item?.risky ? Math.min(this.cfg.askThreshold ?? 0.5, this.cfg.finalThreshold) : this.cfg.finalThreshold) : this.cfg.threshold;
+      if (choice !== 'none' && item && p >= bar && (final || !item.final || TEXT_KINDS.has(item.kind))) {
         this.done = true;
         this.pending = null;
-        this.picked?.(answer.choice);
+        this.picked?.(choice);
         if (TEXT_KINDS.has(item.kind)) {
-          this.textAction = { key: answer.choice, p };
+          this.textAction = { key: choice, p };
           if (final) await this.fill(text);
           return;
         }
-        await this.execute(answer.choice, { text, p, final });
+        await this.execute(choice, { text, p, final });
         return;
       }
     }
@@ -291,10 +331,12 @@ export class Chooser {
   /** The second pick for a note, search or typing: which span of the words is the text. */
   async fill(text) {
     const turn = this.turnId;
-    const { key, p } = this.textAction;
-    this.textAction.filling = true;
+    const ta = this.textAction;
+    const { key, p } = ta;
+    ta.filling = true;
     const kind = this.catalog.get(key).kind;
-    const options = spans(text);
+    // Words for a field can end before "in the search box": any run of words.
+    const options = kind === 'field' ? runs(text) : spans(text);
     const started = performance.now();
     let answer = null;
     for (let tries = 2; tries > 0 && !answer; tries--) {
@@ -307,11 +349,17 @@ export class Chooser {
         this.log({ event: 'chooser-error', final: true, error: String(err.message || err).slice(0, 200), cause: err.cause?.code, ms: Math.round(performance.now() - started), text });
       }
     }
-    this.textAction.done = true;
-    if (turn !== this.turnId || !answer) return;
+    if (turn !== this.turnId || !answer) {
+      ta.done = true;
+      return;
+    }
     const slot = answer.choice !== 'none' ? options[answer.choice]?.slice(1, -1) : '';
     this.log({ event: 'chooser', words: text.split(/\s+/).length, final: true, choice: slot ? `${key} (${slot.split(/\s+/).length} words)` : `${key}: no text`, p: answer.probabilities?.[answer.choice] ?? 0, ms: Math.round(performance.now() - started), text: slot || text });
-    if (slot) await this.execute(key, { text, p, final: true, slot });
+    try {
+      if (slot) await this.execute(key, { text, p, final: true, slot });
+    } finally {
+      ta.done = true;
+    }
   }
 
   async decide(text, question) {
@@ -334,6 +382,7 @@ export class Chooser {
                     'A person is speaking to their desktop voice assistant and may not have finished the sentence. ' +
                     'From what they have said so far, which one thing do they explicitly want done on their computer right now? ' +
                     'Opening an app starts it; switching to an app brings its open window to the front. ' +
+                    'Clicking, pressing, typing into a field, scrolling, going back and tabs mean the web page open in their browser. ' +
                     'A question about something is not a request to do it.',
                   criteria: this.criteria,
                 },
@@ -430,7 +479,7 @@ export const typeable = (text) => String(text).replace(/[\u0000-\u001f\u007f]+/g
  * files and folders must still sit inside the documents folder or a record source. The
  * only words it takes are a note's text, a search's words and text to type (`slot`).
  */
-export async function perform(item, { roots = [], platform = process.platform, run = launch, has = () => true, slot = '', exec = capture, note = writeNote } = {}) {
+export async function perform(item, { roots = [], platform = process.platform, run = launch, has = () => true, slot = '', exec = capture, note = writeNote, browser = null } = {}) {
   if (!item) throw new Error('not in the catalog');
   switch (item.kind) {
     case 'system':
@@ -446,7 +495,8 @@ export async function perform(item, { roots = [], platform = process.platform, r
       if (!slot.trim()) throw new Error('nothing to search for');
       const url = item.url.replace('{q}', encodeURIComponent(slot.trim().replace(/[.!?]+$/, '')));
       if (!/^https:\/\//.test(url)) throw new Error('only https search links are opened');
-      return run(opener(url, platform));
+      // With a voice browser, pages opened for browsing open in its window.
+      return browser ? browser.open(url) : run(opener(url, platform));
     }
     case 'type': {
       const text = typeable(slot);
@@ -461,7 +511,7 @@ export async function perform(item, { roots = [], platform = process.platform, r
       throw new Error(`no way to start ${item.name} here`);
     case 'site':
       if (!/^https?:\/\//.test(item.url)) throw new Error('only http and https links are opened');
-      return run(opener(item.url, platform));
+      return browser ? browser.open(item.url) : run(opener(item.url, platform));
     case 'folder':
     case 'file':
     case 'record': {
@@ -494,6 +544,10 @@ export function describe(item, slot = '', { words = true } = {}) {
       return `searched the web for ${q}`;
     case 'type':
       return `typed ${q}`;
+    case 'field':
+      return `typed ${q} into "${item.label}" on the page`;
+    case 'page':
+      return item.done;
     default:
       return `opened ${item.name}`;
   }

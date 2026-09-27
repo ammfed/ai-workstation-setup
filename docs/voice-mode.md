@@ -17,6 +17,7 @@ voice-mode start            # the same conversation, in this terminal (Ctrl+C en
 voice-mode check            # what is configured and what is missing (never prints keys)
 voice-mode do "<request>"   # for your assistant: one desktop action from the same safe list
 voice-mode say "<text>"     # for your assistant: say these words aloud, as they are
+voice-mode page             # what the browser's current page offers the voice (touches nothing)
 voice-mode help             # every command
 ```
 
@@ -62,7 +63,8 @@ points at another one). Everything not in the file takes the defaults in `bin/co
 | `queue` | `{ "command": [...], "env": {} }`: how a hand-off reaches your assistant; the note is added as the last argument. Never run through a shell. Without it there is no hand-off. |
 | `handoff` | `replyCommand` (default `voice-mode reply`: the command written into each note; give the full path if your assistant's shell does not have it on PATH), `dir` (the reply queue; default `handoff/` next to the config), `waitMin` (15: how long a conversation stays open for an answer that is still coming), `stillComingSec` (20: when it says, once, that the answer is still coming; 0 never). |
 | `briefing` | `enabled`, `refreshMin` (3), `maxChars` (120000 in all; see What a big briefing costs), `parts` (see Briefing and hand-off). |
-| `actions` | `enabled`, `chooser` (`model`, `keyName`, `keyFile`, `threshold` 0.9 mid-sentence, `finalThreshold` 0.7 once you stop), `apps` (extra `{ id, name, desktop \| mac \| command }`), `discoverApps` (installed desktop apps on Linux), `sites` (`{ id, name, url }`, http and https only), `documents` (its folders can be opened), `files`, `decisionLog` (default on: one line per decision in `logs/decisions.log`), `control` (default on: the PC control below), `notes.folder`, `searchUrl` (`{q}` is replaced by the words), `dryRun`. |
+| `actions` | `enabled`, `chooser` (`model`, `keyName`, `keyFile`, `threshold` 0.9 mid-sentence, `finalThreshold` 0.7 once you stop, `askThreshold` 0.5 for a browser button that is only asked about), `apps` (extra `{ id, name, desktop \| mac \| command }`), `discoverApps` (installed desktop apps on Linux), `sites` (`{ id, name, url }`, http and https only), `documents` (its folders can be opened), `files`, `decisionLog` (default on: one line per decision in `logs/decisions.log`), `control` (default on: the PC control below), `notes.folder`, `searchUrl` (`{q}` is replaced by the words), `dryRun`. |
+| `browser` | `enabled` (off by default), `endpoint` (`http://127.0.0.1:9222`: the DevTools address of a Chrome started for the assistant; loopback only), `ignore` (URL prefixes of tabs it never reads, switches to or closes), `maxItems` (60 links, buttons and fields per page), `confirmSec` (30: how long a held button waits for a yes). See Browser control. |
 | `audio` | `duplex`: `full` (default: talk over a reply to cut in) or `half` (the mic is muted while a reply plays), `echoCancel` (default on; it wraps the `input` and `output` devices, or the default ones), `input` and `output` device names, `earcons` (a short tone when a conversation starts and ends). |
 | `listen.exitAfterMin` | End the conversation after this many minutes without speech (default 10). |
 | `orb` | `enabled`, `size` (pixels), `corner` (`bottom-right`, `bottom-left`, `top-right`, `top-left`), `margin` (pixels from that corner), `colors` for `idle`, `listening`, `thinking`, `speaking` and `action`, `runner` (the Qt 6 `qml` tool, found by itself when empty). |
@@ -105,6 +107,69 @@ runs commands, or closes or quits apps. Those are not in the catalog; asked for 
 decision model picks nothing and the voice says voice mode does not do that. Set
 `actions.control` to `false` to keep it to opening things, and `actions.dryRun` to `true` to
 log what each action would run instead of running it.
+
+## Browser control
+
+With `browser.enabled`, the voice also acts on the current page of a Chrome window started
+for your assistant, while you are still talking: "click the pricing link", "type blue hiking
+boots in the search box", "scroll down", "go back", "switch to the docs tab", "close this
+tab", "what does this page say". Listed sites and web searches then open in that window too.
+
+Start that Chrome with its own profile and a debugging port (Chrome refuses remote debugging
+on your everyday profile, and voice mode should never drive the browser you use yourself):
+
+```sh
+google-chrome --user-data-dir="$HOME/.config/assistant-chrome" --remote-debugging-port=9222
+```
+
+How it works, all in `bin/browser.mjs`, with no dependencies:
+
+- **The page becomes choices.** At the start of each thing you say, plain code reads the page
+  over the Chrome DevTools Protocol, in an isolated world the page's own scripts cannot reach:
+  the links, buttons, fields and page tabs in view, by their visible names, plus scroll, back,
+  forward, read, and the open tabs. That takes about 10 to 40 ms. Download links are left out.
+- **The decision model picks one**, from the same catalog as the desktop actions, and for a
+  field which span of your own words to type. It never produces a selector, a URL or text of
+  its own.
+- **Plain code carries it out**: a real mouse click at the element's centre once it is
+  checked to be the same element and not covered by something else; the words inserted into
+  the field (never Enter or another key); a scroll of the page under the mouse; the tab's own
+  history; the endpoint's activate and close calls. Downloads are denied while an action runs.
+- **Reading** gives the voice the page's title and main text (up to 1,500 characters,
+  redacted), and it tells you briefly what the page says.
+
+What it never does:
+
+- **A button that sends, submits, posts, deletes, buys, pays, confirms, signs in or grants
+  access is never pressed on a pick.** Plain code decides which buttons those are (their words,
+  in English and Arabic, and any button that submits a form). The voice is told the button is
+  held and asks you, naming it. It is pressed only when your next words are a short plain yes
+  ("yes", "go ahead"; nothing with no, not or wait in it), said after the voice finished
+  asking, within `confirmSec`, on the same page with the same button still there. If the
+  voice's reply did not name the button and ask, a yes cannot be verified and nothing is
+  pressed. `voice-mode do` never presses one: nobody can say yes there.
+- **It never types into a password, payment or identity field**: password inputs, one-time
+  codes, anything whose autocomplete says card, password or birth date, and fields named
+  like a card number, security code, expiry, IBAN, account number, passport, national ID or
+  date of birth. Such a field is offered only so the voice can say it will not type there,
+  and the field is checked again, live, just before any typing.
+- It never downloads, never reads or touches tabs whose URL starts with an `ignore` entry,
+  and never talks to a non-loopback endpoint.
+
+**Which page text leaves the machine.** The names of the links, buttons and fields in view go
+to the decision model with your words, and a page you ask to hear goes to the realtime voice
+provider. Nothing else from the page is sent anywhere.
+
+Measured on 2026-09-27, Gemini Live and `typesafe/jev-1.13`, on an invented shop page, three
+runs each (end of speech to the action carried out, medians): click a link 1.72 s, click a
+button 1.62 s, scroll 1.85 s, go back 1.55 s, read the page 2.27 s, type into a field 2.53 s
+(it waits for the sentence, then picks the words). The right thing was done in all of those
+runs. A button that sends was held and asked about in every run; a following "yes" pressed it
+1.05 and 1.58 s after the word; "no, wait" never did. On Gemini most of that time is the
+provider delivering your words after you stop (about 0.9 s) and one decision call (about
+0.75 s with a catalog of about 160 choices); reading the page and clicking take 10 to 30 ms.
+With OpenAI Realtime the words arrive while you speak, so a click can land before the
+sentence ends, as the desktop actions do.
 
 ## What it may read, and what it never does
 
@@ -403,4 +468,6 @@ Measured on 2026-09-25 on a Linux desktop, over a few thousand local notes, with
   chooser, barge-in, both provider adapters, the one-conversation lock, the orb's routes,
   every PC-control action's exact command, the redactor, the briefing's parts and cleaning,
   the hand-off round trip with its reply queue, a conversation staying open for an answer,
-  and `do` and `say`.
+  `do` and `say`, and browser control: the choices built from an invented page, each pick's
+  exact protocol calls, a held button pressed only after a later plain yes to a question that
+  named it, and refused secret fields.
