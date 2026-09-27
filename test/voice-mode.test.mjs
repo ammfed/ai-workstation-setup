@@ -17,7 +17,7 @@ const { merge, parseEnvFile, readKey, expandGlob, loadConfig, DEFAULTS } = await
 const { Records, runTool } = await import(path.join(bin, 'records.mjs'));
 const { Chooser, buildCatalog, criteria, perform, controlActions, spans, focusScript, describe, typeable, SYSTEM } = await import(path.join(bin, 'desk.mjs'));
 const { OpenAIRealtime, GeminiLive, FakeProvider } = await import(path.join(bin, 'providers.mjs'));
-const { Session, Live, PROMISE, streamClip, speechBounds, acquireLock, claimLock, releaseLock, lockHolder, decisionLine, doRequest, sayText, makeLogger } = await import(path.join(bin, 'voice-mode.mjs'));
+const { Session, Live, PROMISE, instructionsFor, streamClip, speechBounds, acquireLock, claimLock, releaseLock, lockHolder, decisionLine, doRequest, sayText, makeLogger } = await import(path.join(bin, 'voice-mode.mjs'));
 const net = await import('node:net');
 const { spawn } = await import('node:child_process');
 const { resample, tone, Speaker, wavToPcm } = await import(path.join(bin, 'audio.mjs'));
@@ -25,6 +25,7 @@ const { startOrb, toLevel } = await import(path.join(bin, 'orb.mjs'));
 const { redact, transcriptTail, sections, buildBriefing, briefingChanges, briefingStamp, plain } = await import(path.join(bin, 'briefing.mjs'));
 const { noteText, savePending, saveReply, waitingReplies, markSpoken, handoffDir, Deliveries } = await import(path.join(bin, 'handoff.mjs'));
 const { parseCommand, qtKey } = await import(path.join(repoRoot, 'modules', 'voice-mode', 'module.mjs'));
+const { Browser, pageCatalog, performPage, riskOf, sensitiveField, isYes, isDownload, asksAbout } = await import(path.join(bin, 'browser.mjs'));
 
 // Resolved, because macOS's temp folder is a symlink and opened paths are resolved ones.
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'voice-mode-test-')));
@@ -1175,6 +1176,360 @@ test('cli: help, no command or an unknown option print the usage and never open 
   r = run('start', '--halp');
   assert.deepEqual([r.status, r.stderr.trim()], [2, 'voice-mode: unknown option --halp (see voice-mode help)']);
   assert.equal(fs.existsSync(path.join(dir, 'logs')), false, 'nothing started');
+});
+
+// ------------------------------------------------------------------ browser
+
+// An invented page: what the in-page snapshot returns for it.
+const PAGE = {
+  url: 'https://app.example.test/inbox',
+  title: 'Inbox - Example Mail',
+  visible: true,
+  elements: [
+    { i: 0, kind: 'link', name: 'Inbox', href: 'https://app.example.test/inbox' },
+    { i: 1, kind: 'button', name: 'Compose' },
+    { i: 2, kind: 'field', name: 'Search mail', type: 'text' },
+    { i: 3, kind: 'button', name: 'Send', title: 'Send (Ctrl-Enter)' },
+    { i: 4, kind: 'button', name: 'Save changes', submit: true },
+    { i: 5, kind: 'button', name: 'Delete' },
+    { i: 6, kind: 'field', name: 'Password', type: 'password' },
+    { i: 7, kind: 'field', name: 'Name on card', type: 'text', autocomplete: 'cc-name' },
+    { i: 8, kind: 'field', name: 'Passport number', type: 'text' },
+    { i: 9, kind: 'link', name: 'Quarterly export', href: 'https://app.example.test/files/export.zip' },
+    { i: 10, kind: 'link', name: 'Invoice', href: 'https://app.example.test/invoice', download: true },
+    { i: 11, kind: 'link', name: 'Sign in to pay your invoice before the end of the month' },
+    { i: 12, kind: 'link', name: 'Inbox', href: 'https://app.example.test/inbox?again' },
+    { i: 13, kind: 'button', name: 'إرسال' },
+    { i: 14, kind: 'link', name: 'Sign out' },
+    { i: 15, kind: 'tab', name: 'Updates' },
+    { i: 16, kind: 'field', name: 'Verification code', type: 'text', autocomplete: 'one-time-code' },
+  ],
+};
+const SNAP = {
+  tab: { id: 'T1', url: PAGE.url, title: PAGE.title, ws: 'ws://127.0.0.1:9222/devtools/page/T1' },
+  elements: PAGE.elements,
+  tabs: [
+    { id: 'T1', url: PAGE.url, title: PAGE.title },
+    { id: 'T2', url: 'https://docs.example.test/', title: 'Docs' },
+  ],
+};
+
+test('browser catalog: links, buttons, fields and tabs in view become choices; downloads are left out', () => {
+  const cat = new Map(pageCatalog(SNAP));
+  for (const k of ['page:scroll-down', 'page:scroll-up', 'page:back', 'page:forward', 'page:read', 'page:click:0', 'page:click:1', 'page:field:2', 'page:click:15', 'tab:switch:T2', 'tab:close:T1', 'tab:close:T2']) assert.ok(cat.has(k), k);
+  // A same-named second link is the same thing by voice; download links are never offered.
+  for (const k of ['page:click:12', 'page:click:9', 'page:click:10', 'tab:switch:T1']) assert.ok(!cat.has(k), k);
+  assert.equal(cat.get('page:click:0').name, 'Click the link "Inbox" on the browser page');
+  assert.equal(cat.get('page:field:2').kind, 'field');
+  assert.equal(cat.get('page:field:2').name, 'Type dictated words into the "Search mail" box (a field) on the browser page');
+  assert.equal(cat.get('tab:close:T1').name, 'Close this browser tab ("Inbox - Example Mail")');
+  assert.equal(cat.get('tab:close:T1').final, true);
+  assert.ok(isDownload({ kind: 'link', href: 'https://x.test/a.dmg?x=1' }) && !isDownload({ kind: 'link', href: 'https://x.test/read' }));
+  // At most maxItems elements.
+  assert.equal(pageCatalog(SNAP, { maxItems: 2 }).filter(([k]) => /^page:(click|field|refuse)/.test(k)).length, 2);
+  assert.deepEqual(pageCatalog(null), []);
+});
+
+test('browser guard: controls that send, submit, delete, buy or sign in are risky; secret fields are refused', () => {
+  const cat = new Map(pageCatalog(SNAP));
+  assert.equal(cat.get('page:click:3').risky, 'sends or posts');
+  assert.equal(cat.get('page:click:4').risky, 'submits a form');
+  assert.equal(cat.get('page:click:5').risky, 'deletes or removes');
+  assert.equal(cat.get('page:click:13').risky, 'changes something for real');
+  assert.equal(cat.get('page:click:14').risky, 'signs in or grants access');
+  for (const k of ['page:click:0', 'page:click:1', 'page:click:15']) assert.equal(cat.get(k).risky, null, k);
+  // A long link is content (a subject line), not a control.
+  assert.equal(cat.get('page:click:11').risky, null);
+  for (const [name, el] of [
+    ['buy', { kind: 'button', name: 'Place order' }],
+    ['pay', { kind: 'button', name: 'Pay now' }],
+    ['confirm', { kind: 'button', name: 'Confirm' }],
+    ['grant', { kind: 'button', name: 'Allow access' }],
+    ['post', { kind: 'button', name: 'Post comment' }],
+    ['log in', { kind: 'link', name: 'Log in' }],
+  ])
+    assert.ok(riskOf(el), name);
+  // Following a link called "Update notes" only loads a page; the same words on a button change something.
+  assert.equal(riskOf({ kind: 'link', name: 'Update notes' }), null);
+  assert.ok(riskOf({ kind: 'button', name: 'Update notes' }));
+  for (const k of ['page:refuse:6', 'page:refuse:7', 'page:refuse:8', 'page:refuse:16']) assert.equal(cat.get(k).op, 'refuse', k);
+  for (const k of ['page:field:6', 'page:field:7', 'page:field:8', 'page:field:16']) assert.ok(!cat.has(k), k);
+  for (const el of [{ name: 'Card number' }, { name: 'CVV' }, { name: 'Expiry date' }, { name: 'IBAN' }, { name: 'Date of birth' }, { name: 'x', attr: 'cc-number' }, { name: 'Emirates ID' }, { name: 'PIN' }])
+    assert.ok(sensitiveField({ kind: 'field', type: 'text', autocomplete: '', ...el }), el.name);
+  assert.equal(sensitiveField({ kind: 'field', name: 'Search mail', type: 'search' }), null);
+});
+
+test('browser guard: a yes counts only after the voice named the button and asked', () => {
+  assert.equal(asksAbout('Shall I press the Delete draft button?', 'Delete draft'), true);
+  assert.equal(asksAbout('Do you want me to press Send?', 'Send'), true);
+  assert.equal(asksAbout('I pressed Send.', 'Send'), false);
+  assert.equal(asksAbout('Should I delete it?', 'Delete draft'), false);
+  assert.equal(asksAbout('', 'Send'), false);
+});
+
+test('browser guard: only a short plain yes counts', () => {
+  for (const t of ['yes', 'Yes.', 'yeah go ahead', 'yes please', 'ok', 'Sure, send it', 'go ahead', 'نعم']) assert.equal(isYes(t), true, t);
+  for (const t of ['no', 'yes, no wait', 'not yet', "don't", 'wait', 'cancel', 'yes but do not send it', '', 'I think yes maybe later on when I am back', 'shall I press send', 'press yes']) assert.equal(isYes(t), false, t);
+});
+
+// A browser behind fakes: the endpoint's JSON list and one page's protocol socket.
+function fakeBrowser({ elements = PAGE.elements, find = { x: 40, y: 20, type: 'text', autocomplete: '', attr: '' }, history = { currentIndex: 1, entries: [{ id: 7, url: 'https://app.example.test/' }, { id: 8, url: PAGE.url }] }, list } = {}) {
+  const sent = [];
+  const http = [];
+  const tabs = list || [
+    { id: 'T1', type: 'page', url: PAGE.url, title: PAGE.title, webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/page/T1' },
+    { id: 'T0', type: 'page', url: 'http://127.0.0.1:4000/review', title: 'Left alone', webSocketDebuggerUrl: 'ws://x/T0' },
+    { id: 'T2', type: 'page', url: 'https://docs.example.test/', title: 'Docs', webSocketDebuggerUrl: 'ws://x/T2' },
+    { id: 'B', type: 'browser_ui', url: 'chrome://omnibox/', title: '' },
+  ];
+  const cdp = {
+    closed: false,
+    close() {},
+    async send(method, params = {}) {
+      sent.push([method, params]);
+      if (method === 'Page.getFrameTree') return { frameTree: { frame: { id: 'F' } } };
+      if (method === 'Page.createIsolatedWorld') return { executionContextId: 5 };
+      if (method === 'Page.getNavigationHistory') return history;
+      if (method === 'Runtime.evaluate') {
+        const e = params.expression;
+        if (e.includes('__voiceEls = els')) return { result: { value: { url: PAGE.url, title: PAGE.title, visible: true, elements } } };
+        if (e.includes('elementFromPoint')) return { result: { value: find } };
+        if (e.includes('.focus()')) return { result: { value: true } };
+        if (e.includes('innerWidth')) return { result: { value: { w: 1000, h: 800 } } };
+        if (e.includes("querySelector('main")) return { result: { value: { title: PAGE.title, text: 'Three unread messages.' } } };
+      }
+      return {};
+    },
+  };
+  const fetchImpl = async (url, init) => {
+    http.push([init?.method || 'GET', url]);
+    const route = url.replace('http://127.0.0.1:9222', '');
+    const body = route === '/json/list' ? tabs : route === '/json/version' ? { webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/browser/X' } : 'ok';
+    return { ok: true, text: async () => (typeof body === 'string' ? body : JSON.stringify(body)) };
+  };
+  const b = new Browser({ endpoint: 'http://127.0.0.1:9222', ignore: ['http://127.0.0.1:4000'], downloadGuardMs: 0 }, { fetchImpl, connect: async () => cdp });
+  return { b, sent, http };
+}
+
+test('browser: only a loopback endpoint; ignored tabs are never listed', async () => {
+  for (const endpoint of ['http://192.168.1.5:9222', 'https://example.test:9222', '', 'ws://127.0.0.1:9222']) assert.throws(() => new Browser({ endpoint }), /loopback/, endpoint);
+  const { b } = fakeBrowser();
+  assert.deepEqual((await b.tabs()).map((t) => t.id), ['T1', 'T2']);
+  const snap = await b.snapshot();
+  assert.equal(snap.tab.id, 'T1');
+  assert.deepEqual(snap.tabs.map((t) => t.id), ['T1', 'T2']);
+});
+
+test('browser: each pick is carried out by plain code, exactly', async () => {
+  const { b, sent, http } = fakeBrowser();
+  const cat = new Map(pageCatalog(await b.snapshot()));
+  const since = () => sent.splice(0);
+  since();
+  // Click: a real mouse click at the element's centre, with downloads denied around it.
+  await performPage(b, cat.get('page:click:1'));
+  const clicks = since();
+  assert.deepEqual(clicks.filter(([m]) => m === 'Input.dispatchMouseEvent').map(([, p]) => [p.type, p.x, p.y]), [['mouseMoved', 40, 20], ['mousePressed', 40, 20], ['mouseReleased', 40, 20]]);
+  assert.ok(clicks.some(([m, p]) => m === 'Browser.setDownloadBehavior' && p.behavior === 'deny'));
+  // A risky control is never clicked on a pick.
+  await assert.rejects(performPage(b, cat.get('page:click:3')), /needs a spoken yes/);
+  assert.ok(!since().some(([m]) => m === 'Input.dispatchMouseEvent'));
+  // Typing: the cursor goes in the field, the words are inserted, never a key like Enter.
+  await performPage(b, cat.get('page:field:2'), { slot: 'quarterly report\n' });
+  const typed = since();
+  assert.deepEqual(typed.filter(([m]) => m === 'Input.insertText').map(([, p]) => p.text), ['quarterly report']);
+  assert.ok(!typed.some(([m]) => m === 'Input.dispatchKeyEvent'));
+  // A refused field never types.
+  await assert.rejects(performPage(b, cat.get('page:refuse:6'), { slot: 'hunter2' }), /never types there/);
+  assert.ok(!since().some(([m]) => m === 'Input.insertText'));
+  // Scroll, back, read.
+  await performPage(b, cat.get('page:scroll-down'));
+  assert.deepEqual(since().filter(([m]) => m === 'Input.dispatchMouseEvent').map(([, p]) => [p.type, p.deltaY]), [['mouseWheel', 640]]);
+  await performPage(b, cat.get('page:back'));
+  assert.deepEqual(since().filter(([m]) => m === 'Page.navigateToHistoryEntry').map(([, p]) => p.entryId), [7]);
+  await assert.rejects(performPage(b, cat.get('page:forward')), /no page to go forward/);
+  assert.deepEqual(await performPage(b, cat.get('page:read')), { title: PAGE.title, text: 'Three unread messages.' });
+  // Tabs: by id, through the endpoint.
+  http.splice(0);
+  await performPage(b, cat.get('tab:switch:T2'));
+  await performPage(b, cat.get('tab:close:T2'));
+  assert.deepEqual(http.filter(([, u]) => /activate|close/.test(u)).map(([, u]) => u.replace('http://127.0.0.1:9222', '')), ['/json/activate/T2', '/json/close/T2']);
+  // Opening a listed site goes to this window, never a file or another scheme.
+  await b.open('https://docs.example.test/start');
+  assert.ok(http.some(([m, u]) => m === 'PUT' && u.endsWith(`/json/new?${encodeURIComponent('https://docs.example.test/start')}`)));
+  await assert.rejects(b.open('file:///etc/passwd'), /only http and https/);
+  await assert.rejects(b.open('http://127.0.0.1:4000/review'), /leaves alone/);
+  // Downloads denied for an action are allowed again, at the latest when the connection closes.
+  const d = fakeBrowser();
+  d.b.cfg.downloadGuardMs = 60000;
+  await performPage(d.b, new Map(pageCatalog(await d.b.snapshot())).get('page:click:1'));
+  await d.b.close();
+  assert.deepEqual(d.sent.filter(([m]) => m === 'Browser.setDownloadBehavior').map(([, p]) => p.behavior), ['deny', 'default']);
+});
+
+test('browser: the element is checked again when acting; a field that became a password field is refused', async () => {
+  let { b, sent } = fakeBrowser({ find: { error: 'something covers it on the page' } });
+  let cat = new Map(pageCatalog(await b.snapshot()));
+  await assert.rejects(performPage(b, cat.get('page:click:1')), /covers it/);
+  assert.ok(!sent.some(([m]) => m === 'Input.dispatchMouseEvent'));
+  ({ b, sent } = fakeBrowser({ find: { x: 1, y: 1, type: 'password', autocomplete: '', attr: '' } }));
+  cat = new Map(pageCatalog(await b.snapshot()));
+  await assert.rejects(performPage(b, cat.get('page:field:2'), { slot: 'secret' }), /password field/);
+  assert.ok(!sent.some(([m]) => m === 'Input.insertText'));
+  // The page moved on: the tab's URL is not the one the choice was made on.
+  ({ b } = fakeBrowser());
+  cat = new Map(pageCatalog(await b.snapshot()));
+  const moved = { ...cat.get('page:click:1'), tab: { ...cat.get('page:click:1').tab, url: 'https://app.example.test/other' } };
+  await assert.rejects(performPage(b, moved), /page changed/);
+});
+
+// A stand-in browser for the session: the invented page, and a record of what was done.
+function stubBrowser(snap = SNAP) {
+  const done = [];
+  return {
+    done,
+    snap,
+    snapshot: async function () {
+      return this.snap;
+    },
+    click: async (item) => {
+      if (item.risky && !item.confirmed) throw new Error('needs a spoken yes first');
+      done.push(['click', item.label, !!item.confirmed]);
+    },
+    type: async (item, text) => done.push(['type', item.label, text]),
+    scroll: async (item) => done.push(['scroll', item.dir]),
+    read: async () => ({ title: 'Inbox', text: 'Three unread messages.' }),
+    open: async (url) => done.push(['open', url]),
+    close() {},
+  };
+}
+
+function browserSession(browser) {
+  const c = config({ browser: { enabled: true } });
+  const notes = [];
+  const logs = [];
+  const session = new Session(c, { script: [], log: (r) => logs.push(r), browser });
+  session.provider.note = (t) => notes.push(t);
+  session.chooser.key = 'test';
+  return { session, notes, logs };
+}
+
+async function turn(session, text, { key, slot, reply } = {}) {
+  session.onSpeechStart();
+  await session.pageLoad;
+  if (key) await session.act(key, { text, p: 0.95, final: true, slot });
+  session.provider.emit('user-text', text, true);
+  await new Promise((r) => setTimeout(r, 10));
+  // What the voice answered (its transcript), read when the turn ends.
+  if (reply) session.turn.reply = reply;
+}
+
+test('session: a risky button is named and held; only a later plain yes presses it', async () => {
+  const br = stubBrowser();
+  const { session, notes, logs } = browserSession(br);
+  // The page's choices join the catalog at the start of each turn.
+  await turn(session, 'press send', { key: 'page:click:3', reply: 'Shall I press Send?' });
+  assert.ok(session.chooser.catalog.has('page:click:3') && session.chooser.catalog.has('app:firefox'));
+  assert.ok(session.chooser.criteria['page:click:3'].includes('"Send"'));
+  assert.deepEqual(br.done, []);
+  assert.match(notes.at(-1), /"Send" sends or posts, so it is not pressed yet\. Ask the user whether to press "Send"/);
+  assert.ok(logs.some((l) => l.event === 'action-held' && l.target === 'page:click:3'));
+  await turn(session, 'yes');
+  assert.deepEqual(br.done, [['click', 'Send', true]]);
+  assert.match(notes.at(-1), /pressed "Send" after the user said yes/);
+  // Anything but a yes leaves it unpressed.
+  for (const answer of ['no wait', 'what does it do', 'yes but not yet']) {
+    await turn(session, 'delete it', { key: 'page:click:5', reply: 'Do you want me to press Delete?' });
+    await turn(session, answer);
+    assert.equal(br.done.length, 1, answer);
+    assert.match(notes.at(-1), /"Delete" was not pressed: the user did not say yes/);
+  }
+  // The yes has to come in a later turn: "delete it, yes" in one breath is not a yes to a question.
+  session.onSpeechStart();
+  await session.pageLoad;
+  await session.act('page:click:5', { text: 'delete it yes', p: 0.95, final: true });
+  session.provider.emit('user-text', 'yes', true);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(br.done.length, 1);
+  session.confirm = null;
+  // The voice did not ask (it said something else): a yes cannot be an answer to it.
+  await turn(session, 'delete it', { key: 'page:click:5', reply: 'I cannot delete things.' });
+  await turn(session, 'yes');
+  assert.equal(br.done.length, 1);
+  assert.match(notes.at(-1), /"Delete" was not pressed: it was not asked about/);
+  // A yes said over the voice's own question does not count; the question stays open.
+  await turn(session, 'press send', { key: 'page:click:3', reply: 'Press Send?' });
+  session.lastReplyAudio = performance.now() + 1000;
+  await turn(session, 'yes');
+  assert.equal(br.done.length, 1);
+  assert.ok(session.confirm);
+  session.lastReplyAudio = 0;
+  // Too late: after confirmSec.
+  session.confirm.at -= 31000;
+  await turn(session, 'yes');
+  assert.equal(br.done.length, 1);
+  assert.match(notes.at(-1), /the yes came too late/);
+  // The page changed between the question and the yes: not pressed.
+  await turn(session, 'press send', { key: 'page:click:3', reply: 'Should I press Send?' });
+  br.snap = { ...SNAP, tab: { ...SNAP.tab, url: 'https://app.example.test/elsewhere' } };
+  await turn(session, 'yes');
+  assert.equal(br.done.length, 1);
+  assert.match(notes.at(-1), /the page changed/);
+  session.close();
+});
+
+test('session: plain browser picks act at once, a secret field is refused aloud, and reading gives the voice the page', async () => {
+  const br = stubBrowser();
+  const { session, notes } = browserSession(br);
+  await turn(session, 'click compose', { key: 'page:click:1' });
+  await turn(session, 'type quarterly report in the search', { key: 'page:field:2', slot: 'quarterly report' });
+  await turn(session, 'scroll down', { key: 'page:scroll-down' });
+  assert.deepEqual(br.done, [['click', 'Compose', false], ['type', 'Search mail', 'quarterly report'], ['scroll', 1]]);
+  assert.match(notes[0], /Browser helper: clicked "Compose" for the user/);
+  await turn(session, 'type my password', { key: 'page:refuse:6', slot: 'hunter2' });
+  assert.equal(br.done.length, 3);
+  assert.match(notes.at(-1), /"Password" is a password field; voice mode never types there/);
+  await turn(session, 'read me this page', { key: 'page:read' });
+  assert.match(notes.at(-1), /the page says .*Three unread messages/);
+  assert.deepEqual((await session.desktopResult()).page_says, 'Inbox: Three unread messages.');
+  // With browser control on, a listed site opens in that window.
+  await session.act('site:mail', { text: 'open mail', p: 0.95, final: true });
+  assert.deepEqual(br.done.at(-1), ['open', 'https://mail.example.com']);
+  session.close();
+});
+
+test('do: the assistant can use the page, but a risky button is never pressed without a spoken yes', async () => {
+  const c = config({ browser: { enabled: true } });
+  const records = new Records(c);
+  const catalog = buildCatalog(c, records, KDE);
+  const br = stubBrowser();
+  const fetchImpl = async (url, init) => {
+    const body = JSON.parse(init.body);
+    const crit = body.questions.target.criteria;
+    const heard = body.state.heard_so_far;
+    let choice = 'none';
+    if (crit['s1-3']) choice = Object.keys(crit).find((k) => crit[k] === '"release notes"') || 'none';
+    else if (/send/.test(heard)) choice = 'page:click:3';
+    else if (/search/.test(heard)) choice = 'page:field:2';
+    return { ok: true, json: async () => ({ answers: { target: { choice, probabilities: { [choice]: 0.97 } } } }) };
+  };
+  const chooser = () => {
+    const ch = new Chooser(c, catalog, { fetchImpl });
+    ch.key = 'test';
+    return ch;
+  };
+  let r = await doRequest(c, 'press send', { records, catalog, chooser: chooser(), browser: br });
+  assert.equal(r.key, 'page:click:3');
+  assert.match(r.error, /pressed only after the user's spoken yes/);
+  assert.deepEqual(br.done, []);
+  r = await doRequest(c, 'search release notes', { records, catalog, chooser: chooser(), browser: br });
+  assert.equal(r.done, 'typed "release notes" into "Search mail" on the page');
+  assert.deepEqual(br.done, [['type', 'Search mail', 'release notes']]);
+});
+
+test('instructions: the browser rule is there only with browser control on', () => {
+  const records = new Records(config());
+  assert.ok(!instructionsFor(config(), records).includes('browser helper'));
+  assert.match(instructionsFor(config({ browser: { enabled: true } }), records), /A browser helper also acts .* pressed only when the user then answers yes/);
 });
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));

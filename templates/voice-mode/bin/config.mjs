@@ -47,6 +47,8 @@ export const DEFAULTS = {
       keyFile: '',
       threshold: 0.9,
       finalThreshold: 0.7,
+      // A browser button that sends or changes something is only asked about when picked.
+      askThreshold: 0.5,
       timeoutMs: 3000,
     },
     // One line per decision in logs/decisions.log (what was chosen, how sure, how fast;
@@ -71,6 +73,13 @@ export const DEFAULTS = {
     documents: path.join(os.homedir(), 'Documents'),
     files: [],
   },
+  // Browser control (browser.mjs): the current page of a Chrome started for the assistant
+  // with its own profile and --remote-debugging-port. endpoint must be a loopback address;
+  // tabs whose URL starts with an ignore entry are never read, switched to or closed.
+  // maxItems: links, buttons and fields offered per page; confirmSec: how long a button
+  // that sends or changes something waits for a spoken yes. With it on, listed sites and
+  // web searches open in that window.
+  browser: { enabled: false, endpoint: 'http://127.0.0.1:9222', ignore: [], maxItems: 60, confirmSec: 30, timeoutMs: 3000 },
   // Read-only sources: { name, path, about?, show? } or { name, command: [..., '{query}'], about? }.
   sources: [],
   // Where real work and deeper questions are handed over: argv with the note appended; env is added.
