@@ -1,0 +1,83 @@
+// Tests for Windows onboarding. The reproduction: a default run of install.ps1 on native
+// Windows skipped firstmate without naming it in the summary and never offered WSL. Dry runs
+// simulate Windows from Linux or macOS; on a Windows host the probes would be real, so skip.
+// Run: node --test test/windows.test.mjs
+
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { cloneUrl, linuxUserName, resumeCommand } from '../modules/wsl/module.mjs';
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const skip = process.platform === 'win32' && 'simulates Windows from another system';
+
+function install(platform, ...args) {
+  const r = spawnSync(
+    process.execPath,
+    [path.join(repoRoot, 'lib/installer.mjs'), '--dry-run', '--yes', '--platform', platform, '--answers', path.join(repoRoot, 'answers.example.env'), ...args],
+    { encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' }, stdin: 'ignore' },
+  );
+  return { code: r.status, out: r.stdout + r.stderr };
+}
+
+const summaryOf = (out) => out.slice(out.indexOf('\nSummary'));
+const literal = (text) => new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+
+test('a default Windows run names firstmate in the summary and says how to get it', { skip }, () => {
+  const { code, out } = install('windows');
+  assert.equal(code, 0, out);
+  const summary = summaryOf(out);
+  assert.match(summary, /Not set up on windows:\n\s+– firstmate: .*\.\\install\.ps1 --modules wsl/);
+  assert.match(out, /winget install --id Anthropic\.Claude -e/, 'the Windows-only path installs the Claude desktop app');
+});
+
+test('the wsl module plans WSL, Ubuntu, a Linux user and the full setup inside it', { skip }, () => {
+  const { code, out } = install('windows', '--modules', 'wsl');
+  assert.equal(code, 0, out);
+  const order = [
+    /Start-Process wsl\.exe -ArgumentList '--install','--no-distribution' -Verb RunAs/,
+    /one-time sign-in entry that runs: powershell\.exe .*install\.ps1" --modules wsl --yes/,
+    /wsl\.exe --install -d Ubuntu --no-launch/,
+    /wsl\.exe -u root -e bash -lc 'id -u \S+ .*adduser/,
+    /apt-get install -y git curl/,
+    literal('git clone https://github.com/ammfed/ai-workstation-setup ~/ai-workstation-setup'),
+    /sudo -v && .*\.\/install\.sh --yes/,
+  ];
+  let at = 0;
+  for (const re of order) {
+    const m = out.slice(at).match(re);
+    assert.ok(m, `missing, or out of order: ${re}\n${out}`);
+    at += m.index + m[0].length;
+  }
+  assert.doesNotMatch(summaryOf(out), /Not set up on windows/, 'firstmate is set up inside WSL, so nothing is missed');
+});
+
+test('the wsl module is only offered on Windows', { skip }, () => {
+  for (const os of ['linux', 'macos', 'wsl']) {
+    const { code, out } = install(os, '--modules', 'wsl');
+    assert.equal(code, 0, out);
+    assert.match(summaryOf(out), /wsl\s+unsupported/, os);
+  }
+});
+
+test('install.ps1 asks one question only when nothing else says what to do', () => {
+  const ps1 = fs.readFileSync(path.join(repoRoot, 'install.ps1'), 'utf8');
+  assert.match(ps1, /'\^\(1\|\)\$' \{ \$forward = @\('--modules', 'wsl', '--yes'\) \+ \$argv/, 'the recommended choice (and Enter) runs the wsl module unattended');
+  assert.match(ps1, /'\^2\$' \{ \$forward = @\('--yes'\) \+ \$argv/, 'Windows only runs with defaults');
+  assert.match(ps1, /@forward/);
+  for (const flag of ['--yes', '--modules', '--answers', '--list', '--help']) assert.ok(ps1.includes(`'${flag}'`), `${flag} skips the question`);
+});
+
+test('helpers: Linux user name, resume command length, clone URL', () => {
+  assert.equal(linuxUserName('Jane.Doe'), 'janedoe');
+  assert.equal(linuxUserName('1st User'), 'stuser');
+  assert.equal(linuxUserName('日本'), 'user');
+  assert.match(resumeCommand('C:\\Users\\me\\ai-workstation-setup'), /^powershell\.exe .* --modules wsl --yes$/);
+  assert.equal(resumeCommand(`C:\\${'x'.repeat(260)}`), null, 'Windows ignores a sign-in entry over 260 characters');
+  assert.equal(cloneUrl('https://github.com/someone/ai-workstation-setup.git'), 'https://github.com/someone/ai-workstation-setup.git');
+  assert.equal(cloneUrl(null), 'https://github.com/ammfed/ai-workstation-setup');
+  assert.equal(cloneUrl('C:\\local\\copy'), 'https://github.com/ammfed/ai-workstation-setup');
+});

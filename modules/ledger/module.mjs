@@ -125,7 +125,7 @@ export default {
   description: 'Opt-in: an always-on service that records what you say and decide and each status line, with a Now page rebuilt within seconds',
   order: 91,
   platforms: ['linux', 'macos', 'wsl'],
-  unsupported: { windows: 'it reads Firstmate homes, and Firstmate runs on Linux, macOS or WSL; install this module inside WSL' },
+  unsupported: { windows: 'it reads Firstmate homes, and Firstmate runs on Linux, macOS or WSL; set up WSL with .\\install.ps1 --modules wsl and add this module there' },
   requires: ['core'],
   default: false,
   questions: [

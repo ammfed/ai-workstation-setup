@@ -24,7 +24,7 @@ const TARGETS = {
   firstmate: {
     label: "firstmate - seed firstmate's local preferences file (data/captain.md in your firstmate clone)",
     file: (ctx) => ctx.path(ctx.get('FIRSTMATE_DIR') || '~/firstmate', 'data/captain.md'),
-    unsupported: { windows: 'firstmate runs in WSL; run ./install.sh inside WSL for this target' },
+    unsupported: { windows: 'firstmate runs in WSL; .\\install.ps1 --modules wsl sets it up there with this target' },
   },
 };
 
