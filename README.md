@@ -23,12 +23,18 @@ cd ai-workstation-setup
 ./install.sh             # pick modules, answer questions, install
 ```
 
-**Windows (PowerShell)**
+**Windows (PowerShell)** (no Git yet? download the ZIP from GitHub and unpack it)
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\install.ps1 --dry-run
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
+
+It asks one question. **Linux inside Windows** (recommended) installs WSL and Ubuntu
+the way Microsoft documents it (`wsl --install`), carries on by itself after a restart if
+Windows needs one, and then runs the whole setup inside Ubuntu, Firstmate included.
+**Windows only** installs Claude Code (command line and desktop app) and every module that
+runs on Windows. Either way, every dependency is installed without asking again; Windows
+asks once to allow the WSL install, and Ubuntu asks for your new Linux password.
 
 The only prerequisite is Node.js 20+; the entry script offers to install it
 (per-user with nvm on Linux/macOS, with winget on Windows). You pick modules, every
@@ -59,19 +65,20 @@ diverged, it stops, explains, and changes nothing. See
 | Module | What it sets up | Linux | macOS | WSL | Windows |
 | --- | --- | :-: | :-: | :-: | :-: |
 | `core` | git, Node.js check, GitHub CLI (and sign-in), jq | ✓ | ✓ | ✓ | ✓ |
-| `claude-code` | Claude Code; model, effort (also per model), theme, thinking summaries, Remote Control, view, auto-compact; ccstatusline or usage-gauges status line; diagram-design plugin; context and after-compaction reminders | ✓ | ✓ | ✓ | ✓ |
+| `claude-code` | Claude Code (and the Claude desktop app on Windows); model, effort (also per model), theme, thinking summaries, Remote Control, view, auto-compact; ccstatusline or usage-gauges status line; diagram-design plugin; context and after-compaction reminders | ✓ | ✓ | ✓ | ✓ |
 | `agent-clis` | gh-axi, chrome-devtools-axi, lavish-axi, tasks-axi, quota-axi, ctx7, no-mistakes, treehouse; optional notion-axi, gws-axi, herdr, Codex, Antigravity, Composio (not native Windows), mermaid-ascii, pixel-agents; session hooks; `research-browser` launcher (not native Windows) | ✓ | ✓ | ✓ | ✓ |
 | `mcp-servers` | Optional context7, chrome-devtools and TickTick MCP servers for Claude Code | ✓ | ✓ | ✓ | ✓ |
 | `skills` | Claude Code skills: kun, grill-me, grilling, teach, to-questionnaire, find-docs; optional no-mistakes, composio-cli | ✓ | ✓ | ✓ | ✓ |
 | `backpass` | Opt-in [backpass](https://github.com/kunchenguid/backpass) behind a privacy gate: project allowlist, denylist check before any model call, one pinned model, never auto-applies; optional schedule (cron) | ✓ | ✓ | ✓ | ✓ |
-| `firstmate` | Upstream Firstmate clone plus its local config: backend, harnesses, permission mode, backlog, dispatch profiles, tool update watch | ✓ | ✓ | ✓ | – (use WSL) |
+| `firstmate` | Upstream Firstmate clone plus its local config: backend, harnesses, permission mode, backlog, dispatch profiles, tool update watch | ✓ | ✓ | ✓ | via `wsl` |
 | `preferences` | How your agents work, as a rules file: language and tone, reporting, decisions, review pages, fleet workflow, ideas, model use, research, safety; [guide](docs/working-preferences.md), [review pages](docs/review-pages.md) | ✓ | ✓ | ✓ | ✓ |
 | `second-brain` | Markdown vault: life-area and fixed-type entity folders, note contract, provenance rules, eight note templates, map/checker/ingest/housekeeping scripts, obsidian-axi wiring; [design notes](docs/second-brain.md) | ✓ | ✓ | ✓ | ✓ |
 | `clickup` | clickup-axi (checksum-verified release binary), skill, session hook, default list; [structure guide](docs/clickup-structure.md) | ✓ | ✓ | ✓ | ✓ |
 | `extras` | Optional docling (documents to markdown) and OpenWhispr (voice dictation) | ✓ | ✓ | app on Windows side | ✓ |
 | `daily-sync` | Opt-in daily job: fast-forwards clean repos, runs the vault ingest (failing loudly on a missing raw folder), checks tool updates, reads ClickUp and TickTick for drift; model calls only for new drift; one short report, FAILED when a run fails or is missed; [guide](docs/daily-sync.md) | ✓ | ✓ | ✓ | schedule by hand |
 | `voice-mode` | Opt-in speech-to-speech with your assistant: OpenAI Realtime or Gemini Live (one config line), answers from your records read-only and a live briefing of your assistant's current conversation and work (redacted), hands deeper questions and real work to your assistant and speaks the answer when it comes back, controls the PC mid-sentence via a fast decision model choosing from a fixed list (open apps, sites, folders and records; switch and arrange windows; volume, media, brightness, screenshot, lock; notes, web search, typing; never deleting, sending or closing); optional browser control of a Chrome started for the assistant (click, type into a field, scroll, back, tabs, read the page; anything that sends, deletes, pays or signs in waits for a spoken yes, and password, payment and identity fields are never typed into); records looked up before anything is handed off, and a conversation that stays open until a handed-off answer is spoken; `voice-mode do` and `voice-mode say` let your assistant use the same desktop actions and voice; one conversation per hotkey press (on, then off), talk over a reply to cut in (echo cancellation), a floating orb that moves with the voices, measured latency; [guide](docs/voice-mode.md) | ✓ | ✓ | – | – |
-| `ledger` | Opt-in always-on service: one append-only record of your messages, rulings and every Firstmate status line and inbox note, with secrets redacted, and a live Now page (waiting on you, in flight, latest words, latest status) rebuilt within seconds; [guide](docs/ledger.md) | ✓ | ✓ | ✓ | – (use WSL) |
+| `ledger` | Opt-in always-on service: one append-only record of your messages, rulings and every Firstmate status line and inbox note, with secrets redacted, and a live Now page (waiting on you, in flight, latest words, latest status) rebuilt within seconds; [guide](docs/ledger.md) | ✓ | ✓ | ✓ | – (inside WSL) |
+| `wsl` | Opt-in on Windows (the recommended first choice): WSL with Ubuntu via Microsoft's `wsl --install`, a Linux user, resuming after a restart, then this whole setup inside Ubuntu | – | – | – | ✓ |
 | `terminal` | Optional WezTerm and a translucent theme in `~/.wezterm.lua` | ✓ | ✓ | config only | ✓ |
 
 `./install.sh --list` prints the same from the modules themselves. A module that

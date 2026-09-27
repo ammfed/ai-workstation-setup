@@ -39,6 +39,13 @@ export default {
   default: true,
   questions: [
     {
+      key: 'CLAUDE_DESKTOP',
+      type: 'confirm',
+      message: 'Also install the Claude desktop app (its Code tab runs Claude Code)?',
+      default: true,
+      when: (ctx) => ctx.os === 'windows',
+    },
+    {
       key: 'CLAUDE_MODEL',
       type: 'choice',
       message: 'Default model',
@@ -146,6 +153,15 @@ export default {
       }),
     );
     if (state === 'installed') ctx.todo('run `claude` once and sign in');
+
+    // Anthropic's installer, published to winget as Anthropic.Claude (https://code.claude.com/docs/en/desktop).
+    if (ctx.os === 'windows' && ctx.get('CLAUDE_DESKTOP')) {
+      await ctx.step('Claude desktop app', () => {
+        if ((ctx.capture('winget list --id Anthropic.Claude -e') || '').includes('Anthropic.Claude')) return ctx.ok('Claude desktop app already installed');
+        ctx.run('winget install --id Anthropic.Claude -e --accept-source-agreements --accept-package-agreements');
+        ctx.todo('open the Claude app once, sign in, and pick the Code tab');
+      });
+    }
 
     await ctx.step('settings', () =>
       ctx.updateJson(

@@ -1,14 +1,35 @@
 # install.ps1 - entry point on native Windows.
 #
-# The installer itself is lib/installer.mjs and needs Node.js 20+. This script
-# only makes sure Node exists (offering to install it with winget), then hands
-# every argument over. Run:  powershell -ExecutionPolicy Bypass -File .\install.ps1 --help
+# The installer itself is lib/installer.mjs and needs Node.js 20+. Run with no
+# options, this script asks one question (Linux inside Windows, Windows only, or
+# choose each step), makes sure Node exists (installing it with winget), then
+# hands every argument over. Run:  powershell -ExecutionPolicy Bypass -File .\install.ps1 --help
 
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $nodeMin = 20
-$dryRun = $args -contains '--dry-run'
-$assumeYes = ($args -contains '--yes') -or ($args -contains '-y') -or ($args -contains '--non-interactive')
+$argv = @($args)
+$forward = $argv
+$dryRun = $argv -contains '--dry-run'
+$assumeYes = ($argv -contains '--yes') -or ($argv -contains '-y') -or ($argv -contains '--non-interactive')
+
+# One question up front when nothing else says what to do. Either setup choice is the only
+# yes needed: every dependency is then installed without asking again.
+$chosen = @('--yes', '-y', '--non-interactive', '--modules', '--answers', '--list', '--help', '-h', '--platform') | Where-Object { $argv -contains $_ }
+if (-not $chosen) {
+    Write-Host 'How should this machine be set up?'
+    Write-Host '  1) Linux inside Windows (recommended): installs WSL and Ubuntu, then everything inside it, firstmate included'
+    Write-Host '  2) Windows only: Claude Code (command line and desktop app) and every tool that runs on Windows'
+    Write-Host '  3) Let me pick modules and answer each question'
+    Write-Host '  q) Stop'
+    $reply = Read-Host 'Choice [1]'
+    switch -Regex ($reply.Trim()) {
+        '^(1|)$' { $forward = @('--modules', 'wsl', '--yes') + $argv; $assumeYes = $true }
+        '^2$' { $forward = @('--yes') + $argv; $assumeYes = $true }
+        '^3$' { }
+        default { Write-Host 'Nothing was changed.'; exit 0 }
+    }
+}
 
 function Get-NodeMajor {
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) { return 0 }
@@ -39,5 +60,5 @@ if ((Get-NodeMajor) -lt $nodeMin) {
     }
 }
 
-& node (Join-Path $here 'lib/installer.mjs') @args
+& node (Join-Path $here 'lib/installer.mjs') @forward
 exit $LASTEXITCODE

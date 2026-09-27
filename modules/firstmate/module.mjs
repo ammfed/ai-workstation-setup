@@ -74,7 +74,7 @@ export default {
   description: 'Firstmate agent-fleet supervisor: upstream clone plus your config choices',
   order: 60,
   platforms: ['linux', 'macos', 'wsl'],
-  unsupported: { windows: 'firstmate supports macOS and Linux only; install WSL and run ./install.sh inside it' },
+  unsupported: { windows: 'firstmate needs Linux; .\\install.ps1 --modules wsl sets up WSL and installs it there' },
   requires: ['core', 'agent-clis'],
   default: true,
   questions: [
