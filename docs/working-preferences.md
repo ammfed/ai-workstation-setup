@@ -9,7 +9,7 @@ Where it writes (`PREFS_TARGETS`):
 | Target | File | Loaded by |
 | --- | --- | --- |
 | `claude` | `~/.claude/rules/working-preferences.md` | Claude Code, as user rules in every project |
-| `firstmate` | `data/captain.md` in your firstmate clone (the file firstmate reads for preferences) | Firstmate, at session start |
+| `firstmate` | `data/captain.md` in your Firstmate home (`FIRSTMATE_HOME`, else the clone; the file firstmate reads for preferences) | Firstmate, at session start |
 
 The file is yours: edit it freely. Re-running the installer asks before replacing a
 changed file and keeps a timestamped backup.
@@ -34,7 +34,7 @@ changed file and keeps a timestamped backup.
 
 | Key | Default | Rule |
 | --- | --- | --- |
-| `PREFS_STATUS` | `board` | Status replies open with one table whose three columns, TODO, DOING and DONE, sit side by side (never three stacked lists or rows), then brief action items grouped by who acts. `brief` opens with a one-line answer instead. |
+| `PREFS_STATUS` | `actions` | A status request gets a very short list of action items, yours first, then a pointer to the full report. `board` opens with one table whose three columns, TODO, DOING and DONE, sit side by side, then brief action items grouped by who acts; `brief` opens with a one-line answer instead. |
 | `PREFS_HONEST_NUMBERS` | yes | Uncertain numbers are ranges or "not yet known"; charts are plain bars or small multiples, never radar or gauges. |
 | `PREFS_LINK_DELIVERABLES` | yes | Every finished item links to its output: a URL, or an absolute path for a local file. |
 | `PREFS_DAILY_CHECK` | yes | Once a day, a nothing-forgotten check: uncollected review answers, anything waiting longer than `PREFS_STALE_DAYS` (default 2), and standing rules with no evidence they ran. Each item is verified before it is called dropped. |
@@ -85,7 +85,7 @@ The first two apply with `PREFS_DECISIONS=cards`; the starter page already follo
 
 | Key | Default | Rule |
 | --- | --- | --- |
-| `PREFS_MODEL_ROUTING` | `economical` | Low effort by default, medium for planning, design and hard reasoning, the most capable model for building. `balanced` raises each step. |
+| `PREFS_MODEL_ROUTING` | `capable` | The most capable model at medium effort for all work, with user-facing frontend and visual design on the model strongest at design. `economical`: low effort by default, medium for planning, design and hard reasoning, the most capable model for building. `balanced` raises each step. |
 | `PREFS_QUOTA` | yes | Check subscription limits with `quota-axi` before heavy work and take the cheapest path. |
 | `PREFS_DELEGATE_RETRIEVAL` | `agy` if chosen in agent-clis | Bulk reading and fetching go to this secondary agent CLI; decisions and code changes stay with the main agent. Empty for none. |
 
@@ -93,7 +93,7 @@ The first two apply with `PREFS_DECISIONS=cards`; the starter page already follo
 
 | Key | Default | Rule |
 | --- | --- | --- |
-| `PREFS_RESEARCH_BROWSER` | `separate` | Web research happens in the agent's own visible browser, never yours; one tab per task, closed when done. |
+| `PREFS_RESEARCH_BROWSER` | `separate` | Web research happens in the agent's own visible browser, never yours; one tab per task, closed when done, and never a tab the agent did not open. |
 | `PREFS_SOURCE_QUALITY` | yes | Each source is named by type (official docs, standards body, report, vendor page, forum); low-quality sources are skipped; existing software comes before general write-ups. |
 | `PREFS_FINDINGS_TO_CHANGE` | yes | Research ends in a change you can see or a decision you can make, not only a report. |
 | `PREFS_VERIFY_USER_CLAIMS` | yes | Tools and facts you mention in passing are checked before they are relied on, and options are compared before large installs. |
@@ -106,6 +106,9 @@ The first two apply with `PREFS_DECISIONS=cards`; the starter page already follo
 | `PREFS_VERIFY_CAUSE` | yes | No guessed causes: a failure's cause is named only when checked, otherwise "cause unknown". |
 | `PREFS_PAUSE_WORD` | `pause` | Saying this word stops every running agent until you say resume. Empty for none. |
 | `PREFS_STOP_DIGGING` | yes | A problem is confirmed from evidence before its cause is hunted; after about two checks that find nothing, the agent reports what is known. |
+| `PREFS_BLOCKED_COMMANDS` | yes | A permission check that blocks an install, schedule, service change, push or pull request is never worked around; the agent records the exact one-line command for you and carries on. |
+| `PREFS_PRIVATE_STAYS_LOCAL` | yes | Private chats and anything captured from your own sessions never go to an outside model or service. |
+| `PREFS_PUBLIC_REPOS` | yes | In public repositories: a no-reply commit identity, no email trailers, pull request text that names nothing private, and a privacy scan before every push. |
 
 Always included: no secrets or personal data anywhere, only genuine decisions brought
 to you, and saying plainly when something was reasoned about rather than tested.

@@ -19,12 +19,13 @@ const SKILLS = [
     },
   },
 ];
-const DEFAULTS = ['kun', 'grill-me', 'grilling', 'teach', 'to-questionnaire', 'find-docs'];
+// The default set is the one in daily use; grill-me and to-questionnaire stay available as options.
+const DEFAULTS = ['kun', 'grilling', 'teach', 'find-docs'];
 
 export default {
   name: 'skills',
   title: 'Agent skills',
-  description: 'Claude Code skills: kun, grill-me, grilling, teach, to-questionnaire, find-docs, no-mistakes, composio-cli',
+  description: 'Claude Code skills: kun, grilling, teach, find-docs; grill-me, to-questionnaire, no-mistakes, composio-cli',
   order: 50,
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],

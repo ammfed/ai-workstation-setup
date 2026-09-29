@@ -11,12 +11,26 @@ const PLUGINS = [
     marketplaceName: 'diagram-design',
     id: 'diagram-design@diagram-design',
   },
+  {
+    // github.com/kunchenguid/compact-adviser README "Claude Code": a function-hooks module, so it
+    // only runs with CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1. It asks TypeSafe's Jev model whether the
+    // session is at a safe point to /compact; installing it is consent to send that checkpoint context.
+    value: 'compact-adviser',
+    label: 'compact-adviser - hints when the session is at a safe point to /compact (sends checkpoint context to TypeSafe; needs a TypeSafe key)',
+    marketplace: 'kunchenguid/compact-adviser',
+    marketplaceName: 'compact-adviser',
+    id: 'compact-adviser@compact-adviser',
+    env: { CLAUDE_CODE_ENABLE_FUNCTION_HOOKS: '1' },
+    unsupported: { windows: 'compact-adviser supports macOS and Linux; use it inside WSL' },
+    options: { mode: 'hint' },
+    todo: 'compact-adviser: set TYPESAFE_API_KEY (https://console.typesafe.ai/settings/keys) in your environment or save it with /compact-adviser',
+  },
 ];
 
 const keep = { value: 'keep', label: 'keep (Claude Code default, or what you already set)' };
 const EFFORTS = ['low', 'medium', 'high', 'xhigh'];
 
-// "claude-opus-5=medium, claude-sonnet-5=low" -> { 'claude-opus-5': 'medium', ... }
+// "claude-opus-5-5=xhigh, claude-sonnet-5-5=low" -> { 'claude-opus-5-5': 'xhigh', ... }
 export function parseModelEfforts(text) {
   const out = {};
   for (const pair of String(text || '').split(',').map((s) => s.trim()).filter(Boolean)) {
@@ -50,7 +64,25 @@ export default {
       type: 'choice',
       message: 'Default model',
       default: 'keep',
-      choices: [keep, { value: 'opus', label: 'opus - most capable' }, { value: 'sonnet', label: 'sonnet - balanced' }, { value: 'haiku', label: 'haiku - fastest' }],
+      choices: [
+        keep,
+        { value: 'opus', label: 'opus - most capable' },
+        { value: 'opus[1m]', label: 'opus[1m] - most capable, with the 1M-token context window' },
+        { value: 'sonnet', label: 'sonnet - balanced' },
+        { value: 'haiku', label: 'haiku - fastest' },
+      ],
+    },
+    {
+      key: 'CLAUDE_PERMISSION_MODE',
+      type: 'choice',
+      message: 'Default permission mode',
+      default: 'keep',
+      choices: [
+        keep,
+        { value: 'auto', label: 'auto - a classifier reviews each action and asks only about risky ones' },
+        { value: 'default', label: 'default - ask before edits and commands' },
+        { value: 'acceptEdits', label: 'acceptEdits - accept file edits, ask before commands' },
+      ],
     },
     {
       key: 'CLAUDE_EFFORT',
@@ -87,7 +119,7 @@ export default {
     {
       key: 'CLAUDE_MODEL_EFFORTS',
       type: 'text',
-      message: 'Default effort per model, like "claude-opus-5=medium, claude-sonnet-5=low" (levels: low, medium, high, xhigh; empty to keep)',
+      message: 'Default effort per model, like "claude-opus-5-5=xhigh, claude-sonnet-5-5=low" (levels: low, medium, high, xhigh; empty to keep)',
       default: '',
     },
     {
@@ -171,6 +203,11 @@ export default {
             const v = ctx.get(answer);
             if (v && v !== 'keep') s[key] = v;
           }
+          const mode = ctx.get('CLAUDE_PERMISSION_MODE');
+          if (mode && mode !== 'keep') {
+            s.permissions ??= {};
+            s.permissions.defaultMode = mode;
+          }
           const thinking = ctx.get('CLAUDE_THINKING_SUMMARIES');
           if (thinking && thinking !== 'keep') s.showThinkingSummaries = thinking === 'show';
           for (const [model, effortLevel] of Object.entries(parseModelEfforts(ctx.get('CLAUDE_MODEL_EFFORTS')))) {
@@ -190,7 +227,7 @@ export default {
             s.autoCompactWindow = tokens;
           }
         },
-        'model, effort, theme, thinking summaries, Remote Control, view and auto-compact',
+        'model, effort, theme, permission mode, thinking summaries, Remote Control, view and auto-compact',
       ),
     );
 
@@ -231,13 +268,35 @@ export default {
     }
 
     for (const p of PLUGINS.filter((pl) => ctx.get('CLAUDE_PLUGINS').includes(pl.value))) {
+      const unsupported = ctx.forOs(p.unsupported);
+      if (unsupported) {
+        await ctx.step(`plugin ${p.value}`, () => {
+          throw new Skip(unsupported);
+        });
+        continue;
+      }
       await ctx.step(`plugin ${p.value}`, () => {
         if (readSettings(ctx).enabledPlugins?.[p.id]) return ctx.ok(`plugin ${p.value} already enabled`);
         if (!ctx.dryRun && !ctx.has('claude')) throw new Skip('`claude` is not on PATH yet; open a new terminal and re-run');
         const marketplaces = ctx.capture('claude plugin marketplace list') || '';
         if (!marketplaces.includes(p.marketplaceName)) ctx.run(`claude plugin marketplace add ${p.marketplace}`);
         ctx.run(`claude plugin install ${p.id}`);
+        if (p.todo) ctx.todo(p.todo);
       });
+      for (const [key, value] of Object.entries(p.env || {})) await ctx.step(`${p.value} ${key}`, () => ctx.setUserEnv(key, value));
+      if (p.options) {
+        await ctx.step(`${p.value} options`, () =>
+          ctx.updateJson(
+            settingsPath(ctx),
+            (s) => {
+              s.pluginConfigs ??= {};
+              // Only a starting point: options you already set are kept.
+              s.pluginConfigs[p.id] = { ...s.pluginConfigs[p.id], options: { ...p.options, ...s.pluginConfigs[p.id]?.options } };
+            },
+            `${p.value} options`,
+          ),
+        );
+      }
     }
 
     if (ctx.get('CLAUDE_CONTEXT_REMINDER')) {

@@ -12,3 +12,5 @@ Merge pull request #1 from ammfed/fm/setup-template-repo
 data/captain.md
 # launchd's plist key for a job's command line (daily-sync module, macOS).
 <key>ProgramArguments</key>
+# The repo owner's public Lavish Library app, installed by the extras module.
+github.com/ammfed/lavish-library

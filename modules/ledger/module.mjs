@@ -148,7 +148,7 @@ export default {
       type: 'text',
       path: true,
       message: 'Your main Firstmate home (the folder holding state/ and data/; FM_HOME when you set one)',
-      default: (ctx) => process.env.FM_HOME || ctx.values.FIRSTMATE_DIR || '~/firstmate',
+      default: (ctx) => ctx.values.FIRSTMATE_HOME || process.env.FM_HOME || ctx.values.FIRSTMATE_DIR || '~/firstmate',
     },
     {
       key: 'LEDGER_SESSIONS',

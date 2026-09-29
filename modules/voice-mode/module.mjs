@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Skip } from '../../lib/context.mjs';
+import { keyFile as openrouterKeyFile } from '../openrouter/module.mjs';
 
 // Speech-to-speech voice mode for your assistant: talk, hear it answer in real time from its
 // own records (read-only), hand real work to its inbox, and open apps, sites, folders and
@@ -71,7 +72,11 @@ function buildConfig(ctx) {
     actions: {
       enabled: ctx.get('VOICE_ACTIONS'),
       documents: ctx.get('VOICE_DOCUMENTS'),
-      chooser: { keyFile: ctx.get('VOICE_ACTIONS_KEY_FILE') },
+      // The openrouter module, when picked, sets the decision model (its OPENROUTER_MODEL).
+      chooser: {
+        keyFile: ctx.get('VOICE_ACTIONS_KEY_FILE'),
+        ...((ctx.values.MODULES || []).includes('openrouter') && ctx.get('OPENROUTER_MODEL') ? { model: ctx.get('OPENROUTER_MODEL') } : {}),
+      },
     },
     ...(ctx.get('VOICE_ACTIONS') && ctx.get('VOICE_BROWSER') ? { browser: { enabled: true, endpoint: ctx.get('VOICE_BROWSER') } } : {}),
   };
@@ -142,7 +147,10 @@ export default {
       type: 'text',
       message: 'Files and folders it may read to answer you (comma-separated; read-only)',
       // Firstmate keeps its records in <home>/data; its home is the clone unless FM_HOME says otherwise.
-      default: (ctx) => (ctx.values.FIRSTMATE_DIR ? path.join(ctx.values.FIRSTMATE_DIR, 'data') : ''),
+      default: (ctx) => {
+        const home = ctx.values.FIRSTMATE_HOME || ctx.values.FIRSTMATE_DIR;
+        return home ? path.join(home, 'data') : '';
+      },
     },
     { key: 'VOICE_VAULT_SEARCH', type: 'confirm', message: 'Also search your notes vault with obsidian-axi?', default: (ctx) => 'VAULT_PATH' in ctx.values },
     {
@@ -157,7 +165,7 @@ export default {
       type: 'text',
       path: true,
       message: 'Env file that holds OPENROUTER_API_KEY for the decision model (read at run time, never copied; empty: from the environment)',
-      default: '',
+      default: (ctx) => ((ctx.values.MODULES || []).includes('openrouter') ? openrouterKeyFile(ctx) : ''),
       when: (ctx) => ctx.get('VOICE_ACTIONS'),
     },
     { key: 'VOICE_DOCUMENTS', type: 'text', path: true, message: 'Documents folder whose folders it may open', default: '~/Documents', when: (ctx) => ctx.get('VOICE_ACTIONS') },

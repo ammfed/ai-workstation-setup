@@ -10,7 +10,7 @@ A public, cross-platform installer template. `install.sh` (Linux, macOS, WSL) an
   (start from `answers.example.env`). Unknown keys are reported.
 - Always `--dry-run` first. `--platform linux|macos|wsl|windows` simulates another
   OS, only with `--dry-run`; that is how every platform's plan is tested on one machine.
-- Secrets come only from environment variables (`CLICKUP_TOKEN`, `CONTEXT7_API_KEY`)
+- Secrets come only from environment variables (`CLICKUP_TOKEN`, `CONTEXT7_API_KEY`, `OPENROUTER_API_KEY`)
   or hidden prompts, never answers files.
 - Exit status: 0 ok, 1 a step failed (see the summary), 2 usage or config error.
 - Without `--answers`, `answers.env` (gitignored) is read and, on a real run, saved back
@@ -69,7 +69,7 @@ run on the user's machine, not here, so keep them free of dependencies and cross
 ```sh
 shellcheck install.sh update.sh scripts/*.sh templates/*/*.sh
 for f in lib/*.mjs modules/*/*.mjs templates/*/bin/*.mjs; do node --check "$f"; done
-node --test test/update.test.mjs test/answers.test.mjs test/tools.test.mjs test/privacy.test.mjs test/daily-sync.test.mjs test/voice-mode.test.mjs test/ledger.test.mjs test/windows.test.mjs
+node --test test/update.test.mjs test/answers.test.mjs test/tools.test.mjs test/privacy.test.mjs test/daily-sync.test.mjs test/voice-mode.test.mjs test/ledger.test.mjs test/windows.test.mjs test/news-digest.test.mjs
 for os in linux macos wsl windows; do node lib/installer.mjs --dry-run --yes --modules all --answers answers.example.env --platform "$os"; done
 scripts/privacy-scan.sh --denylist <local denylist>
 ```

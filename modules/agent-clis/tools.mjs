@@ -1,7 +1,19 @@
+import { Skip } from '../../lib/context.mjs';
+
 // Install routes for the agent CLIs, each taken from the tool's upstream README.
 // Shared with the firstmate module, which needs some of them for its backend.
 
 const npm = (pkg) => ({ default: { npm: pkg } });
+
+// An isolated Python CLI, the way the tool's README gives it: uv first, else pipx.
+const uvTool = (pkg) => ({
+  default: (ctx) => {
+    if (ctx.dryRun && ctx.platform.simulated) return ctx.run(`uv tool install ${pkg}   (or pipx install ${pkg})`);
+    if (ctx.has('uv')) return ctx.run(`uv tool install ${pkg}`);
+    if (ctx.has('pipx')) return ctx.run(`pipx install ${pkg}`);
+    throw new Skip(`needs uv or pipx for an isolated install (https://docs.astral.sh/uv/); then: uv tool install ${pkg}`);
+  },
+});
 
 // Smallest offline proof a CLI is runnable, not only a name on PATH: it prints its own version.
 // Exported because the other modules register tools that prove themselves the same way.
@@ -121,6 +133,16 @@ export const TOOLS = {
     signIn: 'run `codex` and sign in',
     check: versionCheck('codex'),
   },
+  pi: {
+    name: 'Pi',
+    bin: 'pi',
+    about: 'Pi coding agent, a Firstmate harness (github.com/earendil-works/pi; Node 22.19+)',
+    // packages/coding-agent/README.md: npm with --ignore-scripts, which a normal install does not need scripts for.
+    install: npm('--ignore-scripts @earendil-works/pi-coding-agent'),
+    minNode: [22, 19],
+    signIn: 'run `pi` and sign in to a model provider',
+    check: versionCheck('pi'),
+  },
   agy: {
     name: 'Antigravity CLI',
     bin: 'agy',
@@ -157,6 +179,49 @@ export const TOOLS = {
     install: npm('gnhf'),
     signIn: 'gnhf --max-iterations 5 --max-tokens 2000000 "<objective>"   (run it in a clean repo; it works on a gnhf/ branch and never pushes unless given --push)',
     check: versionCheck('gnhf'),
+  },
+  ntn: {
+    name: 'ntn',
+    about: "Notion's own CLI (beta): pages, data sources, the API and workers from the terminal (developers.notion.com/cli)",
+    // developers.notion.com/cli/get-started/installation: the script on macOS and Linux, winget on Windows.
+    install: { unix: 'curl -fsSL https://ntn.dev | bash', windows: 'winget install --id Notion.ntn -e --accept-source-agreements --accept-package-agreements' },
+    pathHints: ['~/.local/bin'],
+    signIn: 'ntn login',
+    check: versionCheck('ntn'),
+  },
+  'claude-swap': {
+    name: 'claude-swap',
+    bin: 'cswap',
+    about: 'switch between several Claude Code accounts and see each one\'s usage (github.com/realiti4/claude-swap)',
+    install: uvTool('claude-swap'),
+    pathHints: ['~/.local/bin'],
+    signIn: 'cswap add   (once per Claude account, while signed in to it)',
+    check: versionCheck('cswap'),
+  },
+  notebooklm: {
+    name: 'notebooklm-mcp-cli',
+    bin: 'nlm',
+    about: 'NotebookLM for agents: the nlm CLI and an MCP server (github.com/jacob-bd/notebooklm-mcp-cli)',
+    install: uvTool('notebooklm-mcp-cli'),
+    pathHints: ['~/.local/bin'],
+    signIn: 'nlm login   (signs in with your Google account in a browser)',
+    check: versionCheck('nlm'),
+  },
+  m365: {
+    name: 'CLI for Microsoft 365',
+    bin: 'm365',
+    about: 'Microsoft 365 and SharePoint from the terminal (github.com/pnp/cli-microsoft365)',
+    install: npm('@pnp/cli-microsoft365'),
+    signIn: 'm365 setup, then m365 login',
+    check: versionCheck('m365'),
+  },
+  vercel: {
+    name: 'Vercel CLI',
+    bin: 'vercel',
+    about: 'deploy and manage Vercel projects (github.com/vercel/vercel)',
+    install: npm('vercel'),
+    signIn: 'vercel login',
+    check: versionCheck('vercel'),
   },
   composio: {
     name: 'composio',
