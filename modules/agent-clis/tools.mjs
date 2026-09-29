@@ -121,6 +121,16 @@ export const TOOLS = {
     signIn: 'run `codex` and sign in',
     check: versionCheck('codex'),
   },
+  pi: {
+    name: 'Pi',
+    bin: 'pi',
+    about: 'Pi coding agent, a Firstmate harness (github.com/earendil-works/pi; Node 22.19+)',
+    // packages/coding-agent/README.md: npm with --ignore-scripts, which a normal install does not need scripts for.
+    install: npm('--ignore-scripts @earendil-works/pi-coding-agent'),
+    minNode: [22, 19],
+    signIn: 'run `pi` and sign in to a model provider',
+    check: versionCheck('pi'),
+  },
   agy: {
     name: 'Antigravity CLI',
     bin: 'agy',

@@ -142,7 +142,10 @@ export default {
       type: 'text',
       message: 'Files and folders it may read to answer you (comma-separated; read-only)',
       // Firstmate keeps its records in <home>/data; its home is the clone unless FM_HOME says otherwise.
-      default: (ctx) => (ctx.values.FIRSTMATE_DIR ? path.join(ctx.values.FIRSTMATE_DIR, 'data') : ''),
+      default: (ctx) => {
+        const home = ctx.values.FIRSTMATE_HOME || ctx.values.FIRSTMATE_DIR;
+        return home ? path.join(home, 'data') : '';
+      },
     },
     { key: 'VOICE_VAULT_SEARCH', type: 'confirm', message: 'Also search your notes vault with obsidian-axi?', default: (ctx) => 'VAULT_PATH' in ctx.values },
     {

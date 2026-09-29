@@ -22,8 +22,8 @@ const TARGETS = {
     file: (ctx) => path.join(claudeDir(ctx), 'rules', 'working-preferences.md'),
   },
   firstmate: {
-    label: "firstmate - seed firstmate's local preferences file (data/captain.md in your firstmate clone)",
-    file: (ctx) => ctx.path(ctx.get('FIRSTMATE_DIR') || '~/firstmate', 'data/captain.md'),
+    label: "firstmate - seed firstmate's local preferences file (data/captain.md in your Firstmate home)",
+    file: (ctx) => ctx.path(ctx.get('FIRSTMATE_HOME') || ctx.get('FIRSTMATE_DIR') || '~/firstmate', 'data/captain.md'),
     unsupported: { windows: 'firstmate runs in WSL; .\\install.ps1 --modules wsl sets it up there with this target' },
   },
 };
@@ -66,8 +66,9 @@ export default {
       key: 'PREFS_STATUS',
       type: 'choice',
       message: 'Reporting: how status replies open',
-      default: 'board',
+      default: 'actions',
       choices: [
+        { value: 'actions', label: 'actions - a very short list of action items, then where the full report is' },
         { value: 'board', label: 'board - one table with TODO, DOING and DONE as three side-by-side columns, then brief action items' },
         { value: 'brief', label: 'brief - the answer in a sentence or two, then brief action items' },
         { value: 'none', label: 'none - no rule' },
@@ -142,8 +143,9 @@ export default {
       key: 'PREFS_MODEL_ROUTING',
       type: 'choice',
       message: 'Models: effort and model routing',
-      default: 'economical',
+      default: 'capable',
       choices: [
+        { value: 'capable', label: 'capable - the most capable model at medium effort, frontend and visual design on the model strongest at design' },
         { value: 'economical', label: 'economical - low effort by default, more for planning, design and hard reasoning, the strongest model for building' },
         { value: 'balanced', label: 'balanced - medium effort by default, high for planning, design, hard reasoning and building' },
         { value: 'none', label: 'none - no rule' },
@@ -191,6 +193,9 @@ export default {
       default: 'pause',
     },
     yes('PREFS_STOP_DIGGING', 'Safety: confirm a problem is real before hunting its cause, and stop after a couple of checks that find nothing?'),
+    yes('PREFS_BLOCKED_COMMANDS', 'Safety: when a permission check blocks an install, schedule, service or push, never work around it; give you the exact command to run?'),
+    yes('PREFS_PRIVATE_STAYS_LOCAL', 'Safety: private chats and anything captured from your own sessions never go to an outside model?'),
+    yes('PREFS_PUBLIC_REPOS', 'Safety: in public repositories, a no-reply commit identity, no email trailers, pull request text naming nothing private, and a privacy scan before each push?'),
   ],
 
   async install(ctx) {

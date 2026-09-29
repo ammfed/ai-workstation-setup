@@ -37,8 +37,10 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
   section('Reporting and status', [
     status === 'board' &&
       'Open every status reply with the current work as one table whose three columns sit side by side: TODO, DOING, DONE. Each column lists its own items, one short line each. Never three stacked lists or three separate rows.',
+    status === 'actions' &&
+      'Answer a status request with a very short list of action items, the user\'s first, then point to the full report (its path or link) instead of repeating it.',
     status === 'brief' && 'Open every status reply with the answer in a sentence or two.',
-    status !== 'none' && 'Then give brief action items, grouped by who acts: the user first, then the agent.',
+    (status === 'board' || status === 'brief') && 'Then give brief action items, grouped by who acts: the user first, then the agent.',
     status !== 'none' && 'Show progress as counts like "3 of 5". A word always carries the state, never colour alone.',
     get('PREFS_HONEST_NUMBERS') &&
       'When a number is uncertain, give a range or say "not yet known" instead of a single made-up figure. Charts are plain bars or small multiples on a shared scale, never radar or gauge charts.',
@@ -124,6 +126,8 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
 
   const routing = get('PREFS_MODEL_ROUTING');
   section('AI and model use', [
+    routing === 'capable' && 'Use the most capable model at medium effort by default, for building and for everything else.',
+    routing === 'capable' && 'Give user-facing frontend and visual design work (screens, look, layout, clickable journeys) to the model strongest at design.',
     routing === 'economical' && 'Use a balanced model at low effort for routine work and sub-tasks.',
     routing === 'economical' && 'Use medium effort for planning, design, hard reasoning and judgment calls.',
     routing === 'economical' && 'Use the most capable model at high effort for building a product, prototype or demo.',
@@ -140,7 +144,7 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     browser &&
       "Do web research in a separate, visible browser that belongs to the agent (for example `research-browser axi <command>`), never in the user's own browser profile or an extension running in it.",
     browser &&
-      'Give each research task its own tab, fill specific page elements instead of typing with global keyboard input, and close each tab as soon as that research is done. Report a site that needs the user to sign in; do not wait on it.',
+      'Give each research task its own tab, fill specific page elements instead of typing with global keyboard input, and close each tab you opened as soon as that research is done. Never close a tab you did not open. Report a site that needs the user to sign in; do not wait on it.',
     get('PREFS_SOURCE_QUALITY') &&
       'Name the type of every source next to its link (official documentation, standards body, peer-reviewed or government report, vendor page, forum post). Skip content farms and unsourced blog posts. Look for real, existing software before general write-ups.',
     get('PREFS_VERIFY_USER_CLAIMS') &&
@@ -162,6 +166,12 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
       'Do not name a cause for a failure unless you checked it against evidence. Otherwise report the failure and say the cause is unknown.',
     get('PREFS_STOP_DIGGING') &&
       'A request to investigate is not proof that something is broken. Confirm the problem from real evidence first, or ask what the user saw. If about two checks turn up nothing, stop and report what is known.',
+    get('PREFS_BLOCKED_COMMANDS') &&
+      'When a permission check blocks an install, a schedule, a service change, a push or a pull request, do not look for another way around it. Record the exact one-line command for the user to run, say what it is for, and carry on with the rest.',
+    get('PREFS_PRIVATE_STAYS_LOCAL') &&
+      "Private chats, and anything captured from the user's own sessions, never go to an outside model or service, including for a second opinion.",
+    get('PREFS_PUBLIC_REPOS') &&
+      'In a public repository, commit with a no-reply identity and add no trailer that carries an email address. Pull request text is a short plain summary that names no private people, clients, projects or internal tooling. Run the privacy scan before every push; a hit blocks the push.',
     get('PREFS_PAUSE_WORD') &&
       `When the user says "${get('PREFS_PAUSE_WORD')}", stop every running agent in place, confirm each one stopped, and hold until the user says to resume. A new full task request right after a pause counts as the resume.`,
     'Say plainly when something was reasoned about rather than tested.',
