@@ -9,6 +9,7 @@ import { versionCheck } from '../agent-clis/tools.mjs';
 //     as an isolated CLI with uv or pipx when one is available.
 //   OpenWhispr: docs quickstart downloads a release (github.com/OpenWhispr/openwhispr);
 //     the same app is packaged as a Homebrew cask and a winget package.
+//   llama.cpp: docs/install.md (github.com/ggml-org/llama.cpp): Homebrew or winget.
 //   Lavish Library: README "Run it" (github.com/ammfed/lavish-library): clone, npm install,
 //     then its web UI and its filesystem companion, run here as two user services.
 
@@ -124,6 +125,25 @@ const EXTRAS = [
     },
   },
   {
+    value: 'llama-cpp',
+    label: 'llama-cpp - run open models locally (llama-cli, llama-server); Homebrew on macOS and Linux, winget on Windows',
+    // github.com/ggml-org/llama.cpp docs/install.md: Homebrew (macOS, Linux), winget (Windows).
+    install(ctx) {
+      return ctx.ensureTool({
+        name: 'llama.cpp',
+        bin: 'llama-cli',
+        install: {
+          windows: 'winget install llama.cpp --accept-source-agreements --accept-package-agreements',
+          default: (c) => {
+            if (!c.dryRun && !c.has('brew')) throw new Skip('needs Homebrew (brew.sh); or take a prebuilt release from https://github.com/ggml-org/llama.cpp/releases');
+            c.run('brew install llama.cpp');
+          },
+        },
+        check: { about: 'reports its version', cmd: 'llama-cli --version', expect: /version: \S+/ },
+      });
+    },
+  },
+  {
     value: 'lavish-library',
     label: 'lavish-library - a local library to find and reopen every Lavish review page, on 127.0.0.1:3000 (Linux, macOS)',
     install(ctx) {
@@ -136,7 +156,7 @@ const EXTRAS = [
 export default {
   name: 'extras',
   title: 'Extra tools',
-  description: 'Optional: docling document converter, OpenWhispr voice dictation, Lavish Library',
+  description: 'Optional: docling document converter, OpenWhispr voice dictation, llama.cpp local models, Lavish Library',
   order: 90,
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],
