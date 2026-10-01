@@ -80,8 +80,24 @@ export const DEFAULTS = {
   // that sends or changes something waits for a spoken yes. With it on, listed sites and
   // web searches open in that window.
   browser: { enabled: false, endpoint: 'http://127.0.0.1:9222', ignore: [], maxItems: 60, confirmSec: 30, timeoutMs: 3000 },
-  // Read-only sources: { name, path, about?, show? } or { name, command: [..., '{query}'], about? }.
+  // Read-only sources: { name, path, about?, show? } or { name, command: [..., '{query}'], about?, timeoutSec? }.
   sources: [],
+  // Name patterns (`*` and `?`, any case) for files and folders that are never listed, read,
+  // offered to the decision model or opened, in the documents folder and every source. Yours
+  // alone: they live in this local file only.
+  exclude: [],
+  // The lookout (lookout.mjs): while a conversation runs, speak up when something new waits on
+  // you or a worker stopped or failed, read from the ledger's live board (url, else command).
+  // everySec: how often the board is read; batchSec: events this close together are one line;
+  // gapSec: at most one line this often.
+  lookout: { enabled: false, url: 'http://127.0.0.1:4391/api/board', command: ['ledger', 'board', '--json'], everySec: 5, batchSec: 30, gapSec: 120, stateFile: '' },
+  // Questions about the notes vault go to agy (notes.mjs), which reads the vault and answers in
+  // a few sentences; the voice never reads the vault itself. vault: the vault folder (a git
+  // repository, so a run that changed a file can be caught); rawDir: raw material agy is told
+  // never to read; waitSec: how long an answer may take.
+  notes: { enabled: false, vault: '', agy: 'agy', rawDir: '', waitSec: 30 },
+  // Today's and overdue tasks (tasks.mjs), read when asked through the `voice-mode tasks` source.
+  tasks: { command: ['ticktick', '--format', 'json', 'tasks', 'due', '1'], timeoutSec: 5 },
   // Where real work and deeper questions are handed over: argv with the note appended; env is added.
   queue: { command: [], env: {} },
   // Answers to hand-offs come back with `<replyCommand> <id> "<answer>"` (see handoff.mjs).
@@ -140,6 +156,23 @@ export function readKey(file, name) {
   }
 }
 
+/** A glob of `*` and `?` as a whole-name, case-insensitive pattern. */
+const globRe = (g) => new RegExp(`^${String(g).split('').map((ch) => (ch === '*' ? '.*' : ch === '?' ? '.' : ch.replace(/[.+^${}()|[\]\\]/g, '\\$&'))).join('')}$`, 'i');
+
+/**
+ * True when a folder or file name along `p` matches one of the `exclude` patterns. Only the
+ * part of the path below whichever of `roots` holds it counts (the folders above a root are
+ * not yours to name); outside every root, only its own name does.
+ */
+export function excluded(p, patterns = [], roots = []) {
+  if (!patterns.length || !p) return false;
+  const res = patterns.map(globRe);
+  const full = path.resolve(String(p));
+  const root = roots.map((r) => path.resolve(String(r))).filter((r) => full === r || full.startsWith(r + path.sep)).sort((a, b) => b.length - a.length)[0];
+  const rel = root ? path.relative(root, full) : path.basename(full);
+  return rel.split(/[\\/]+/).some((seg) => seg && res.some((re) => re.test(seg)));
+}
+
 // Expand a `*` inside path segments, such as ~/homes/<star>/data, to the paths that exist.
 export function expandGlob(p) {
   const parts = p.split(path.sep);
@@ -193,6 +226,9 @@ export function loadConfig(file = process.env.VOICE_MODE_CONFIG || path.join(CON
   config.actions.notes.folder = expandHome(config.actions.notes.folder);
   config.actions.chooser.keyFile = expandHome(config.actions.chooser.keyFile);
   config.sources = expandSources(config.sources || []);
+  config.exclude = (config.exclude || []).map(String).filter(Boolean);
+  config.notes.vault = expandHome(config.notes.vault);
+  config.notes.rawDir = expandHome(config.notes.rawDir);
   if (config.personaFile) config.persona = fs.readFileSync(expandHome(config.personaFile), 'utf8').trim();
   if (!config.providers[config.provider]) throw new Error(`unknown provider "${config.provider}" (openai, gemini or fake)`);
   return config;

@@ -99,6 +99,9 @@ undated hold was set `holdAgeDays` or more ago; otherwise it needs you now. So t
 the same backlog. The Now page's "Waiting on you" uses the same rule and also lists questions a
 worker raised that are not yet a hold.
 
+Voice mode's lookout reads the same `/api/board` while a conversation runs, to say when
+something new needs you or a worker stopped or failed ([voice mode](voice-mode.md#the-lookout-speaking-up-on-its-own)).
+
 The page polls `/api/board` every `pollSeconds` (2.5): `generated_at`, `counts`, `lanes`,
 `rows` (the cards), `needs`, `parked`, `landed`. `/api/timeline?home=H&task=T` gives one
 task's entries. The live dots come from `herdr agent list` (`board.agents` sets another

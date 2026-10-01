@@ -10,7 +10,7 @@ import { keyFile as openrouterKeyFile } from '../openrouter/module.mjs';
 // templates/voice-mode/bin, with the system's own audio tools. See docs/voice-mode.md.
 
 const NAME = 'voice-mode';
-const SCRIPTS = ['voice-mode.mjs', 'config.mjs', 'providers.mjs', 'records.mjs', 'desk.mjs', 'audio.mjs', 'orb.mjs', 'orb.qml', 'briefing.mjs', 'handoff.mjs', 'browser.mjs'];
+const SCRIPTS = ['voice-mode.mjs', 'config.mjs', 'providers.mjs', 'records.mjs', 'desk.mjs', 'audio.mjs', 'orb.mjs', 'orb.qml', 'briefing.mjs', 'handoff.mjs', 'browser.mjs', 'lookout.mjs', 'notes.mjs', 'pc.mjs', 'tasks.mjs'];
 // The orb runs on Qt 6's own `qml` tool with KDE's layer-shell module (overlay above every window).
 const ORB_PKGS = { apt: 'qml-qt6 qml6-module-qtquick-window qml6-module-qtquick-shapes qml6-module-org-kde-layershell', pacman: 'qt6-declarative layer-shell-qt' };
 const ORB_RUNNERS = ['/usr/lib/qt6/bin/qml', 'qml6', 'qml-qt6'];
@@ -54,9 +54,13 @@ function buildConfig(ctx) {
     const full = ctx.path(p);
     return { name: path.basename(full).replace(/^\./, '') || full, path: full, show: true };
   });
-  if (ctx.get('VOICE_VAULT_SEARCH')) {
-    sources.push({ name: 'second brain', about: 'the notes vault, searched by keyword', command: ['obsidian-axi', 'search', '{regex}', '--regex', '--limit', '12'] });
+  // Read-only command sources, read only when the voice asks them; through the launcher, by full path.
+  const launcher = path.join(ctx.home, '.local', 'bin', 'voice-mode');
+  if (ctx.get('VOICE_PC')) {
+    sources.push({ name: 'computer', about: "this computer's status now: battery, disk, memory, how busy it is, network, the busiest apps, uptime", command: [launcher, 'pc'] });
   }
+  const tasks = parseCommand(ctx.get('VOICE_TASKS_COMMAND')).command;
+  if (tasks.length) sources.push({ name: 'tasks', about: "today's and overdue tasks, with their titles", command: [launcher, 'tasks'], timeoutSec: 8 });
   const queue = parseCommand(ctx.get('VOICE_QUEUE_COMMAND'));
   const transcript = ctx.get('VOICE_BRIEFING_TRANSCRIPT');
   return {
@@ -79,6 +83,12 @@ function buildConfig(ctx) {
       },
     },
     ...(ctx.get('VOICE_ACTIONS') && ctx.get('VOICE_BROWSER') ? { browser: { enabled: true, endpoint: ctx.get('VOICE_BROWSER') } } : {}),
+    ...(tasks.length ? { tasks: { command: tasks } } : {}),
+    // The ledger's board, else its one-shot command by full path (a hotkey's PATH may lack ~/.local/bin).
+    ...(ctx.get('VOICE_LOOKOUT') ? { lookout: { enabled: true, command: [path.join(ctx.home, '.local', 'bin', 'ledger'), 'board', '--json'] } } : {}),
+    ...(ctx.get('VOICE_NOTES') ? { notes: { enabled: true, vault: ctx.get('VOICE_NOTES_VAULT'), rawDir: ctx.get('VOICE_NOTES_RAW_DIR') } } : {}),
+    // Name patterns of files and folders never to be read, offered or opened: yours to fill in, here only.
+    exclude: [],
   };
 }
 
@@ -152,7 +162,34 @@ export default {
         return home ? path.join(home, 'data') : '';
       },
     },
-    { key: 'VOICE_VAULT_SEARCH', type: 'confirm', message: 'Also search your notes vault with obsidian-axi?', default: (ctx) => 'VAULT_PATH' in ctx.values },
+    {
+      key: 'VOICE_NOTES',
+      type: 'confirm',
+      message: 'Answer questions about your notes vault by asking agy, which reads it and answers in a few sentences (the voice never reads the vault itself)?',
+      default: (ctx) => 'VAULT_PATH' in ctx.values && (ctx.values.AGENT_CLIS || []).includes('agy'),
+    },
+    { key: 'VOICE_NOTES_VAULT', type: 'text', path: true, message: 'The vault folder agy answers from (a git repository)', default: (ctx) => ctx.values.VAULT_PATH || '~/second-brain', when: (ctx) => ctx.get('VOICE_NOTES') },
+    {
+      key: 'VOICE_NOTES_RAW_DIR',
+      type: 'text',
+      path: true,
+      message: 'Raw material folder agy is told never to read for these answers (empty: none)',
+      default: (ctx) => ctx.values.VAULT_RAW_DIR || '',
+      when: (ctx) => ctx.get('VOICE_NOTES'),
+    },
+    {
+      key: 'VOICE_LOOKOUT',
+      type: 'confirm',
+      message: "While a conversation runs, speak up when something new waits on you or a worker stopped or failed (reads the ledger module's board)?",
+      default: (ctx) => (ctx.values.MODULES || []).includes('ledger'),
+    },
+    { key: 'VOICE_PC', type: 'confirm', message: "Answer questions about this computer's status (battery, disk, memory, network, busiest apps) when asked?", default: true },
+    {
+      key: 'VOICE_TASKS_COMMAND',
+      type: 'text',
+      message: "Command that prints your tasks as JSON, for today's and overdue tasks when asked (TickTick: ticktick --format json tasks due 1; empty: none)",
+      default: (ctx) => (ctx.values.DAILY_SYNC_TICKTICK_COMMAND ? 'ticktick --format json tasks due 1' : ''),
+    },
     {
       key: 'VOICE_QUEUE_COMMAND',
       type: 'text',
@@ -220,10 +257,17 @@ export default {
       ctx.todo(`put your key for the chosen provider in ${keys} (mode 600; never commit it or paste it in chat)`);
     });
 
-    if (ctx.get('VOICE_VAULT_SEARCH')) {
-      await ctx.step('vault search', () => {
-        if (!ctx.dryRun && !ctx.has('obsidian-axi')) throw new Skip('obsidian-axi is not installed; pick it in second-brain, or remove the "second brain" source from the config');
-        ctx.ok('obsidian-axi found');
+    if (ctx.get('VOICE_NOTES')) {
+      await ctx.step('notes through agy', () => {
+        if (!ctx.dryRun && !ctx.has('agy')) throw new Skip('agy is not installed; pick it in agent-clis, or set "notes": { "enabled": false } in the config');
+        ctx.ok(`agy answers notes questions from ${ctx.get('VOICE_NOTES_VAULT')}`);
+      });
+    }
+
+    if (ctx.get('VOICE_LOOKOUT')) {
+      await ctx.step('lookout', () => {
+        if (!(ctx.values.MODULES || []).includes('ledger') && !ctx.dryRun && !ctx.has('ledger')) throw new Skip('the lookout reads the ledger module\'s board; install the ledger module first');
+        ctx.ok('the lookout reads the ledger board while a conversation runs');
       });
     }
 

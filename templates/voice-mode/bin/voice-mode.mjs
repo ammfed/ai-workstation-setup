@@ -12,6 +12,9 @@
 //   voice-mode say "<text>" [--dry-run]
 //                                  speak text aloud, word for word, in the configured voice (into
 //                                  a running conversation when there is one)
+//   voice-mode pc                  this computer's status in a few lines (a record source)
+//   voice-mode tasks               today's and overdue tasks in a few lines (a record source)
+//   voice-mode ask-notes <id>      run by voice mode itself: one notes question through agy
 //   voice-mode stop | status
 //   voice-mode check               what is configured and what is missing (never prints keys)
 //   voice-mode pick "<words>"      which desktop action the chooser would take (opens nothing)
@@ -33,13 +36,17 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CONFIG_DIR, loadConfig, merge, readKey } from './config.mjs';
 import { Records, TOOLS, runTool } from './records.mjs';
-import { Chooser, TEXT_KINDS, buildCatalog, describe, perform } from './desk.mjs';
+import { Chooser, TEXT_KINDS, buildCatalog, describe, documentFolders, perform } from './desk.mjs';
 import { Browser, asksAbout, isYes, pageCatalog, performPage } from './browser.mjs';
 import { Mic, Speaker, audioTools, has, play, resample, rms, startEchoCancel, tone, wavToPcm } from './audio.mjs';
 import { PROVIDERS, createProvider, synthesize } from './providers.mjs';
 import { orbRunner, startOrb, toLevel } from './orb.mjs';
 import { briefingChanges, briefingStamp, buildBriefing, redact } from './briefing.mjs';
 import { Deliveries, handoffDir, newId, noteText, saveMessage, savePending, saveReply } from './handoff.mjs';
+import { Lookout, readBoard, stateFile as lookoutStateFile } from './lookout.mjs';
+import { agyMayRead, askNotes, busyReason, disabledFile, vaultState, BUSY_ANSWER } from './notes.mjs';
+import { gather, summary } from './pc.mjs';
+import { readTasks } from './tasks.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 
@@ -119,7 +126,7 @@ export function releaseLock(file = LOCK) {
 const RULES = `How you work:
 - The briefing below (when there is one) is your own memory: your recent conversation with the user, the work under way and who is doing it, your notes and what you have learned. Speak from it as yourself; never call it a briefing.
 - When the briefing answers a question, answer at once without tools, unless the user asks you to read, look up or check notes, files or records: then always read them with the tools, since they are newer than your memory.
-- For anything else about notes, files, documents, the notes vault, memories, records, people, projects, plans, decisions or work, look it up yourself first, in the same reply: search_records with a few keywords (and the source, when the user names one), list_records for what is newest in a source, read_record to read one in full. Then answer from what they return, the newest record first when they disagree. Never make up a status.
+- For anything else about notes, files, documents, memories, records, people, projects, plans, decisions or work, look it up yourself first, in the same reply: search_records with a few keywords (and the source, when the user names one), list_records for what is newest in a source, read_record to read one in full. Then answer from what they return, the newest record first when they disagree. Never make up a status.
 - Only when those do not answer (after you looked), or the user asks for real work (changing, renaming, moving or deleting files, code, tasks or messages, running or checking anything now, research, anything that takes effort), or for something outside your records (mail, messages, the web, other people's replies), say one short line such as "Let me check; I'll tell you here as soon as it's back" and call hand_off in that same reply, with the request in the user's words. Saying you will check without calling a tool leaves the user waiting for nothing. It goes to your own working session, which can do it; never say the work is done until an answer says so. Every new request needs its own hand_off, even one asked before.
 - When an answer to a hand-off arrives (a line starting "Answer arrived"), tell the user at once, briefly, as your own answer. You are one assistant: never say that someone else, another session or another assistant answered.
 - A separate desktop helper acts on the computer while the user is still talking: it opens apps, websites, folders and records, switches to an open app, minimizes, maximizes or moves the window in front, shows the desktop or the overview, turns the volume up or down or mutes it, plays, pauses or skips media, changes screen brightness, takes a screenshot, locks the screen, writes a note, searches the web, and types dictated text. What it did may already be in the conversation as a line starting "Desktop helper:"; then confirm it in a few words. Otherwise, when the user asked for one of those, call desktop_action to learn what it did. If it did nothing, say you could not tell what to do.
@@ -133,6 +140,11 @@ const BROWSER_RULE =
   'Asked to press a button on the page, even one that sends, deletes or buys, never refuse it yourself: the helper handles it (call desktop_action when no line has come). ' +
   'When a line or result says a button is not pressed yet, ask the user in one short question whether to press it, saying the button\'s name as written; it is pressed only when the user then answers yes, never on your word. ' +
   'It never types into password, payment or identity fields and never downloads anything.';
+
+// Only with notes answers on (config.notes): the vault is asked through agy, never searched.
+const NOTES_RULE =
+  '- Questions about the user\'s notes vault (their second brain, what their notes say) go to ask_notes, with the question in the user\'s words, after one short line such as "Let me check your notes". ' +
+  'Your records do not hold the vault, so never search them for it. The answer arrives later as a line starting "Answer arrived"; say it then.';
 
 // Without a queue command there is no hand-off: those rules give way to a plain refusal.
 const NO_HANDOFF = '- You cannot do work, and you know only the briefing and the records. When they do not answer, or you are asked for more, say plainly that voice mode cannot do that.';
@@ -164,6 +176,20 @@ const HANDOFF_TOOL = {
       kind: { type: 'string', enum: ['question', 'task'], description: 'question: they want an answer; task: they want something done' },
     },
     required: ['request'],
+  },
+};
+
+const NOTES_TOOL = {
+  name: 'ask_notes',
+  // The conversation goes on while the notes are checked (Gemini: a non-blocking call).
+  async: true,
+  description:
+    "Ask the user's notes vault a question: a notes helper reads the notes and answers in a few sentences, which come back into this conversation within about half a minute; speak the answer then. " +
+    'Say a short line like "Let me check your notes" before calling this.',
+  parameters: {
+    type: 'object',
+    properties: { question: { type: 'string', description: "the question in the user's words, with any detail they gave" } },
+    required: ['question'],
   },
 };
 
@@ -231,6 +257,7 @@ export function instructionsFor(config, records, briefing = '') {
   const sources = records.describe();
   const brief = briefing ? `\n\nBriefing: what you currently know (your own recent conversation, current work and notes; newest last):\n${briefing}` : '';
   let rs = rules((config.queue.command || []).length > 0);
+  if (config.notes?.enabled) rs = `${rs}\n${NOTES_RULE}`;
   // The desktop helper's limits are not the browser helper's: a page button is asked about, not refused.
   if (config.browser?.enabled) rs = `${rs.replace('- The helper itself never deletes', '- The desktop helper itself (not the browser helper, below) never deletes')}\n${BROWSER_RULE}`;
   return `${config.persona}\n\n${rs}${sources ? `\n\nRecord sources:\n${sources}` : ''}${brief}`;
@@ -262,7 +289,8 @@ export class Session {
     this.browser = browser;
     this.confirm = null;
     this.handoff = (config.queue.command || []).length > 0;
-    const tools = [...TOOLS, ...(this.handoff ? [HANDOFF_TOOL] : []), ...(this.chooser.ready ? [DESKTOP_TOOL] : [])];
+    this.notes = !!config.notes?.enabled;
+    const tools = [...TOOLS, ...(this.handoff ? [HANDOFF_TOOL] : []), ...(this.notes ? [NOTES_TOOL] : []), ...(this.chooser.ready ? [DESKTOP_TOOL] : [])];
     const keyName = PROVIDERS[config.provider].keyName;
     this.provider =
       provider ||
@@ -312,7 +340,8 @@ export class Session {
       const a = this.aside;
       if (a && !a.heard) this.dropAside('no audio');
       else if (a) {
-        if (this.config.logTranscripts) this.log({ event: 'handoff-spoken', id: a.id, reply: a.reply });
+        // A notes answer is kept in the reply queue only, never in a log.
+        if (this.config.logTranscripts && a.kind !== 'notes') this.log({ event: 'handoff-spoken', id: a.id, reply: a.reply });
         this.aside = null;
       }
       this.finishTurn();
@@ -436,7 +465,7 @@ export class Session {
     }
     this.lastAction = { key, at: started };
     try {
-      await this.performImpl(item, { roots: this.roots, has, slot, browser: this.browser, ...(this.config.actions.dryRun ? { ...this.dryRun(slot), browser: null } : {}) });
+      await this.performImpl(item, { roots: this.roots, exclude: this.config.exclude, has, slot, browser: this.browser, ...(this.config.actions.dryRun ? { ...this.dryRun(slot), browser: null } : {}) });
       this.provider.note?.(`Desktop helper: ${done} for the user.`);
       const rec = { event: 'action', target: key, done, words: info.text.split(/\s+/).length, final: info.final, p: info.p };
       if (!this.config.logTranscripts) rec.done = describe(item, slot, { words: false });
@@ -558,6 +587,7 @@ export class Session {
     try {
       if (call.name === 'desktop_action') result = await this.desktopResult();
       else if (call.name === 'hand_off') result = await this.handOff(call.args);
+      else if (call.name === 'ask_notes') result = await this.askNotes(call.args);
       else result = await runTool(this.records, call.name, call.args);
     } catch (err) {
       result = { error: err.message };
@@ -565,7 +595,7 @@ export class Session {
     if (this.turn) (this.turn.tools ||= []).push(call.name);
     this.log({ event: 'tool', name: call.name, ms: Math.round(performance.now() - started), ok: !result?.error });
     // A hand-off after the reply already said "Let me check" needs no second reply.
-    this.provider.toolResult(call, result, { quiet: call.name === 'hand_off' && !!result?.handed_off && this.turn?.firstAudio != null });
+    this.provider.toolResult(call, result, { quiet: ['hand_off', 'ask_notes'].includes(call.name) && !!(result?.handed_off || result?.asked) && this.turn?.firstAudio != null });
   }
 
   /** Send a question or task to the assistant's own session, with an id its answer comes back under. */
@@ -585,6 +615,35 @@ export class Session {
     return { handed_off: true, note: 'Sent. The answer will arrive in this conversation; you already said you are on it, so say nothing more about it now unless asked.' };
   }
 
+  /**
+   * A question for the notes vault: recorded under an id like a hand-off, then answered by agy
+   * in a detached `voice-mode ask-notes <id>` (notes.mjs), whose answer lands in the reply
+   * queue and is spoken from there. Busy or switched off: said at once, nothing is started.
+   */
+  async askNotes({ question } = {}, { spawnImpl = spawn, busy = busyReason } = {}) {
+    const text = String(question || '').trim();
+    if (!text) return { asked: false, error: 'no question' };
+    const why = busy(this.config);
+    if (why) {
+      this.log({ event: 'notes-asked', sent: false, why: why === 'busy' ? 'busy' : 'unavailable' });
+      return { asked: false, say: why === 'busy' ? BUSY_ANSWER : `Answers from your notes are unavailable: ${why}.` };
+    }
+    const id = newId();
+    const t = this.turn;
+    const end = t && this.lastLoud > t.t0 ? this.lastLoud : t?.vadEnd ?? performance.now();
+    savePending(this.config, { id, kind: 'notes', request: text, askedAt: Math.round(Date.now() - (performance.now() - end)), at: Date.now() });
+    try {
+      const child = spawnImpl(process.execPath, [SELF, 'ask-notes', id], { detached: true, stdio: 'ignore', env: { ...process.env, ...(this.config.file ? { VOICE_MODE_CONFIG: this.config.file } : {}) } });
+      child.unref?.();
+    } catch (err) {
+      this.log({ event: 'notes-asked', id, sent: false, error: err.message });
+      return { asked: false, error: err.message };
+    }
+    this.log({ event: 'notes-asked', id, sent: true });
+    this.onHandOff?.({ id, request: text, kind: 'notes' });
+    return { asked: true, note: 'Asked. The answer will arrive in this conversation; you already said you are checking, so say nothing more about it now unless asked.' };
+  }
+
   /** A quiet moment to speak a hand-off's answer: nobody talking, nothing playing or pending. */
   quiet() {
     const now = performance.now();
@@ -598,10 +657,10 @@ export class Session {
   speakAnswer(entry) {
     const q = entry.question?.request;
     const text = entry.verbatim
-      ? `A message from your working session, to say out loud now. Say exactly these words, and nothing before or after them: "${redact(entry.text)}"`
+      ? `${entry.from === 'lookout' ? 'A heads-up from watching the work' : 'A message from your working session'}, to say out loud now. Say exactly these words, and nothing before or after them: "${redact(entry.text)}"`
       : redact(`Answer arrived${q ? ` to what the user asked earlier ("${q}")` : ''}: ${entry.text}`) + `\nTell the user now, briefly, in your own words, as your own answer.`;
     if (!this.provider.say?.(text)) return false;
-    this.aside = { id: entry.id, text, askedAt: entry.question?.askedAt, sentAt: performance.now() };
+    this.aside = { id: entry.id, text, kind: entry.question?.kind, askedAt: entry.question?.askedAt, sentAt: performance.now() };
     return true;
   }
 
@@ -636,10 +695,16 @@ export class Session {
       c.asked = asksAbout(t.reply, c.item.label);
       this.log({ event: 'confirm-asked', asked: c.asked });
     }
-    // Said it would check but called no tool at all: hand off the user's own words.
-    if (this.handoff && t.text && !(t.tools || []).length && PROMISE.test(t.reply || '')) {
-      (t.tools ||= []).push('hand_off (auto)');
-      this.handOff({ request: t.text }).catch(() => {});
+    // Said it would check but called no tool at all: ask the notes (a promise about the notes)
+    // or hand off the user's own words.
+    if (t.text && !(t.tools || []).length && PROMISE.test(t.reply || '')) {
+      if (this.notes && /\bnotes?\b/i.test(t.reply || '')) {
+        (t.tools ||= []).push('ask_notes (auto)');
+        this.askNotes({ question: t.text }).catch(() => {});
+      } else if (this.handoff) {
+        (t.tools ||= []).push('hand_off (auto)');
+        this.handOff({ request: t.text }).catch(() => {});
+      }
     }
     const end = t.speechEnd ?? t.vadEnd;
     const rec = {
@@ -719,7 +784,10 @@ export class Live {
     }, 1000);
     // Answers to hand-offs (including ones that came back while no session ran) are spoken
     // in the first quiet moment; the briefing is refreshed when its sources change.
+    // The lookout reads the board while the conversation runs and queues its lines to be said.
+    this.lookout = c.lookout.enabled ? new Lookout(c, { log: this.log }) : null;
     this.watch = setInterval(() => {
+      this.watchBoard();
       this.deliverAnswers();
       this.stillComing();
       this.refreshBriefing();
@@ -849,9 +917,17 @@ export class Live {
     const due = [...this.waiting.values()].filter((w) => !w.nudged && now - w.at > after && !fs.existsSync(path.join(replies, `${w.id}.json`)));
     if (!due.length) return;
     const what = due.map((w) => `"${w.request}"`).join(' and ');
-    if (!s.provider.say?.(redact(`Your working session is still on ${what}. Tell the user in one short sentence that the answer is still coming and that you will say it here as soon as it lands.`))) return;
+    const who = due.every((w) => w.kind === 'notes') ? 'Your notes are still being checked for' : 'Your working session is still on';
+    if (!s.provider.say?.(redact(`${who} ${what}. Tell the user in one short sentence that the answer is still coming and that you will say it here as soon as it lands.`))) return;
     for (const w of due) w.nudged = true;
     this.log({ event: 'still-coming', ids: due.map((w) => w.id) });
+  }
+
+  /** A lookout line that is due goes into the answer queue, to be said word for word in a quiet moment. */
+  watchBoard() {
+    if (!this.lookout || !this.mic) return;
+    const line = this.lookout.tick();
+    if (line) saveMessage(this.config, line, { from: 'lookout' });
   }
 
   deliverAnswers() {
@@ -1044,7 +1120,23 @@ function check(config) {
     add(!!runner, runner ? `orb (${runner})` : 'orb: the Qt 6 qml tool (Debian and Ubuntu: qml-qt6)');
   }
   const records = new Records(config);
-  for (const s of config.sources) add(s.command ? has(s.command[0]) : fs.existsSync(s.path), `source "${s.name}"`);
+  for (const s of config.sources) add(s.command ? has(s.command[0]) || fs.existsSync(s.command[0]) : fs.existsSync(s.path), `source "${s.name}"`);
+  // The exclude patterns themselves are never printed, nor what they matched: only counts.
+  if (config.exclude.length) {
+    const docs = config.actions.documents && fs.existsSync(config.actions.documents) ? fs.readdirSync(config.actions.documents, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith('.')).length - documentFolders(config.actions.documents, config.exclude).length + 1 : 0;
+    rows.push(`     exclude: ${config.exclude.length} pattern${config.exclude.length === 1 ? '' : 's'}; ${docs + records.excludedCount()} files and folders left out`);
+  }
+  if (config.lookout.enabled) {
+    const up = spawnSync(process.execPath, ['--input-type=module', '-e', `import(${JSON.stringify(path.join(path.dirname(SELF), 'lookout.mjs'))}).then((m) => m.readBoard(${JSON.stringify(config.lookout)})).then((b) => process.exit(Array.isArray(b.rows) ? 0 : 1), () => process.exit(1))`], { timeout: 15000 });
+    add(up.status === 0, `lookout: the board (${config.lookout.url || config.lookout.command.join(' ')}); state in ${lookoutStateFile(config)}`);
+  }
+  if (config.notes.enabled) {
+    const off = fs.existsSync(disabledFile(config));
+    add(!off, off ? `notes: switched off after a file in the vault changed during a check; read ${disabledFile(config)}, then delete it to switch them back on` : 'notes: not switched off');
+    add(has(config.notes.agy) || fs.existsSync(config.notes.agy), `notes: ${config.notes.agy} answers questions about the vault`);
+    add(agyMayRead(), 'notes: agy may read files when it runs on its own (a read_file allow rule in its settings; see docs/voice-mode.md)');
+    add(!!config.notes.vault && !!vaultState(config.notes.vault), `notes: the vault is a git repository (${config.notes.vault || 'notes.vault is empty'})`);
+  }
   add(!!(config.queue.command || []).length && (path.isAbsolute(config.queue.command[0]) ? fs.existsSync(config.queue.command[0]) : has(config.queue.command[0])), 'queue command (hand-off)');
   if ((config.queue.command || []).length) rows.push(`     answers come back with: ${config.handoff.replyCommand} <id> "<answer>"`);
   if (config.briefing.enabled && (config.briefing.parts || []).length) {
@@ -1159,7 +1251,7 @@ export async function doRequest(config, text, { log = () => {}, performImpl = pe
     // A dry run goes through the same checks and only records what would have run.
     const stub = dryRun ? { run: async (a) => argv.push(a), exec: async (a) => (argv.push(a), '(0,)'), note: (folder) => path.join(folder, '(dry run).md') } : {};
     try {
-      await performImpl(item, { roots, has, slot, browser: dryRun ? null : browser, ...stub });
+      await performImpl(item, { roots, exclude: config.exclude, has, slot, browser: dryRun ? null : browser, ...stub });
       result = { key, name: item.name, done, ms: ms(), ...(dryRun ? { dry_run: true, would_run: argv[0] || null } : {}) };
       log({ event: 'action', target: key, done: logged, p: info.p, ms_from_request: result.ms, ...(dryRun ? { dry_run: true } : {}) });
     } catch (err) {
@@ -1359,6 +1451,39 @@ async function main(argv) {
     }
     case 'check':
       return check(config);
+    case 'pc':
+      console.log(summary(gather()));
+      return 0;
+    case 'tasks': {
+      const r = readTasks(config);
+      console.log(r.text);
+      return r.ok ? 0 : 1;
+    }
+    case 'ask-notes': {
+      // Started by a conversation for one notes question (notes.mjs); the answer goes to the reply queue.
+      const id = args._[1];
+      const pending = path.join(handoffDir(config), 'pending', `${id}.json`);
+      let question;
+      try {
+        if (!/^vq-[0-9a-f]{6}$/.test(id || '')) throw new Error('not a voice question id');
+        question = JSON.parse(fs.readFileSync(pending, 'utf8')).request;
+      } catch (err) {
+        console.error(`voice-mode ask-notes: ${err.message}`);
+        return 2;
+      }
+      fs.mkdirSync(config.logDir, { recursive: true });
+      const log = makeLogger(config, { file: path.join(config.logDir, 'voice-mode.log') });
+      const r = await askNotes(config, question);
+      // Ids, times and outcomes only: the answer lives in the reply queue alone.
+      log({ event: 'notes', id, outcome: r.outcome, ms: r.ms });
+      try {
+        saveReply(config, id, r.answer);
+      } catch (err) {
+        log({ event: 'notes-reply-failed', id, error: err.message });
+        return 1;
+      }
+      return r.outcome === 'answered' ? 0 : 1;
+    }
     case 'pick':
       return pick(config, args._.slice(1).join(' '));
     case 'page':
@@ -1368,7 +1493,7 @@ async function main(argv) {
     case 'latency':
       return latency(config);
     default:
-      console.error(`voice-mode: unknown command "${cmd}" (start, toggle, stop, status, reply, briefing, do, say, check, pick, page, bench, latency, help)`);
+      console.error(`voice-mode: unknown command "${cmd}" (start, toggle, stop, status, reply, briefing, do, say, pc, tasks, check, pick, page, bench, latency, help)`);
       return 2;
   }
 }

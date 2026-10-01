@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile, spawn, spawnSync } from 'node:child_process';
-import { readKey } from './config.mjs';
+import { excluded, readKey } from './config.mjs';
 import { inside } from './records.mjs';
 
 // Launchers and scripts are never opened as files, whatever the catalog says.
@@ -65,12 +65,13 @@ export function discoverApps() {
   return [...seen.values()].filter(Boolean).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function documentFolders(root) {
+/** The documents folder and its folders; names matching `exclude` are never listed, so never offered. */
+export function documentFolders(root, exclude = []) {
   const out = [];
   if (!root || !fs.existsSync(root)) return out;
   out.push({ id: '.', name: `the ${path.basename(root)} folder itself`, path: root });
   for (const e of fs.readdirSync(root, { withFileTypes: true })) {
-    if (e.isDirectory() && !e.name.startsWith('.')) out.push({ id: e.name, name: `the ${e.name} folder in ${path.basename(root)}`, path: path.join(root, e.name) });
+    if (e.isDirectory() && !e.name.startsWith('.') && !excluded(path.join(root, e.name), exclude, [root])) out.push({ id: e.name, name: `the ${e.name} folder in ${path.basename(root)}`, path: path.join(root, e.name) });
   }
   return out;
 }
@@ -150,8 +151,10 @@ export function buildCatalog(config, records, opts = {}) {
   const appList = apps || [...(a.apps || []), ...(a.discoverApps && process.platform === 'linux' ? discoverApps() : [])];
   for (const app of appList) if (!items.has(`app:${slug(app.id)}`)) add('app', app.id, app.name, { desktop: app.desktop, mac: app.mac, command: app.command });
   for (const s of a.sites || []) if (/^https?:\/\//.test(s.url)) add('site', s.id || s.name, s.name, { url: s.url });
-  for (const f of documentFolders(a.documents)) add('folder', f.id === '.' ? 'documents' : f.id, f.name, { path: f.path });
-  for (const f of a.files || []) add('file', f.id || f.name, f.name, { path: f.path });
+  // Excluded names are dropped here, before anything is offered to the decision model.
+  const ex = config.exclude || [];
+  for (const f of documentFolders(a.documents, ex)) add('folder', f.id === '.' ? 'documents' : f.id, f.name, { path: f.path });
+  for (const f of a.files || []) if (!excluded(f.path, ex, [a.documents].filter(Boolean)) && !excluded(f.name, ex)) add('file', f.id || f.name, f.name, { path: f.path });
   for (const r of records ? records.showable() : []) add('record', r.id, `the ${r.name} record`, { path: r.path });
   const control = controlActions(config, opts);
   // Switching to an app's open window needs the desktop's window manager (KWin on Plasma).
@@ -479,7 +482,7 @@ export const typeable = (text) => String(text).replace(/[\u0000-\u001f\u007f]+/g
  * files and folders must still sit inside the documents folder or a record source. The
  * only words it takes are a note's text, a search's words and text to type (`slot`).
  */
-export async function perform(item, { roots = [], platform = process.platform, run = launch, has = () => true, slot = '', exec = capture, note = writeNote, browser = null } = {}) {
+export async function perform(item, { roots = [], exclude = [], platform = process.platform, run = launch, has = () => true, slot = '', exec = capture, note = writeNote, browser = null } = {}) {
   if (!item) throw new Error('not in the catalog');
   switch (item.kind) {
     case 'system':
@@ -517,6 +520,8 @@ export async function perform(item, { roots = [], platform = process.platform, r
     case 'record': {
       const real = inside(item.path, roots);
       if (!real) throw new Error(`${item.path} is outside the allowed folders`);
+      const realRoots = roots.flatMap((r) => [r, inside(r, [r]) || r]);
+      if (excluded(real, exclude, realRoots) || excluded(item.path, exclude, roots)) throw new Error(`${path.basename(item.path)} is excluded`);
       const st = fs.statSync(real);
       if (item.kind === 'folder' ? !st.isDirectory() : !st.isFile()) throw new Error(`${real} is not a ${item.kind === 'folder' ? 'folder' : 'file'}`);
       if (st.isFile() && (NEVER_OPEN.test(real) || (platform !== 'win32' && st.mode & 0o111))) throw new Error(`${path.basename(real)} is a program, not a document`);
