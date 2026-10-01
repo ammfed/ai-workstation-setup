@@ -63,10 +63,10 @@ export function saveReply(config, id, text) {
   writeAtomic(path.join(sub(config, 'replies'), `${id}.json`), { id, text: answer, at: Date.now() });
 }
 
-/** `voice-mode say` while a conversation runs: a message for it to say word for word. */
-export function saveMessage(config, text) {
+/** `voice-mode say` while a conversation runs, or a lookout line: a message for it to say word for word. */
+export function saveMessage(config, text, { from = '' } = {}) {
   const id = `vs-${crypto.randomBytes(3).toString('hex')}`;
-  writeAtomic(path.join(sub(config, 'replies'), `${id}.json`), { id, text: String(text).trim(), at: Date.now(), verbatim: true });
+  writeAtomic(path.join(sub(config, 'replies'), `${id}.json`), { id, text: String(text).trim(), at: Date.now(), verbatim: true, ...(from ? { from } : {}) });
   return id;
 }
 

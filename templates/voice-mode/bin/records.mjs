@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { excluded } from './config.mjs';
 
 const TEXT = new Set(['.md', '.txt', '.json', '.jsonl', '.log', '.status', '.yaml', '.yml', '.csv', '.toml', '']);
 // Never read, even inside a source: anything that may hold a key.
@@ -37,8 +38,11 @@ export function inside(p, roots) {
   return null;
 }
 
-/** Text files under a file or folder, newest first, bounded by depth and count. */
-export function walk(root, { depth = 4, limit = MAX_FILES } = {}) {
+/**
+ * Text files under a file or folder, newest first, bounded by depth and count. Names matching
+ * `exclude` are skipped, folders with all they hold; `skipped` counts them.
+ */
+export function walk(root, { depth = 4, limit = MAX_FILES, exclude = [], skipped = { n: 0 } } = {}) {
   const out = [];
   let st;
   try {
@@ -58,6 +62,10 @@ export function walk(root, { depth = 4, limit = MAX_FILES } = {}) {
     }
     for (const e of entries) {
       const full = path.join(dir, e.name);
+      if (exclude.length && excluded(full, exclude, [root])) {
+        skipped.n += 1;
+        continue;
+      }
       if (e.isDirectory()) {
         if (d < depth && !SKIP_DIRS.has(e.name) && !e.name.startsWith('.')) queue.push([full, d + 1]);
       } else if (e.isFile() && isText(full)) {
@@ -97,11 +105,20 @@ function runRead(argv, timeoutMs = 6000) {
   });
 }
 
+const safeReal = (p) => {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return p;
+  }
+};
+
 export class Records {
   constructor(config) {
     this.sources = config.sources || [];
     this.queueCfg = config.queue || {};
     this.roots = this.sources.filter((s) => s.path).map((s) => s.path);
+    this.exclude = config.exclude || [];
     // File text by path, reused while the file's mtime is unchanged, so a search is a
     // walk of stats and in-memory matching rather than a read of every file.
     this.cache = new Map();
@@ -125,7 +142,7 @@ export class Records {
   warm() {
     const t = performance.now();
     let files = 0;
-    for (const s of this.sources) if (s.path) for (const f of walk(s.path)) files += this.text(f) ? 1 : 0;
+    for (const s of this.sources) if (s.path) for (const f of walk(s.path, { exclude: this.exclude })) files += this.text(f) ? 1 : 0;
     return { files, ms: Math.round(performance.now() - t) };
   }
 
@@ -147,7 +164,7 @@ export class Records {
       }
       if (st.isFile()) out.push({ id: s.name, name: s.about ? `${s.name} (${s.about})` : s.name, path: s.path });
       else if (s.show)
-        for (const f of walk(s.path, { depth: 0, limit: 40 })) {
+        for (const f of walk(s.path, { depth: 0, limit: 40, exclude: this.exclude })) {
           if (path.extname(f.file) === '.md') out.push({ id: `${s.name}/${path.basename(f.file, '.md')}`, name: `${path.basename(f.file, '.md')} in ${s.name}`, path: f.file });
         }
     }
@@ -163,15 +180,32 @@ export class Records {
     return file;
   }
 
-  /** Resolve "source/relative/path" or a source name to a readable file inside the roots. */
+  /** Resolve "source/relative/path" or a source name to a readable file inside the roots, never an excluded one. */
   resolve(name) {
     const clean = String(name || '').trim();
+    let found = null;
     for (const s of [...this.sources].sort((a, b) => b.name.length - a.name.length)) {
       if (!s.path) continue;
-      if (clean === s.name) return inside(s.path, this.roots);
-      if (clean.startsWith(`${s.name}/`)) return inside(path.join(s.path, clean.slice(s.name.length + 1)), this.roots);
+      if (clean === s.name) found = inside(s.path, this.roots);
+      else if (clean.startsWith(`${s.name}/`)) found = inside(path.join(s.path, clean.slice(s.name.length + 1)), this.roots);
+      else continue;
+      break;
     }
-    return path.isAbsolute(clean) ? inside(clean, this.roots) : null;
+    if (!found && path.isAbsolute(clean)) found = inside(clean, this.roots);
+    if (!found || this.isExcluded(found) || this.isExcluded(path.resolve(clean))) return null;
+    return found;
+  }
+
+  /** True when `file` falls under an exclude pattern below one of the sources. */
+  isExcluded(file) {
+    return this.exclude.length > 0 && excluded(file, this.exclude, this.roots.flatMap((r) => [r, safeReal(r)]));
+  }
+
+  /** How many files and folders the exclude patterns keep out of the sources (a count, never names). */
+  excludedCount() {
+    const skipped = { n: 0 };
+    for (const s of this.sources) if (s.path) walk(s.path, { exclude: this.exclude, skipped });
+    return skipped.n;
   }
 
   /** Sources called `name`, or named after it ("second mate" covers "second mate web"); all without a name. */
@@ -190,15 +224,18 @@ export class Records {
     const deadline = Date.now() + 4000;
     // Command sources run while the files are searched.
     const regex = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    // A command that does not take the words (computer status, today's tasks) runs only when
+    // its source is named, so what it prints is read only when it is asked for.
     const commands = sources
-      .filter((s) => s.command)
+      .filter((s) => s.command && (source || s.command.some((a) => /\{(query|regex)\}/.test(a))))
       .map(async (s) => {
-        const text = (await runRead(s.command.map((a) => a.replace('{query}', () => words.join(' ')).replace('{regex}', () => regex)))).trim();
+        const argv = s.command.map((a) => a.replace('{query}', () => words.join(' ')).replace('{regex}', () => regex));
+        const text = (await runRead(argv, (s.timeoutSec || 6) * 1000)).trim();
         if (text) hits.push({ score: words.length, source: s.name, text: text.slice(0, 1500) });
       });
     for (const s of sources) {
       if (!s.path) continue;
-      for (const f of walk(s.path)) {
+      for (const f of walk(s.path, { exclude: this.exclude })) {
         if (Date.now() > deadline) break;
         const entry = this.text(f);
         if (!entry || !entry.text) continue;
@@ -242,7 +279,7 @@ export class Records {
     const src = name ? this.resolve(name) : null;
     if (name && !src) return { error: `no record folder called "${name}"` };
     const roots = src ? [src] : this.roots;
-    const files = roots.flatMap((r) => walk(r, { depth: 2, limit: 200 })).sort((a, b) => b.mtime - a.mtime).slice(0, 40);
+    const files = roots.flatMap((r) => walk(r, { depth: 2, limit: 200, exclude: this.exclude })).sort((a, b) => b.mtime - a.mtime).slice(0, 40);
     return {
       sources: name ? undefined : this.sources.map((s) => s.name),
       recent: files.map((f) => ({ record: this.label(f.file), modified: new Date(f.mtime).toISOString().slice(0, 16) })),
@@ -270,13 +307,13 @@ export const TOOLS = [
   {
     name: 'search_records',
     description:
-      'Search your own records, notes, memories, documents and notes vault for keywords; returns matching lines and the name of each record. ' +
+      'Search your own records, notes, memories and documents for keywords; returns matching lines and the name of each record. ' +
       'Use it first for any question about work, projects, people, plans, decisions, notes or files, before saying you do not know or handing anything off.',
     parameters: {
       type: 'object',
       properties: {
         query: { type: 'string', description: 'a few keywords' },
-        source: { type: 'string', description: 'optional: search only this source (a name from the record sources), such as the notes vault when the user names it' },
+        source: { type: 'string', description: 'optional: search only this source (a name from the record sources), when the user names it or the question is about it' },
       },
       required: ['query'],
     },

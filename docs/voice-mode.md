@@ -18,6 +18,8 @@ voice-mode check            # what is configured and what is missing (never prin
 voice-mode do "<request>"   # for your assistant: one desktop action from the same safe list
 voice-mode say "<text>"     # for your assistant: say these words aloud, as they are
 voice-mode page             # what the browser's current page offers the voice (touches nothing)
+voice-mode pc               # this computer's status in a few lines (what the voice reads when asked)
+voice-mode tasks            # today's and overdue tasks in a few lines (what the voice reads when asked)
 voice-mode help             # every command
 ```
 
@@ -59,7 +61,11 @@ points at another one). Everything not in the file takes the defaults in `bin/co
 | `providers.openai` | `model` (`gpt-realtime`), `voice`, `transcribeModel` (`gpt-live-transcribe`, which streams words while you speak), `silenceMs`, `vad` (`server` or `semantic`), `ttsModel` (`gpt-4o-mini-tts`, for `voice-mode say`). |
 | `providers.gemini` | `model` (`gemini-3.8-live`), `voice`, `silenceMs`, `ttsModel` (`gemini-3.8-flash-lite-tts`, for `voice-mode say`). Gemini resets each connection after about ten minutes; voice mode reconnects with the session's resumption handle, so the conversation carries on where it was. |
 | `persona` / `personaFile` | Who the voice is. The shipped default is neutral and brief; put your own in a file. |
-| `sources` | What it may read: `{ "name", "path", "about"?, "show"? }` for a file or folder (a `*` in a path segment makes one source per match), or `{ "name", "command": [..., "{query}"] }` for a read-only search command (`{regex}` gives the keywords as `a\|b`). `about` tells the model what the source holds; `show: true` lets its top-level notes be shown on screen by voice. |
+| `sources` | What it may read: `{ "name", "path", "about"?, "show"? }` for a file or folder (a `*` in a path segment makes one source per match), or `{ "name", "command": [..., "{query}"], "timeoutSec"? }` for a read-only search command (`{regex}` gives the keywords as `a\|b`; 6 s unless `timeoutSec` says otherwise). A command with neither runs only when the voice names its source. `about` tells the model what the source holds; `show: true` lets its top-level notes be shown on screen by voice. |
+| `exclude` | Name patterns (`*` and `?`, any case) of files and folders that are never listed, searched, read, offered to the decision model or opened, in the documents folder and every source. Empty unless you fill it in; see Keeping files out. |
+| `lookout` | `enabled`, `url` (the ledger board's `/api/board`; loopback only), `command` (`ledger board --json`, used when the board is off), `everySec` (5), `batchSec` (30), `gapSec` (120), `stateFile`. See The lookout. |
+| `notes` | `enabled`, `vault` (a git repository), `agy` (the agy command), `rawDir` (raw material agy is told never to read), `waitSec` (30). See Answers from your notes. |
+| `tasks` | `command` (default `ticktick --format json tasks due 1`), `timeoutSec` (5): what `voice-mode tasks` runs. |
 | `queue` | `{ "command": [...], "env": {} }`: how a hand-off reaches your assistant; the note is added as the last argument. Never run through a shell. Without it there is no hand-off. |
 | `handoff` | `replyCommand` (default `voice-mode reply`: the command written into each note; give the full path if your assistant's shell does not have it on PATH), `dir` (the reply queue; default `handoff/` next to the config), `waitMin` (15: how long a conversation stays open for an answer that is still coming), `stillComingSec` (20: when it says, once, that the answer is still coming; 0 never). |
 | `briefing` | `enabled`, `refreshMin` (3), `maxChars` (120000 in all; see What a big briefing costs), `parts` (see Briefing and hand-off). |
@@ -173,7 +179,7 @@ sentence ends, as the desktop actions do.
 
 ## What it may read, and what it never does
 
-- Only the configured sources, read-only. A file is read only when it sits inside a source
+- Only the configured sources, read-only, less anything `exclude` names. A file is read only when it sits inside a source
   (symlinks are followed and checked), is a text file, and is not named like a key or
   secret (`.env`, `*secret*`, `*token*`, `*credential*`, `*key*`, `.pem`). Search keeps file
   text in memory keyed by modification time, warmed at start, so a search over a few
@@ -281,6 +287,102 @@ conversation for the model.
 The run log records `handoff` (id, sent), `handoff-answer` with `round_trip_ms` (the end of
 your question to the first sound of the answer) and `speak_ms` (answer queued to heard), and
 `handoff-unheard` when an answer was not heard.
+
+## The lookout: speaking up on its own
+
+With `lookout.enabled`, a running conversation also keeps an eye on your assistant's work and
+says, without being asked, when something new **waits on you** or a **worker stopped or
+failed**. It reads the [ledger](ledger.md) module's live board (`/api/board` on 127.0.0.1, or
+`ledger board --json` when the board is off) every 5 seconds, so "waits on you" is the board's
+own rule, the one Firstmate's `/bearings` uses. It never reads the Firstmate homes itself and
+never steers anything: running the work stays with your assistant.
+
+| It says (task names as the board has them) | When the board shows |
+| --- | --- |
+| "blue header is waiting on you: Blue logo or grey?" | a new item in *Needs you now* |
+| "docs update is asking you something: Which page first?" | a worker's open question that is not a hold yet |
+| "parser fix failed: tests failing on the parser." | a task whose last status is `failed` (or `blocked`: "is stuck") |
+| "import job stopped before finishing. Its last words: halfway through the import" | a task whose agent was working and is gone, with no `done` or `paused` |
+
+It does not announce pull requests, landings or anything else.
+
+- **No nagging.** The first read ever is a silent baseline: what is already on the board is
+  never announced. Each event is said once. Events found within `batchSec` (30 s) become one
+  line, at most one line is spoken every `gapSec` (2 minutes), and more roll into "and 3 more".
+  A line waits for a quiet moment, like a hand-off's answer.
+- **With no conversation running, nothing is read, shown or said.** What is seen and what is
+  not said yet live in `lookout.json` next to the config (mode 600). The next conversation
+  compares the board with it and says, once, what is new and still true: a question answered
+  meanwhile is not said late.
+- **What leaves the machine**: only the line, to the realtime voice provider, through the
+  conversation that is running. Inside a conversation each line is one more model turn, billed
+  for the whole context (see What a big briefing costs).
+
+## Computer status and today's tasks
+
+Two read-only command sources the installer can add, read only when you ask ("how is my
+battery?", "what's due today?"):
+
+- **`computer`** runs `voice-mode pc`: battery (`/sys/class/power_supply` on Linux, `pmset` on
+  macOS), disk (`df`), memory (`/proc/meminfo`, `vm_stat`), load against the number of cores,
+  network (`nmcli`, else whether an interface is up), the three busiest apps (`ps`, grouped by
+  executable, so a browser's many processes count once) and uptime. It takes about 0.15 s.
+  It never speaks up about these on its own.
+- **`tasks`** runs `voice-mode tasks`: the `tasks.command` (by default the TickTick CLI that the
+  daily-sync module also uses, `ticktick --format json tasks due 1`), keeping what is overdue or
+  due today by your local calendar day, with titles. A failed read is said plainly ("the task
+  list could not be read just now"). The titles go to the realtime voice provider when the
+  voice reads this source.
+
+## Answers from your notes (through agy)
+
+The voice never reads your notes vault itself. With `notes.enabled`, a question about your
+notes ("what do my notes say about the garden?") goes to a tool, `ask_notes`: the voice says
+"Let me check your notes", and [agy](https://antigravity.google) reads the vault and answers in
+one to three sentences, which come back through the same reply queue as a hand-off's answer
+and are spoken in the next quiet moment. At 20 s it says once that the answer is still coming;
+at `waitSec` (30 s) agy is stopped and the voice says it could not get an answer in time.
+
+How it is run, all of it checked in `bin/notes.mjs`:
+
+- agy is started with an argument list, never through a shell, from the vault folder:
+  `agy --prompt "<fixed prompt>" --new-project --effort low`. Nothing else is added: no plan
+  mode, no other model (agy uses the model it is set up with), no permission override.
+- The fixed prompt treats your question as data between markers, answers only from the notes,
+  never reads `.ingest/` or `notes.rawDir`, and asks for one to three spoken sentences.
+- **Read-only is proven, not trusted.** The vault must be a git repository: its
+  `git status --porcelain` (except `.obsidian/`) is taken before and after every run. Any new
+  or changed file switches notes answers off (`notes-disabled.json` next to the config, listing
+  what changed) and the voice says so; nothing is reverted or deleted. `voice-mode check`
+  reports it; delete the file once you have looked, to switch them back on.
+- It never runs while the vault's ingest is running (`.ingest/lock`, or an `ingest.mjs`
+  process for the vault), while agy is already running in the vault, or while another notes
+  question is being answered: the voice then says "Notes are busy, try again shortly".
+- The question and answer live only in the reply queue (`handoff/`); logs get the id, the time
+  taken and the outcome, even with `logTranscripts` on. agy keeps its own session history
+  under `~/.gemini`.
+- Each question runs as its own `voice-mode ask-notes <id>`, so an answer still lands if you
+  end the conversation first; the next one starts with it.
+
+agy run on its own cannot ask for permission. It refuses terminal commands, and it refuses
+to read files unless its settings allow it: add a `read_file` rule to `permissions.allow` in
+agy's `settings.json` (`~/.gemini/antigravity-cli/`), as agy's own message suggests. Without it
+the voice says agy is not allowed to read your notes, and `voice-mode check` flags it. Its
+file-writing tool is not refused that way, which is why every run is checked afterwards.
+
+Measured on 2026-09-30 and 2026-10-01 on a Linux desktop: agy answered a question that reads no
+file in 6 to 11 s from the start of the command (median 7.3 s, five runs); reading a note
+took about 25 s in the one run where agy could read it.
+
+## Keeping files out
+
+`exclude` lists name patterns, such as `"exclude": ["*contract*", "Client ?"]`, matched
+(case-insensitively) against every folder and file name below the documents folder and each
+source. A match is left out of everything: the documents folders offered to the decision model,
+`files`, record search, reading, listing and opening, folders with everything inside them.
+Only the part of a path below a root counts. `voice-mode check` prints how many patterns there
+are and how many files and folders they keep out, never the patterns or the names. Patterns
+are yours: keep them in your own `config.json`, never in a repository.
 
 ## From your assistant's session: `do` and `say`
 
