@@ -57,13 +57,16 @@ async function installLavishLibrary(ctx) {
   }
   const units = path.join(ctx.home, '.config', 'systemd', 'user');
   const node = unitQuote(process.execPath);
+  const prefix = ctx.capture('npm prefix -g');
+  const lavishBin = prefix && fs.existsSync(path.join(prefix, 'bin', 'lavish-axi')) ? path.join(prefix, 'bin', 'lavish-axi') : null;
   const api = await ctx.writeFile(
     path.join(units, 'lavish-library-api.service'),
     lavishUnit(dir, {
       description: 'Lavish Library filesystem companion (127.0.0.1:4318)',
       exec: `${node} ${unitQuote(path.join(dir, 'scripts', 'local-api.mjs'))}`,
-      // Its Open button opens a browser tab, even where agents keep LAVISH_AXI_NO_OPEN set.
-      extra: ['UnsetEnvironment=LAVISH_AXI_NO_OPEN'],
+      // Its Open button opens a browser tab, even where agents keep LAVISH_AXI_NO_OPEN set. It
+      // also calls lavish-axi by its npm path, so a no-open wrapper earlier on PATH is skipped.
+      extra: [...(lavishBin ? [`Environment=${unitQuote(`LAVISH_AXI_BIN=${lavishBin}`)}`] : []), 'UnsetEnvironment=LAVISH_AXI_NO_OPEN'],
     }),
     { onConflict: 'ask' },
   );

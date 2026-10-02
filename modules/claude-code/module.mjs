@@ -137,6 +137,34 @@ export default {
       choices: [keep, { value: 'fullscreen', label: 'fullscreen - flicker-free, with its own scrollback' }, { value: 'default', label: 'default - the classic view' }],
     },
     {
+      key: 'CLAUDE_PUSH_NOTIFICATIONS',
+      type: 'choice',
+      message: 'Push notifications: let Claude send a notification to your phone (through the Claude app) when it decides one is worth it',
+      default: 'keep',
+      choices: [keep, { value: 'on' }, { value: 'off' }],
+    },
+    {
+      key: 'CLAUDE_FEEDBACK_DRAFTS',
+      type: 'choice',
+      message: 'Feedback drafts: let Claude queue draft feedback to Anthropic for you to review before anything is sent',
+      default: 'keep',
+      choices: [keep, { value: 'on' }, { value: 'off', label: 'off - Claude never drafts feedback' }],
+    },
+    {
+      key: 'CLAUDE_SESSION_PERSISTENCE',
+      type: 'choice',
+      message: 'Save transcripts and history even for sessions started from inside another Claude Code session (CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1), so agents you launch can be resumed',
+      default: 'keep',
+      choices: [keep, { value: 'on' }, { value: 'off', label: 'off - remove the setting and let Claude Code decide' }],
+    },
+    {
+      key: 'CLAUDE_SKIP_BYPASS_PROMPT',
+      type: 'choice',
+      message: 'Skip the confirmation before bypass-permissions mode (only if you run agents that way on purpose)',
+      default: 'keep',
+      choices: [keep, { value: 'on', label: 'on - no confirmation' }, { value: 'off', label: 'off - always confirm' }],
+    },
+    {
       key: 'CLAUDE_AUTOCOMPACT_WINDOW',
       type: 'text',
       message: 'Compact the conversation automatically at how many tokens (100000 to 1000000; empty to keep)',
@@ -218,6 +246,19 @@ export default {
           if (remote && remote !== 'keep') s.remoteControlAtStartup = remote === 'on';
           const tui = ctx.get('CLAUDE_TUI');
           if (tui && tui !== 'keep') s.tui = tui;
+          for (const [key, answer] of [
+            ['agentPushNotifEnabled', 'CLAUDE_PUSH_NOTIFICATIONS'],
+            ['feedbackDrafts', 'CLAUDE_FEEDBACK_DRAFTS'],
+            ['skipDangerousModePermissionPrompt', 'CLAUDE_SKIP_BYPASS_PROMPT'],
+          ]) {
+            const v = ctx.get(answer);
+            if (v && v !== 'keep') s[key] = v === 'on';
+          }
+          const persist = ctx.get('CLAUDE_SESSION_PERSISTENCE');
+          if (persist === 'on') {
+            s.env ??= {};
+            s.env.CLAUDE_CODE_FORCE_SESSION_PERSISTENCE = '1';
+          } else if (persist === 'off' && s.env) delete s.env.CLAUDE_CODE_FORCE_SESSION_PERSISTENCE;
           const window = String(ctx.get('CLAUDE_AUTOCOMPACT_WINDOW') || '').trim();
           if (window) {
             const tokens = Number(window);
@@ -227,7 +268,7 @@ export default {
             s.autoCompactWindow = tokens;
           }
         },
-        'model, effort, theme, permission mode, thinking summaries, Remote Control, view and auto-compact',
+        'model, effort, theme, permission mode, thinking summaries, Remote Control, view, auto-compact, notifications, feedback drafts, session persistence and the bypass prompt',
       ),
     );
 
