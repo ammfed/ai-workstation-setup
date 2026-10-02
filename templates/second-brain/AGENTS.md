@@ -38,6 +38,14 @@ Everything else:
 - `bin/ingest.mjs` - the ingestion driver. Hands one raw file at a time to your agent CLI
 - `bin/housekeeping.mjs` - the unattended pass: check, then reindex. Meant for a timer
 - `prompts/ingest.md` - the prompt `bin/ingest.mjs` feeds that agent
+- Optional tools, present only when they were picked at setup:
+  - `bin/search.mjs` - ranked full-text search (BM25) over the notes. It reads the notes on
+    every run, so there is still no index to build or keep fresh
+  - `bin/capture.mjs` - adds one provenance-tagged line to today's journal, a named note, or a
+    new note, runs `bin/check.mjs` on it, and commits only that note and `MAP.md`
+  - `bin/garden.mjs` and `prompts/garden.md` - one small tidy-up of a few notes by your agent
+    CLI (see "Garden" below)
+  - `bin/bookmarks.mjs` - turns a browser bookmark export into markdown to drop in `$RAW_DIR`
 - `START-HERE.md`, `MAP.md` - the two hand-readable entry points. `MAP.md` is generated: one
   line per note, grouped by folder, so anyone can see everything that exists without a search
   index. Like a folder's own `README.md`, neither carries note frontmatter, and `bin/check.mjs`
@@ -132,6 +140,9 @@ rg -l "source: some-file.eml" sources/
 rg -l "type: project" projects/
 ```
 
+When `bin/search.mjs` is installed, `node bin/search.mjs some topic` ranks the notes that match
+best, title matches first; it reads the notes on every run and keeps nothing.
+
 `MAP.md` answers "what exists", `rg` answers "where is it". A search index, a knowledge graph
 and embeddings are a plausible future extension of this vault, not part of it today. Nothing
 here builds or depends on one.
@@ -169,6 +180,16 @@ Point your scheduler at it (a systemd user timer, a launchd agent, Task Schedule
 every few hours, or run it by hand after a batch of edits. Keeping it this boring is the point:
 an unattended job that only validates and reindexes can be left running without supervision,
 and needs no credentials of any kind.
+
+## Garden
+
+`node bin/garden.mjs` (when installed) hands one slice of a few notes, taken round-robin, to
+the agent CLI named by `$AGENT_CLI` with `prompts/garden.md`, to make their structure and prose
+clearer without changing any fact. The vault must be a git repository. A slice holding a note
+with uncommitted changes is skipped; anything the agent changed outside the slice is put back;
+the changed notes must pass `bin/check.mjs` or the pass is discarded; a good pass is committed
+on its own. `--dry-run` shows the next slice and its prompt, `--status` says whether a pass is
+running.
 
 ## Rules
 

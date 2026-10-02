@@ -102,3 +102,26 @@ and deserves a person nearby.
 
 A search index, a knowledge graph or embeddings would all be plausible additions. None of
 them exist here, and nothing in the vault depends on one.
+
+## Optional tools
+
+Picked with `VAULT_TOOLS` (all off by default), each a single Node script in `bin/`:
+
+- `search.mjs`: ranked full-text search (BM25, title words weighted up). It reads the notes on
+  every run and keeps nothing, so there is still no index.
+- `capture.mjs`: one provenance-tagged line into today's journal, a named note (`--to`), or a
+  new note (`--type`, `--title`, `--area`). The note must pass `bin/check.mjs` or the capture is
+  undone; in a git vault only that note and `MAP.md` are committed.
+- `bookmarks.mjs`: a browser bookmark export (the HTML every browser writes) as markdown, one
+  heading per folder, ready to drop in `$RAW_DIR` for ingestion.
+- `garden.mjs` with `prompts/garden.md`: one small tidy-up of a few notes, round-robin over the
+  vault, by the agent CLI you name in `$AGENT_CLI` (no default provider, no keys of its own).
+  It needs a git vault, skips a slice you have uncommitted edits in, puts back anything the
+  agent changed outside the slice (stray new files go to a removed-files folder outside the
+  vault, never deleted), discards the pass if the notes fail the checker, and commits a good
+  pass on its own.
+
+`VAULT_TIMERS` can also schedule `housekeeping` (every 3 hours) and `garden` (every 6 hours,
+with the agent command from `VAULT_AGENT_CMD`) as systemd user timers on Linux and WSL or
+launchd agents on macOS; on Windows it leaves a to-do for Task Scheduler. The agent CLI must
+already be signed in on its own: the timer passes only the command and its flags.
