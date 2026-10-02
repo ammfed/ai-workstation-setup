@@ -45,7 +45,9 @@ function vault() {
   return root;
 }
 
-const node = (root, script, args, env = {}) => spawnSync(process.execPath, [path.join(root, 'bin', script), ...args], { cwd: root, encoding: 'utf8', env: { ...process.env, VAULT_PATH: root, ...env } });
+// The scripts commit with your own git identity; CI has none, so the tests give an invented one.
+const IDENTITY = { GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 'test@example.com', GIT_COMMITTER_NAME: 'Test', GIT_COMMITTER_EMAIL: 'test@example.com' };
+const node = (root, script, args, env = {}) => spawnSync(process.execPath, [path.join(root, 'bin', script), ...args], { cwd: root, encoding: 'utf8', env: { ...process.env, ...IDENTITY, VAULT_PATH: root, ...env } });
 
 test('search: title words outrank body words, and unrelated notes are left out', () => {
   const hits = rank([
