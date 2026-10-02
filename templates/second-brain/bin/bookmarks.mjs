@@ -8,7 +8,7 @@
 // Usage: node bin/bookmarks.mjs bookmarks.html [out.md]     (no out.md prints to stdout)
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 const entities = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", '#39': "'" };
 const decode = (s) => s.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (m, e) => {
@@ -38,7 +38,18 @@ export function bookmarksToMarkdown(html) {
   return `${out.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n`;
 }
 
-if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
+
+// Run directly, not imported by a test. Real paths on both sides: a symlinked folder (such as
+// macOS's /var -> /private/var) would otherwise make the two differ and the script do nothing.
+function runAsScript() {
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (runAsScript()) {
   const [input, output] = process.argv.slice(2);
   if (!input) {
     console.error('Usage: node bin/bookmarks.mjs bookmarks.html [out.md]');

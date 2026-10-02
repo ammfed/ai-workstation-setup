@@ -25,8 +25,12 @@ function git(dir, ...args) {
 }
 
 // A small vault with the scripts installed, tracked by git and committed.
+// It is reached through a symlink, as macOS's temporary folder is, so a script that compares
+// its own path without resolving links (and then does nothing) fails here on every system.
 function vault() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-test-'));
+  const real = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-test-'));
+  const root = `${real}-link`;
+  fs.symlinkSync(real, root, 'junction');
   fs.mkdirSync(path.join(root, 'bin'));
   fs.mkdirSync(path.join(root, 'prompts'));
   for (const f of fs.readdirSync(path.join(repoRoot, 'templates', 'second-brain', 'bin'))) {
@@ -43,6 +47,11 @@ function vault() {
   git(root, 'add', '.');
   git(root, 'commit', '-qm', 'start');
   return root;
+}
+
+function removeVault(root) {
+  fs.rmSync(fs.realpathSync(root), { recursive: true, force: true });
+  fs.rmSync(root, { force: true });
 }
 
 // The scripts commit with your own git identity; CI has none, so the tests give an invented one.
@@ -80,7 +89,7 @@ test('capture: journal, new note and append are checked and committed; a broken 
   assert.doesNotMatch(fs.readFileSync(path.join(root, 'work', 'Beta.md'), 'utf8'), /Nowhere/);
   assert.equal(git(root, 'status', '--porcelain').stdout.trim(), '');
   assert.equal(git(root, 'log', '--format=%s').stdout.split('\n').filter((s) => s.startsWith('capture:')).length, 2);
-  fs.rmSync(root, { recursive: true, force: true });
+  removeVault(root);
 });
 
 test('bookmarks: folders become headings and links keep their added date', () => {
@@ -125,7 +134,7 @@ test('garden: a good pass commits only its slice and puts everything else back',
   assert.deepEqual(git(root, 'show', '--name-only', '--format=', 'HEAD').stdout.trim().split('\n').sort(), ['MAP.md', 'work/Alpha.md']);
   assert.equal(fs.readFileSync(path.join(root, '.ingest', 'garden-cursor'), 'utf8').trim(), '1');
   assert.equal(fs.existsSync(path.join(root, '.ingest', 'lock')), false);
-  fs.rmSync(root, { recursive: true, force: true });
+  removeVault(root);
   fs.rmSync(removed, { recursive: true, force: true });
 });
 
@@ -142,6 +151,6 @@ test('garden: a pass that breaks the contract is discarded; a slice with your ed
   r = node(root, 'garden.mjs', ['--size', '2'], { ...fakeAgent(root), VAULT_REMOVED_DIR: removed });
   assert.match(r.stdout, /skipped: you have uncommitted changes in this slice/);
   assert.match(fs.readFileSync(path.join(root, 'people', 'Sam Example.md'), 'utf8'), /my edit in progress/);
-  fs.rmSync(root, { recursive: true, force: true });
+  removeVault(root);
   fs.rmSync(removed, { recursive: true, force: true });
 });

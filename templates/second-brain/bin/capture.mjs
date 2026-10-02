@@ -17,7 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { FOLDER_TYPE, vaultRoot } from './lib-vault.mjs';
 
 const DEFAULT_AREA = '{{DEFAULT_PILLAR}}';
@@ -106,4 +106,15 @@ function main() {
   console.log(`capture: ${previous === null ? 'wrote' : 'added to'} ${rel}`);
 }
 
-if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) main();
+
+// Run directly, not imported by a test. Real paths on both sides: a symlinked folder (such as
+// macOS's /var -> /private/var) would otherwise make the two differ and the script do nothing.
+function runAsScript() {
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (runAsScript()) main();

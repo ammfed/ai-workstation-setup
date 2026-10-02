@@ -8,7 +8,7 @@
 // Usage: node bin/search.mjs [--limit N] [--folder F] [--type T] [--json] QUERY...
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { noteDirs, notesIn, parseNote, vaultRoot } from './lib-vault.mjs';
 
 export const tokens = (text) => (String(text).toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).filter((t) => t.length > 1);
@@ -47,8 +47,18 @@ function snippet(body, query) {
   return (line || '').trim().slice(0, 160);
 }
 
-// Run as a script; imported (by a test), it only exports rank and tokens.
-if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
+
+// Run directly, not imported by a test. Real paths on both sides: a symlinked folder (such as
+// macOS's /var -> /private/var) would otherwise make the two differ and the script do nothing.
+function runAsScript() {
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (runAsScript()) {
   const argv = process.argv.slice(2);
   const opts = { limit: 10, folder: null, type: null, json: false };
   const words = [];
