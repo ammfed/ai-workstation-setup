@@ -1663,7 +1663,7 @@ test('pc: invented system output becomes a few plain lines; apps are grouped by 
   assert.equal(parseNmcli('connected:limited\n'), 'connected, internet limited');
   assert.equal(parseNmcli('disconnected:none\n'), 'disconnected');
   const ps = ' 10 50.0 10.0 MainThread\n 11 30.0 5.0 web-content\n 12 20.0 2.0 editor\n 13 99.0 0.1 ps\n 14 5.0 1.0 tool\n';
-  const exes = { 10: '/opt/browser/browser', 11: '/opt/browser/browser', 12: '/usr/bin/editor', 14: '/home/u/.local/share/tool/versions/1.2.3' };
+  const exes = { 10: '/opt/browser/browser', 11: '/opt/browser/browser', 12: '/usr/bin/editor', 14: '/opt/tool/versions/1.2.3' };
   // The listing ps itself is left out; an executable named only by a version keeps its process name.
   assert.deepEqual(topApps(ps, { exeOf: (pid) => exes[pid] }).map((a) => [a.name, a.cpu, a.count]), [['browser', 80, 2], ['editor', 20, 1], ['tool', 5, 1]]);
   const f = gather({

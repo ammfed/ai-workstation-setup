@@ -14,3 +14,5 @@ data/captain.md
 <key>ProgramArguments</key>
 # The repo owner's public Lavish Library app, installed by the extras module.
 github.com/ammfed/lavish-library
+# An invented executable path in voice-mode test data, still in history at 25a4c17.
+/home/u/.local/share/tool/versions/1.2.3
