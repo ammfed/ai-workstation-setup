@@ -12,7 +12,8 @@ const SKILLS = [
     value: 'wayfinder',
     repo: 'mattpocock/skills',
     label:
-      'wayfinder - plans work too big for one session as a map of open decisions; starts only when you type /wayfinder. ' +
+      'wayfinder - plans work too big for one session as a map of open decisions; starts only when you type /wayfinder; ' +
+      'its tracker is local Markdown by default, with no setup skill to install. ' +
       'Also installs its helpers domain-modeling, research and prototype, which can start on their own in any session: ' +
       'research and prototype answer general research and UI-exploration requests, ' +
       'domain-modeling writes GLOSSARY.md and docs/adr into the repo it runs in',

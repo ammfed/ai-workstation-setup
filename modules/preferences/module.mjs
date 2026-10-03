@@ -101,7 +101,7 @@ export default {
     yes('PREFS_YES_NO_IN_CHAT', 'Decisions: ask simple yes-or-no questions in plain chat?', { when: (ctx) => ctx.get('PREFS_DECISIONS') !== 'chat' }),
     yes('PREFS_PREVIEW_BEFORE_BUILD', 'Decisions: show look-and-feel changes on a review page before they are built?'),
     yes('PREFS_CHECK_ANSWERS_FIRST', 'Decisions: check whether you already answered before calling a question open?'),
-    yes('PREFS_ASK_BEFORE_CLOSING', 'Decisions: ask before closing finished agents, sessions and tabs?'),
+    yes('PREFS_ASK_BEFORE_CLOSING', 'Decisions: ask before closing finished agents, sessions and review pages?'),
     {
       key: 'PREFS_AUTONOMY',
       type: 'choice',

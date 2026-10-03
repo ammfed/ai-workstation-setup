@@ -14,7 +14,7 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
       'Write in plain, natural, friendly words, like a capable colleague talking. Explain a thing before naming it. No internal codes, invented jargon or arrow shorthand in place of sentences.',
     get('PREFS_PLAIN_LANGUAGE') && 'Keep replies short. Go into detail only when asked or when a decision needs it.',
     get('PREFS_NO_NARRATION') &&
-      'Give the result, not a commentary on your own steps: no private plans, no lists of what you are about to check, no narration between tool calls. If something failed or is still running, say that as a fact about the work.',
+      'Give the result, not a commentary on your own steps. Between tool calls, a few words on what you are doing is fine; no private plans or checklists. If something failed or is still running, say that as a fact about the work.',
     get('PREFS_NO_EM_DASHES') && 'Do not use em dashes. Use a period, a comma, or a plain conjunction instead.',
     get('PREFS_OUTWARD_AS_USER') &&
       'Anything that goes to other people (documents, emails, pull request text, published pages) is written as the user, in their professional voice. Leave out agent and tooling labels, internal ids, source-type tags and speaker notes.',
@@ -53,23 +53,24 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
   ]);
 
   const decisions = get('PREFS_DECISIONS');
+  const browser = get('PREFS_RESEARCH_BROWSER') === 'separate';
   section('Decisions', [
     'Bring the user genuine decisions only, never tool permissions or command mechanics.',
     decisions === 'cards' &&
       'Put decisions on a Lavish decision-card page (lavish-axi): one decision at a time with "1 of N" and a progress fill, a visual preview for every option, a short "why" kept closed, and every answer sent together after a one-screen recap.',
     decisions === 'cards' && cardsPath && `Start each decision page from the template at \`${cardsPath}\`.`,
-    decisions === 'cards' && 'Open review pages without launching a browser tab (`--no-open`, or `LAVISH_AXI_NO_OPEN=1`), never open one automatically, and never re-run the open command just to refresh a page; the running page already updates. Share the page link in chat every time.',
+    decisions === 'cards' && 'Open review pages without launching a browser tab (`--no-open`, or `LAVISH_AXI_NO_OPEN=1`), never open one automatically, and never re-run the open command just to refresh a page; the running page already updates.',
     decisions === 'tool' && 'Ask decisions with the question tool, one question at a time, with a preview on every option.',
     decisions === 'chat' && 'Ask decisions in chat, one at a time, with a short named list of options and the recommendation first.',
-    decisions !== 'chat' && get('PREFS_YES_NO_IN_CHAT') && 'Ask a simple yes-or-no question in plain chat instead.',
+    decisions !== 'chat' && get('PREFS_YES_NO_IN_CHAT') && 'Ask a simple yes-or-no question in plain chat, not on a review page.',
     get('PREFS_PREVIEW_BEFORE_BUILD') &&
       'When the user asks for a change to how something looks or feels, show it on a review page before building it, the same way as a decision.',
-    get('PREFS_CHECK_ANSWERS_FIRST') &&
-      'Before describing a review page or question as still open, check whether the user already answered it. Never assume a page is unanswered.',
+    decisions !== 'cards' && get('PREFS_CHECK_ANSWERS_FIRST') &&
+      'Before describing a question as still open, check whether the user already answered it. Never assume it is unanswered.',
     decisions === 'cards' && get('PREFS_CHECK_ANSWERS_FIRST') &&
-      'For a review page, check its real state first: `lavish-axi` lists every session with its status and pending answers, and `lavish-axi poll <file>` collects answers (leave it running; answers stay queued until collected). Never reopen a page the user ended unless they ask. A page that says it ended, or a link that loads, does not mean answers were lost: read the session status and pending answers, and collect them with `lavish-axi poll <file>` before claiming a page is open, answered or unanswered.',
+      'Before calling a review page open, answered or unanswered, check whether the user already answered it, and never assume it is unanswered. `lavish-axi` lists every session with its status and pending answers, and `lavish-axi poll <file>` collects answers (leave it running; answers stay queued until collected). Never reopen a page the user ended unless they ask. A page that says it ended, or a link that loads, does not mean answers were lost: read the session status and pending answers, and collect them with `lavish-axi poll <file>` first.',
     get('PREFS_ASK_BEFORE_CLOSING') &&
-      'When work finishes, ask whether to close the finished or idle agents, sessions and browser tabs. Never close one unasked, and never leave a finished one open silently.',
+      `When work finishes, ask whether to close the finished or idle agents, sessions and review pages. Never close one unasked, and never leave a finished one open silently.${browser ? ' Research tabs the agent opened follow the research rule.' : ''}`,
     get('PREFS_AUTONOMY') === 'act' &&
       'For ordinary judgment calls within a direction the user already set (a library, a helper tool, an implementation detail), decide and report the outcome instead of asking first. When unsure whether a call is the user\'s, act and flag it.',
     get('PREFS_AUTONOMY') === 'act' &&
@@ -132,14 +133,13 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     routing === 'economical' && 'Use medium effort for planning, design, hard reasoning and judgment calls.',
     routing === 'economical' && 'Use the most capable model at high effort for building a product, prototype or demo.',
     routing === 'balanced' && 'Use medium effort by default, and high effort for planning, design, hard reasoning and building.',
-    routing !== 'none' && 'Use a premium model outside these rules only when the user names it for a task.',
+    routing !== 'none' && 'Use a model above the one these rules pick only when the user names it for a task.',
     get('PREFS_QUOTA') &&
       'Treat subscription limits as scarce. Check them with `quota-axi` before heavy or parallel work, take the cheapest path that still answers, and pause heavy work near a limit and say so.',
     get('PREFS_DELEGATE_RETRIEVAL') &&
       `Hand retrieval-heavy work (large document sweeps, broad web reading, bulk page reads) to \`${get('PREFS_DELEGATE_RETRIEVAL')}\` and reason over what it returns. Keep decisions and code changes with the main agent.`,
   ]);
 
-  const browser = get('PREFS_RESEARCH_BROWSER') === 'separate';
   section('Research', [
     browser &&
       "Do web research in a separate, visible browser that belongs to the agent (for example `research-browser axi <command>`), never in the user's own browser profile or an extension running in it.",
