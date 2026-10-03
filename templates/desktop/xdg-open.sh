@@ -33,10 +33,12 @@ if [ -z "$real" ]; then
 fi
 
 target="${1:-}"
-if [ -n "$target" ] && command -v flock >/dev/null 2>&1; then
+if [ -n "$target" ]; then
   key="$cache/$(printf '%s' "$target" | cksum | cut -d' ' -f1)"
+  # flock makes a burst of simultaneous opens wait their turn; without it the check
+  # still drops repeats that arrive one after another.
   exec 9>"$key.lock"
-  flock 9
+  if command -v flock >/dev/null 2>&1; then flock 9; fi
   now=$(date +%s)
   last=$(cat "$key" 2>/dev/null || echo 0)
   case "$last" in '' | *[!0-9]*) last=0 ;; esac
