@@ -54,8 +54,8 @@ Everything else:
   has been ingested. Created by the first `bin/ingest.mjs` run; it does not exist until then
 
 Raw source files live **outside** this vault, under `$RAW_DIR` (this setup: `{{RAW_DIR}}`).
-They are never copied in and never modified. Notes in `sources/` reference them by exact
-filename only, so the vault stays a layer of notes over an archive it does not own.
+Notes in `sources/` reference them by exact filename only, so the vault stays a layer of notes
+over an archive it does not own (see Rules).
 
 ## Note contract
 
@@ -97,8 +97,8 @@ Every fact added to a topic, person, project, decision or meeting note carries i
 inline: `(from [[<source note>]], <date>)`, or `(captured by <who>, <date>)` when it came from
 a conversation rather than a file.
 
-A fact that contradicts an existing line **never overwrites it**. Strike the old line, stating
-both dates, and add the new fact as its own provenance-tagged line below:
+A fact that contradicts an existing line is never overwritten (see Rules). Strike the old line,
+stating both dates, and add the new fact as its own provenance-tagged line below:
 
 ```markdown
 ~~The deadline is 14 March (stated 2026-01-08)~~ superseded 2026-02-19 by the line below.
@@ -121,7 +121,8 @@ question belongs in one of them, where the next reader will meet it, not in some
 - `reviews/` is where the sweep happens on a schedule, per life area, and where a project's
   `stage:` gets changed on purpose rather than by drift.
 
-Before starting work in this vault, read `decisions/` and the latest `journal/` note.
+Before changing notes, read the latest `journal/` note and the decisions `MAP.md` lists for the
+topic at hand.
 
 ## Writing style
 
@@ -144,8 +145,7 @@ When `bin/search.mjs` is installed, `node bin/search.mjs some topic` ranks the n
 best, title matches first; it reads the notes on every run and keeps nothing.
 
 `MAP.md` answers "what exists", `rg` answers "where is it". A search index, a knowledge graph
-and embeddings are a plausible future extension of this vault, not part of it today. Nothing
-here builds or depends on one.
+and embeddings are a plausible future extension of this vault, not part of it today (see Rules).
 
 ## How to ingest raw files
 
@@ -166,9 +166,7 @@ path was ledgered before but now hashes differently is a revision: the agent upd
 existing `sources/` note in place and the row is ledgered `updated`.
 
 The agent is whatever CLI `$AGENT_CLI` names, with `$AGENT_CLI_ARGS` for its flags. The vault
-does not depend on any particular one. Nothing here runs a local model for understanding,
-summarizing or writing: plain extraction tools that recover text from a file without
-interpreting it are fine as a step ahead of the agent run.
+does not depend on any particular one, and runs no local model (see Rules).
 
 ## Housekeeping
 
@@ -198,7 +196,9 @@ running.
   survive a rename.
 - **No search or embedding index.** Agents read and grep the vault directly. A note that cannot
   be found with `rg` and `MAP.md` is a badly written note, not a missing index.
-- **No local models** for understanding, summarizing or writing notes.
+- **No local models** for understanding, summarizing or writing notes. Plain extraction tools
+  that recover text from a file without interpreting it are fine as a step ahead of the agent
+  run.
 - **No credential ever enters the vault**: no secret, token, API key or password, in any folder.
   Use a real secret store.
 - **Tasks never live in the vault.** The task tracker holds the queue. A project note names the

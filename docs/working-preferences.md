@@ -48,7 +48,7 @@ changed file and keeps a timestamped backup.
 | `PREFS_YES_NO_IN_CHAT` | yes | Simple yes-or-no questions stay in plain chat. |
 | `PREFS_PREVIEW_BEFORE_BUILD` | yes | A change to how something looks or feels is shown on a review page before it is built. |
 | `PREFS_CHECK_ANSWERS_FIRST` | yes | The agent checks for your answer before calling a page or question open. |
-| `PREFS_ASK_BEFORE_CLOSING` | yes | The agent asks before closing finished agents, sessions and tabs. |
+| `PREFS_ASK_BEFORE_CLOSING` | yes | The agent asks before closing finished agents, sessions and review pages. Research tabs follow the research rule. |
 | `PREFS_AUTONOMY` | `act` | Everyday judgment calls inside a direction you set are decided and reported; credentials, anything destructive and choices only you can make are always asked. `ask` asks about every one. |
 | `PREFS_DECISIONS_LOG` | empty | A file where the agent records each ruling with its date (newest wins, not in the file means not decided), what you ruled out (never offered again), and each "not yet" with the condition that brings it back. |
 | `PREFS_GRILL_ON_GAPS` | yes | Hard questioning of a plan only when it has a real gap, never as the default way to ask. |
