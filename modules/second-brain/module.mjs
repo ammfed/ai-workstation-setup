@@ -27,6 +27,103 @@ const ENTITY_FOLDERS = {
 const NOTE_TYPES = ['source', 'topic', 'person', 'project', 'decision', 'meeting', 'daily', 'review'];
 const SCRIPTS = ['lib-vault.mjs', 'index.mjs', 'check.mjs', 'ingest.mjs', 'housekeeping.mjs'];
 
+// Optional tools on top of the core scripts. Each needs only Node; garden is the one model step,
+// and it runs only through the agent command you give it ($AGENT_CLI), never a default.
+const TOOLS = [
+  { value: 'search', file: 'search.mjs', label: 'search - ranked full-text search over your notes (no index, no model)' },
+  { value: 'capture', file: 'capture.mjs', label: 'capture - add one fact to today\'s journal, a note, or a new note, with its provenance, checked and committed' },
+  { value: 'garden', file: 'garden.mjs', label: 'garden - one small reversible tidy-up of a few notes by your agent CLI, checked, committed, undone if anything is off' },
+  { value: 'bookmarks', file: 'bookmarks.mjs', label: 'bookmarks - turn a browser bookmark export into markdown for ingestion' },
+];
+const TIMERS = {
+  housekeeping: { hours: 3, about: 'check the vault and regenerate MAP.md' },
+  garden: { hours: 6, about: 'one garden pass over the next slice of notes' },
+};
+const TIMER_TAG = 'ai-workstation-setup second-brain';
+const unitQuote = (v) => `"${String(v).replace(/%/g, '%%').replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+const xml = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/** "my-agent --print --flag" -> { AGENT_CLI: 'my-agent', AGENT_CLI_ARGS: '--print --flag' } */
+export function agentEnv(command) {
+  const [cli, ...args] = String(command || '').trim().split(/\s+/).filter(Boolean);
+  return cli ? { AGENT_CLI: cli, AGENT_CLI_ARGS: args.join(' ') } : null;
+}
+
+/** Run `node bin/<script>` every few hours: a systemd user timer, or a launchd agent on macOS. */
+async function scheduleVaultJob(ctx, vault, name, script, env = {}) {
+  const { hours, about } = TIMERS[name];
+  const unit = `second-brain-${name}`;
+  const all = { PATH: process.env.PATH, VAULT_PATH: vault, ...env };
+  if (ctx.os === 'windows') {
+    return ctx.todo(`schedule \`node "${script}"\` every ${hours} hours in Task Scheduler (${about})${env.AGENT_CLI ? ', with AGENT_CLI and AGENT_CLI_ARGS set' : ''}`);
+  }
+  if (ctx.os === 'macos') {
+    const label = `local.ai-workstation-setup.${unit}`;
+    const plist = path.join(ctx.home, 'Library', 'LaunchAgents', `${label}.plist`);
+    const log = path.join(ctx.home, 'Library', 'Logs', `ai-workstation-setup-${unit}.log`);
+    const vars = Object.entries(all).map(([k, v]) => `<key>${k}</key><string>${xml(v)}</string>`).join('');
+    const content = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${label}</string>
+  <key>ProgramArguments</key>
+  <array><string>${xml(process.execPath)}</string><string>${xml(script)}</string></array>
+  <key>WorkingDirectory</key><string>${xml(vault)}</string>
+  <key>EnvironmentVariables</key>
+  <dict>${vars}</dict>
+  <key>StartInterval</key><integer>${hours * 3600}</integer>
+  <key>LowPriorityIO</key><true/>
+  <key>StandardOutPath</key><string>${xml(log)}</string>
+  <key>StandardErrorPath</key><string>${xml(log)}</string>
+</dict>
+</plist>
+`;
+    if (await ctx.writeFile(plist, content, { onConflict: 'ask' })) {
+      ctx.run(`launchctl bootout gui/$(id -u)/${label} 2>/dev/null; launchctl bootstrap gui/$(id -u) "${plist}"`);
+    }
+    return ctx.info(`${unit}: ${about} every ${hours} hours; logs: ${log}`);
+  }
+  if (ctx.platform.simulated) return ctx.info(`would run ${path.basename(script)} every ${hours} hours as the systemd user timer ${unit}.timer`);
+  if (ctx.capture('systemctl --user show-environment') === null) {
+    const hint = ctx.os === 'wsl' ? ' (in WSL, turn on systemd in /etc/wsl.conf)' : '';
+    throw new Skip(`no systemd user session found${hint}; schedule \`node "${script}"\` yourself`);
+  }
+  const dir = path.join(ctx.home, '.config', 'systemd', 'user');
+  const service = [
+    '[Unit]',
+    `Description=Second brain: ${about} (${TIMER_TAG})`,
+    '',
+    '[Service]',
+    'Type=oneshot',
+    'Nice=15',
+    'IOSchedulingClass=idle',
+    `WorkingDirectory=${unitQuote(vault)}`,
+    ...Object.entries(all).map(([k, v]) => `Environment=${unitQuote(`${k}=${v}`)}`),
+    `ExecStart=${unitQuote(process.execPath)} ${unitQuote(script)}`,
+    '',
+  ].join('\n');
+  const timer = [
+    '[Unit]',
+    `Description=Second brain: ${about} every ${hours} hours (${TIMER_TAG})`,
+    '',
+    '[Timer]',
+    'OnBootSec=15min',
+    `OnUnitActiveSec=${hours}h`,
+    'Persistent=true',
+    '',
+    '[Install]',
+    'WantedBy=timers.target',
+    '',
+  ].join('\n');
+  const a = await ctx.writeFile(path.join(dir, `${unit}.service`), service, { onConflict: 'ask' });
+  const b = await ctx.writeFile(path.join(dir, `${unit}.timer`), timer, { onConflict: 'ask' });
+  const active = ctx.capture(`systemctl --user is-active ${unit}.timer`) === 'active';
+  if (a || b || !active) ctx.run(`systemctl --user daemon-reload && systemctl --user enable --now ${unit}.timer`);
+  else ctx.ok(`${unit}.timer is enabled`);
+  ctx.info(`${unit}: logs with journalctl --user -u ${unit}; stop it with: systemctl --user disable --now ${unit}.timer`);
+}
+
 const list = (s) => [...new Set(String(s).split(',').map((x) => x.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')).filter(Boolean))];
 
 export default {
@@ -43,6 +140,32 @@ export default {
     { key: 'VAULT_RAW_DIR', type: 'text', path: true, message: 'Where raw source files live, OUTSIDE the vault (never copied in, never modified)', default: '~/raw-sources' },
     { key: 'VAULT_LANGS', type: 'text', message: 'Languages notes are written in, comma-separated codes', default: 'en' },
     { key: 'VAULT_SCRIPTS', type: 'confirm', message: 'Install the vault scripts (map generator, contract checker, ingestion driver, housekeeping pass)?', default: true },
+    {
+      key: 'VAULT_TOOLS',
+      type: 'multi',
+      message: 'Optional vault tools',
+      default: [],
+      choices: TOOLS,
+      when: (ctx) => ctx.get('VAULT_SCRIPTS'),
+    },
+    {
+      key: 'VAULT_TIMERS',
+      type: 'multi',
+      message: 'Run on a timer (systemd user timer on Linux and WSL, launchd on macOS, a to-do on Windows)',
+      default: [],
+      choices: [
+        { value: 'housekeeping', label: `housekeeping - ${TIMERS.housekeeping.about}, every ${TIMERS.housekeeping.hours} hours (no model, no network)` },
+        { value: 'garden', label: `garden - ${TIMERS.garden.about}, every ${TIMERS.garden.hours} hours (needs the garden tool and an agent command)` },
+      ],
+      when: (ctx) => ctx.get('VAULT_SCRIPTS'),
+    },
+    {
+      key: 'VAULT_AGENT_CMD',
+      type: 'text',
+      message: 'Agent command for the scheduled garden pass: your agent CLI and its non-interactive flags; it reads the prompt on stdin (no default)',
+      default: '',
+      when: (ctx) => ctx.get('VAULT_SCRIPTS') && ctx.get('VAULT_TIMERS').includes('garden'),
+    },
     { key: 'VAULT_GIT', type: 'confirm', message: 'Track the vault with git?', default: true },
     { key: 'VAULT_AGENT_ACCESS', type: 'confirm', message: 'Give agents access (obsidian-axi, OBSIDIAN_VAULT, a Claude Code session hook)?', default: true },
     { key: 'VAULT_APP', type: 'confirm', message: 'Install the Obsidian app?', default: false },
@@ -107,6 +230,15 @@ export default {
         await ctx.writeFile(path.join(vault, 'prompts', 'ingest.md'), ctx.template('second-brain/prompts/ingest.md', vars));
       });
 
+      const tools = TOOLS.filter((t) => ctx.get('VAULT_TOOLS').includes(t.value));
+      if (tools.length) {
+        await ctx.step('vault tools', async () => {
+          for (const t of tools) await ctx.writeFile(path.join(vault, 'bin', t.file), ctx.template(`second-brain/bin/${t.file}`, vars), { mode: 0o755 });
+          if (tools.some((t) => t.value === 'garden')) await ctx.writeFile(path.join(vault, 'prompts', 'garden.md'), ctx.template('second-brain/prompts/garden.md', vars));
+        });
+      }
+      if (ctx.get('VAULT_TOOLS').includes('garden') && !ctx.get('VAULT_GIT')) ctx.warn('garden needs the vault tracked with git; it refuses to run otherwise');
+
       // MAP.md is generated, never hand-written, so generate the first one here. An existing
       // one is left alone like every other existing file: it is the vault's, not ours.
       await ctx.step('initial map', () => {
@@ -114,7 +246,20 @@ export default {
         return ctx.run(`node "${path.join(vault, 'bin', 'index.mjs')}" "${vault}"`);
       });
 
-      ctx.todo(`run \`node ${path.join(vault, 'bin', 'housekeeping.mjs')}\` on a timer every few hours (systemd --user, launchd, Task Scheduler or cron): it validates the vault and regenerates MAP.md, needs no credentials and makes no network calls`);
+      const timers = ctx.get('VAULT_TIMERS');
+      if (timers.includes('housekeeping')) {
+        await ctx.step('housekeeping timer', () => scheduleVaultJob(ctx, vault, 'housekeeping', path.join(vault, 'bin', 'housekeeping.mjs')));
+      }
+      if (timers.includes('garden')) {
+        await ctx.step('garden timer', () => {
+          if (!ctx.get('VAULT_TOOLS').includes('garden')) throw new Skip('pick the garden tool too');
+          const env = agentEnv(ctx.get('VAULT_AGENT_CMD'));
+          if (!env) throw new Skip('no agent command given (VAULT_AGENT_CMD); the garden pass needs one');
+          return scheduleVaultJob(ctx, vault, 'garden', path.join(vault, 'bin', 'garden.mjs'), env);
+        });
+      }
+
+      if (!timers.includes('housekeeping')) ctx.todo(`run \`node ${path.join(vault, 'bin', 'housekeeping.mjs')}\` on a timer every few hours (systemd --user, launchd, Task Scheduler or cron): it validates the vault and regenerates MAP.md, needs no credentials and makes no network calls`);
       ctx.todo(`set AGENT_CLI (and AGENT_CLI_ARGS) to the agent CLI that should read raw files, then drop files in ${rawDir} and run \`node ${path.join(vault, 'bin', 'ingest.mjs')} --dry-run\``);
     }
 

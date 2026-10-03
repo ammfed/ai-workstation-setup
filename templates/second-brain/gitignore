@@ -9,3 +9,5 @@ restricted/
 # Ingestion scratch. The ledger itself is provenance and IS committed.
 .ingest/lock
 .ingest/tmp/
+# The garden pass's own bookkeeping (bin/garden.mjs, when installed).
+.ingest/garden-*

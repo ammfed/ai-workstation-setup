@@ -15,7 +15,7 @@ Everything below is installed from its own official source by the module named i
 brackets; nothing is vendored. Items marked optional are off until you pick them.
 
 **Agents and their settings**
-- [Claude Code](https://code.claude.com/docs) with model, effort per model, permission mode, theme, view, Remote Control and auto-compact settings (claude-code); the Claude desktop app on Windows.
+- [Claude Code](https://code.claude.com/docs) with model, effort per model, permission mode, theme, view, Remote Control and auto-compact settings, plus optional phone push notifications, feedback drafts, forced session persistence and skipping the bypass-permissions confirmation (claude-code); the Claude desktop app on Windows.
 - Status line: [ccstatusline](https://github.com/sirmalloc/ccstatusline) or a built-in gauges line with context, 5-hour and weekly bars (claude-code).
 - Plugins: [diagram-design](https://github.com/cathrynlavery/diagram-design); optional [compact-adviser](https://github.com/kunchenguid/compact-adviser), which says when a session is at a safe point to compact (claude-code).
 - Hooks: session-start briefings from the agent CLIs, and reminders to save notes before and after a compaction (claude-code, agent-clis).
@@ -32,17 +32,17 @@ brackets; nothing is vendored. Items marked optional are off until you pick them
 **Command-line tools for agents**
 - [git](https://git-scm.com), [GitHub CLI](https://github.com/cli/cli), jq, and Node.js through nvm (core).
 - [gh-axi](https://github.com/kunchenguid/gh-axi) for GitHub and [ctx7](https://github.com/upstash/context7) for current library docs (agent-clis).
-- Optional [notion-axi](https://github.com/maximebrmd/notion-axi), Notion's own [ntn](https://developers.notion.com/cli/get-started/overview), [gws-axi](https://github.com/JarvusInnovations/gws-axi), [Composio](https://github.com/ComposioHQ/composio), [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii), [claude-swap](https://github.com/realiti4/claude-swap) for several Claude accounts, [notebooklm-mcp-cli](https://github.com/jacob-bd/notebooklm-mcp-cli), the [CLI for Microsoft 365](https://github.com/pnp/cli-microsoft365) and the [Vercel CLI](https://github.com/vercel/vercel) (agent-clis).
+- Optional [notion-axi](https://github.com/maximebrmd/notion-axi), Notion's own [ntn](https://developers.notion.com/cli/get-started/overview), [gws-axi](https://github.com/JarvusInnovations/gws-axi), [Composio](https://github.com/ComposioHQ/composio), [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii), [claude-swap](https://github.com/realiti4/claude-swap) for several Claude accounts (optionally with `cswap auto` as a background service that switches accounts near a usage limit), [notebooklm-mcp-cli](https://github.com/jacob-bd/notebooklm-mcp-cli), the [CLI for Microsoft 365](https://github.com/pnp/cli-microsoft365) and the [Vercel CLI](https://github.com/vercel/vercel) (agent-clis).
 - Optional MCP servers: Context7, [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp), and TickTick's official server (mcp-servers).
 
 **Browser and review**
 - [chrome-devtools-axi](https://github.com/kunchenguid/chrome-devtools-axi) and `research-browser`, a visible Chrome with its own profile that belongs to your agents (agent-clis).
 - [lavish-axi](https://github.com/kunchenguid/lavish-axi) review pages that never open tabs on their own, and a one-decision-at-a-time card page template (agent-clis, preferences; [review pages](docs/review-pages.md)).
-- Optional [Lavish Library](https://github.com/ammfed/lavish-library), a local page to find and reopen every review page (extras).
+- Optional [Lavish Library](https://github.com/ammfed/lavish-library), a local page to find and reopen every review page; its Open button opens a tab even while agents keep the no-open setting (extras).
 - By hand, if you want it: the [Claude in Chrome](https://code.claude.com/docs/en/chrome) extension for your own browser, and claude.ai connectors (such as Claude Docs) turned on in your claude.ai settings.
 
 **Notes and tasks**
-- A Markdown second brain for [Obsidian](https://obsidian.md) with templates, map, checker and ingest scripts, and [obsidian-axi](https://github.com/AndersHoffmann/obsidian-axi) for agents (second-brain; [design](docs/second-brain.md)).
+- A Markdown second brain for [Obsidian](https://obsidian.md) with templates, map, checker and ingest scripts, and [obsidian-axi](https://github.com/AndersHoffmann/obsidian-axi) for agents; optional ranked search, quick capture, a bookmark converter, a small agent tidy-up pass (garden) and timers for housekeeping and garden (second-brain; [design](docs/second-brain.md)).
 - [clickup-axi](https://github.com/JanSuthacheeva/clickup-axi) with its skill and session hook (clickup; [structure](docs/clickup-structure.md)).
 
 **Always-on helpers (opt-in)**
@@ -90,7 +90,10 @@ was done, skipped, failed, and what is left for you (such as signing in).
 Re-running is safe: installed tools are detected and skipped (tools that can prove
 they work without a sign-in are also given a quick real check), config edits only
 happen when something differs, and a changed file you own is never replaced
-without asking (a timestamped `.bak-*` copy is kept when it is). Your answers are
+without asking (a timestamped `.bak-*` copy is kept when it is). With `--yes`, a
+script or file the setup shipped is refreshed when your copy is an older version it
+shipped (known from a hash list in `~/.config/ai-workstation-setup/shipped.json` and
+from this clone's git history); a copy you edited is left alone. Your answers are
 saved to `answers.env` (gitignored), so a re-run asks only questions you have not
 answered yet.
 
@@ -111,14 +114,14 @@ diverged, it stops, explains, and changes nothing. See
 | Module | What it sets up | Linux | macOS | WSL | Windows |
 | --- | --- | :-: | :-: | :-: | :-: |
 | `core` | git, Node.js check, GitHub CLI (and sign-in), jq | ✓ | ✓ | ✓ | ✓ |
-| `claude-code` | Claude Code (and the Claude desktop app on Windows); model (including the 1M-context Opus), effort (also per model), permission mode, theme, thinking summaries, Remote Control, view, auto-compact; ccstatusline or usage-gauges status line; diagram-design and optional compact-adviser plugins; context and after-compaction reminders | ✓ | ✓ | ✓ | ✓ |
-| `agent-clis` | gh-axi, chrome-devtools-axi, lavish-axi, tasks-axi, quota-axi, ctx7, no-mistakes, treehouse; optional notion-axi, ntn, gws-axi, herdr, Codex, Pi, Antigravity, claude-swap, notebooklm-mcp-cli, CLI for Microsoft 365, Vercel CLI, Composio (not native Windows), mermaid-ascii, pixel-agents, gnhf; session hooks; `research-browser` launcher (not native Windows) | ✓ | ✓ | ✓ | ✓ |
+| `claude-code` | Claude Code (and the Claude desktop app on Windows); model (including the 1M-context Opus), effort (also per model), permission mode, theme, thinking summaries, Remote Control, view, auto-compact, push notifications, feedback drafts, session persistence, the bypass-permissions confirmation; ccstatusline or usage-gauges status line; diagram-design and optional compact-adviser plugins; context and after-compaction reminders | ✓ | ✓ | ✓ | ✓ |
+| `agent-clis` | gh-axi, chrome-devtools-axi, lavish-axi, tasks-axi, quota-axi, ctx7, no-mistakes, treehouse; optional notion-axi, ntn, gws-axi, herdr, Codex, Pi, Antigravity, claude-swap (optional `cswap auto` service), notebooklm-mcp-cli, CLI for Microsoft 365, Vercel CLI, Composio (not native Windows), mermaid-ascii, pixel-agents, gnhf; session hooks; `research-browser` launcher (not native Windows) | ✓ | ✓ | ✓ | ✓ |
 | `mcp-servers` | Optional context7, chrome-devtools and TickTick MCP servers for Claude Code | ✓ | ✓ | ✓ | ✓ |
 | `skills` | Claude Code skills: kun, grilling, teach, find-docs; optional grill-me, to-questionnaire, wayfinder, no-mistakes, composio-cli | ✓ | ✓ | ✓ | ✓ |
 | `backpass` | Opt-in [backpass](https://github.com/kunchenguid/backpass) behind a privacy gate: project allowlist, denylist check before any model call, one pinned model, never auto-applies; optional schedule (cron) | ✓ | ✓ | ✓ | ✓ |
 | `firstmate` | Upstream Firstmate clone plus its local config: an operational home apart from the code (FM_HOME, pinned per home and second mate), backend, harnesses, permission mode, backlog, dispatch profiles, Herdr presentation, startup memory budget, tool update watch; [notes](docs/firstmate.md) | ✓ | ✓ | ✓ | via `wsl` |
 | `preferences` | How your agents work, as a rules file: language and tone, reporting, decisions, review pages, fleet workflow, ideas, model use, research, safety; [guide](docs/working-preferences.md), [review pages](docs/review-pages.md) | ✓ | ✓ | ✓ | ✓ |
-| `second-brain` | Markdown vault: life-area and fixed-type entity folders, note contract, provenance rules, eight note templates, map/checker/ingest/housekeeping scripts, obsidian-axi wiring; [design notes](docs/second-brain.md) | ✓ | ✓ | ✓ | ✓ |
+| `second-brain` | Markdown vault: life-area and fixed-type entity folders, note contract, provenance rules, eight note templates, map/checker/ingest/housekeeping scripts; optional search, capture, garden and bookmarks tools and housekeeping and garden timers; obsidian-axi wiring; [design notes](docs/second-brain.md) | ✓ | ✓ | ✓ | ✓ |
 | `clickup` | clickup-axi (checksum-verified release binary), skill, session hook, default list; [structure guide](docs/clickup-structure.md) | ✓ | ✓ | ✓ | ✓ |
 | `extras` | Optional docling (documents to markdown), OpenWhispr (voice dictation), llama.cpp (local models; Homebrew or winget) and Lavish Library (find and reopen review pages; Linux, macOS, WSL) | ✓ | ✓ | app on Windows side | ✓ |
 | `daily-sync` | Opt-in daily job: fast-forwards clean repos, runs the vault ingest (failing loudly on a missing raw folder), checks tool updates, reads ClickUp and TickTick for drift; model calls only for new drift; one short report, FAILED when a run fails or is missed; [guide](docs/daily-sync.md) | ✓ | ✓ | ✓ | schedule by hand |
