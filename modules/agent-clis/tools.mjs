@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { Skip } from '../../lib/context.mjs';
 
 // Install routes for the agent CLIs, each taken from the tool's upstream README.
@@ -232,3 +234,12 @@ export const TOOLS = {
     signIn: 'composio login   (and `composio setup` for its Claude Code plugin)',
   },
 };
+
+// A wrapper in ~/.local/bin only takes effect when that folder comes before the real tool's.
+export function warnPathOrder(ctx, target, bin) {
+  if (ctx.platform.simulated || ctx.dryRun) return;
+  const dirs = (process.env.PATH || '').split(path.delimiter);
+  const mine = dirs.indexOf(path.dirname(target));
+  const real = dirs.findIndex((d, i) => i !== mine && fs.existsSync(path.join(d, bin)));
+  if (mine === -1 || (real !== -1 && real < mine)) ctx.warn(`${path.dirname(target)} must come before ${real === -1 ? 'the real ' + bin : dirs[real]} on PATH for the ${bin} wrapper to work`);
+}

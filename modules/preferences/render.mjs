@@ -129,6 +129,8 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
   section('AI and model use', [
     routing === 'capable' && 'Use the most capable model at medium effort by default, for building and for everything else.',
     routing === 'capable' && 'Give user-facing frontend and visual design work (screens, look, layout, clickable journeys) to the model strongest at design.',
+    routing === 'capable' &&
+      'Give small, clear tasks (a bug with a clear repro, a docs or copy edit, a version bump, a config tweak) to a faster model at high effort.',
     routing === 'economical' && 'Use a balanced model at low effort for routine work and sub-tasks.',
     routing === 'economical' && 'Use medium effort for planning, design, hard reasoning and judgment calls.',
     routing === 'economical' && 'Use the most capable model at high effort for building a product, prototype or demo.',

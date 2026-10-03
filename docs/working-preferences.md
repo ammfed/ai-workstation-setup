@@ -85,7 +85,7 @@ The first two apply with `PREFS_DECISIONS=cards`; the starter page already follo
 
 | Key | Default | Rule |
 | --- | --- | --- |
-| `PREFS_MODEL_ROUTING` | `capable` | The most capable model at medium effort for all work, with user-facing frontend and visual design on the model strongest at design. `economical`: low effort by default, medium for planning, design and hard reasoning, the most capable model for building. `balanced` raises each step. |
+| `PREFS_MODEL_ROUTING` | `capable` | The most capable model at medium effort for most work, with user-facing frontend and visual design on the model strongest at design and small, clear tasks on a faster model at high effort. `economical`: low effort by default, medium for planning, design and hard reasoning, the most capable model for building. `balanced` raises each step. |
 | `PREFS_QUOTA` | yes | Check subscription limits with `quota-axi` before heavy work and take the cheapest path. |
 | `PREFS_DELEGATE_RETRIEVAL` | `agy` if chosen in agent-clis | Bulk reading and fetching go to this secondary agent CLI; decisions and code changes stay with the main agent. Empty for none. |
 

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Skip } from '../../lib/context.mjs';
+import { claudeDir, setHook } from '../../lib/claude.mjs';
 import { TOOLS, versionCheck } from '../agent-clis/tools.mjs';
 
 // Firstmate is used from an upstream clone (github.com/kunchenguid/firstmate);
@@ -37,7 +38,7 @@ const BACKENDS = {
 };
 
 // Profiles use the current model ids; a non-Claude harness keeps only the effort.
-function dispatchProfiles(kind, harness) {
+export function dispatchProfiles(kind, harness) {
   const profile = (model, effort) => ({ harness, ...(harness === 'claude' ? { model } : {}), effort });
   if (kind === 'capable') {
     return {
@@ -46,6 +47,11 @@ function dispatchProfiles(kind, harness) {
           when: "The task designs or builds a prototype's user-facing frontend: screens, visual look, layout, characters, or clickable user journeys.",
           use: [profile('claude-fable-5-1', 'medium')],
           why: 'Frontend design goes to the model strongest at visual design.',
+        },
+        {
+          when: 'A small, well-defined task with a clear outcome and little ambiguity: a bug fix with a clear repro, a docs or copy edit, a version bump, a config tweak, or another narrow mechanical change.',
+          use: [profile('claude-sonnet-5-5', 'xhigh')],
+          why: 'Small, clear tasks go to the faster model at high effort; everything else stays on the most capable model.',
         },
       ],
       default: [profile('claude-opus-5-5', 'medium')],
@@ -92,6 +98,16 @@ function watchedTools(dir, clis) {
       ...(clis.includes('lavish-axi') ? [announcing('lavish-axi')] : []),
     ],
   };
+}
+
+const STOW_TEXT = 'Context is large. Run /stow now, before anything else, then continue.';
+
+export function stowTokens(text) {
+  const tokens = Number(String(text ?? '').trim());
+  if (!Number.isInteger(tokens) || tokens < 50000 || tokens > 1000000) {
+    throw new Error(`FIRSTMATE_STOW_REMINDER_TOKENS: "${text}" should be a whole number of tokens from 50000 to 1000000`);
+  }
+  return tokens;
 }
 
 function pinHome(ctx, where, value) {
@@ -176,7 +192,7 @@ export default {
       default: 'starter',
       choices: [
         { value: 'starter', label: 'starter - strong model for builds, more effort for planning, light default' },
-        { value: 'capable', label: 'capable - the most capable model at medium effort, frontend design on the design model' },
+        { value: 'capable', label: 'capable - the most capable model at medium effort, frontend design on the design model, small clear tasks on Sonnet at xhigh' },
         { value: 'none', label: 'none - every worker uses the crew harness' },
       ],
     },
@@ -205,6 +221,19 @@ export default {
       type: 'text',
       message: 'Startup memory budget in estimated tokens for preferences and learnings (empty keeps the firstmate default, 7500)',
       default: '',
+    },
+    {
+      key: 'FIRSTMATE_STOW_REMINDER',
+      type: 'confirm',
+      message: "Remind the main Firstmate session to run /stow (save its state) once its context gets large? Only that session, not workers or second mates",
+      default: false,
+    },
+    {
+      key: 'FIRSTMATE_STOW_REMINDER_TOKENS',
+      type: 'text',
+      message: 'Remind once the context passes how many tokens (set it below your auto-compact point)',
+      default: '350000',
+      when: (ctx) => ctx.get('FIRSTMATE_STOW_REMINDER'),
     },
     {
       key: 'FIRSTMATE_WATCH_UPDATES',
@@ -305,6 +334,18 @@ export default {
           onConflict: 'ask',
         });
         if (written) ctx.todo(`arm the update check once: cd "${dir}" && bin/fm-tool-update-check.sh arm`);
+      });
+    }
+    if (ctx.get('FIRSTMATE_STOW_REMINDER')) {
+      // The claude-code module's context-reminder hook with its own text, registered only in the
+      // clone's gitignored .claude/settings.local.json: the main session starts there, while
+      // workers and second mates run from their own folders and never see it.
+      await ctx.step('stow reminder', async () => {
+        const tokens = stowTokens(ctx.get('FIRSTMATE_STOW_REMINDER_TOKENS'));
+        const script = path.join(claudeDir(ctx), 'hooks', 'context-reminder.mjs');
+        await ctx.writeFile(script, ctx.template('claude-code/bin/context-reminder.mjs'), { onConflict: 'ask' });
+        const command = `node "${script}" ${tokens} "${STOW_TEXT}"`;
+        setHook(ctx, 'UserPromptSubmit', 'context-reminder.mjs', command, path.join(dir, '.claude', 'settings.local.json'));
       });
     }
     ctx.todo(`start firstmate: cd "${dir}" && claude   (or your harness; its AGENTS.md takes over)`);

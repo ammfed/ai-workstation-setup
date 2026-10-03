@@ -18,7 +18,7 @@ jobs:
       - name: node syntax
         run: for f in lib/*.mjs modules/*/*.mjs templates/*/bin/*.mjs; do node --check "$f"; done
       - name: update, saved-answers, tool-check, privacy-scan, daily-sync, voice-mode, ledger and windows tests
-        run: node --test test/update.test.mjs test/answers.test.mjs test/tools.test.mjs test/privacy.test.mjs test/daily-sync.test.mjs test/voice-mode.test.mjs test/ledger.test.mjs test/windows.test.mjs test/news-digest.test.mjs test/refresh.test.mjs test/second-brain.test.mjs
+        run: node --test test/update.test.mjs test/answers.test.mjs test/tools.test.mjs test/privacy.test.mjs test/daily-sync.test.mjs test/voice-mode.test.mjs test/ledger.test.mjs test/windows.test.mjs test/news-digest.test.mjs test/refresh.test.mjs test/second-brain.test.mjs test/optional-pieces.test.mjs
       - name: simulated dry runs for every platform
         run: |
           for os in linux macos wsl windows; do
@@ -34,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: update, saved-answers, tool-check, daily-sync and windows tests
-        run: node --test test/update.test.mjs test/answers.test.mjs test/tools.test.mjs test/daily-sync.test.mjs test/windows.test.mjs test/news-digest.test.mjs test/refresh.test.mjs test/second-brain.test.mjs
+        run: node --test test/update.test.mjs test/answers.test.mjs test/tools.test.mjs test/daily-sync.test.mjs test/windows.test.mjs test/news-digest.test.mjs test/refresh.test.mjs test/second-brain.test.mjs test/optional-pieces.test.mjs
       - name: voice-mode tests (Linux and macOS, where the module runs)
         if: runner.os != 'Windows'
         run: node --test test/voice-mode.test.mjs
