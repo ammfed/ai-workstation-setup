@@ -34,7 +34,8 @@ config.font = wezterm.font_with_fallback {
 }
 config.font_size = {{FONT_SIZE}}
 config.line_height = 1.15
-config.default_cursor_style = 'BlinkingBar'
+config.default_cursor_style = '{{CURSOR_STYLE}}'
+config.cursor_blink_rate = {{CURSOR_BLINK_RATE}}
 config.colors = {
   tab_bar = {
     background = 'rgba(0,0,0,0)',

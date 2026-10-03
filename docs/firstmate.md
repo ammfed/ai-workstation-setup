@@ -29,10 +29,11 @@ fails its first steer to a worker (upstream issue
 | `FIRSTMATE_SECONDMATE_HARNESS` | `config/secondmate-harness` | `<harness> [model] [effort]` for second mates, for example `claude claude-opus-5-5 medium`. |
 | `FIRSTMATE_PERMISSION_MODE` | `config/claude-permission-mode` | `bypass` (upstream default) or `auto`, Claude Code's classifier-reviewed mode. |
 | `FIRSTMATE_BACKLOG` | `config/backlog-backend` | Only written for `manual`; tasks-axi is the default. |
-| `FIRSTMATE_DISPATCH` | `config/crew-dispatch.json` | `starter`: the strongest model for builds, more effort for planning, a light default. `capable`: the most capable model at medium effort for everything, with user-facing frontend design on the model strongest at design. |
+| `FIRSTMATE_DISPATCH` | `config/crew-dispatch.json` | `starter`: the strongest model for builds, more effort for planning, a light default. `capable`: the most capable model at medium effort for most work, with user-facing frontend design on the model strongest at design and small, clear tasks (a bug with a clear repro, a docs edit, a version bump, a config tweak) on Sonnet at xhigh effort. |
 | `FIRSTMATE_HERDR_SPACES` | `config/herdr-presentation-spaces` | With herdr: `off` keeps every task in the flat layout instead of its own disposable workspace. |
 | `FIRSTMATE_MEMORY_BUDGET` | `config/startup-memory-budget` | Estimated tokens allowed for preferences and learnings loaded at session start (upstream default 7500). |
 | `FIRSTMATE_WATCH_UPDATES` | `config/watched-tools.json` | Firstmate announces new releases of itself, quota-axi and lavish-axi. |
+| `FIRSTMATE_STOW_REMINDER` | `.claude/settings.local.json` in the clone | Off by default. Once the main session's context passes `FIRSTMATE_STOW_REMINDER_TOKENS` (default 350000), its next prompt carries one reminder to run `/stow` (save its state) before anything else; it fires again only after the context drops back below 90% of that. Workers and second mates start in their own folders, so they never see it. It reuses the claude-code module's context-reminder hook script. |
 
 Each file is written only when it differs, and a changed file is never replaced without asking.
 

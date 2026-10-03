@@ -9,7 +9,7 @@
 #   research-browser axi <args>   run chrome-devtools-axi against that window
 #
 # Environment:
-#   RESEARCH_BROWSER_PORT      remote-debugging port (default 9333)
+#   RESEARCH_BROWSER_PORT      remote-debugging port (default {{PORT}})
 #   RESEARCH_BROWSER_PROFILE   profile directory (default ~/.config/research-browser)
 #   RESEARCH_BROWSER_CHROME    Chrome or Chromium binary (default: first one found)
 #   CHROME_DEVTOOLS_AXI_SESSION  name a session per agent task (default research)
@@ -17,7 +17,8 @@
 # Installed by ai-workstation-setup (agent-clis module).
 set -eu
 
-port=${RESEARCH_BROWSER_PORT:-9333}
+default_port='{{PORT}}'
+port=${RESEARCH_BROWSER_PORT:-$default_port}
 profile=${RESEARCH_BROWSER_PROFILE:-$HOME/.config/research-browser}
 url="http://127.0.0.1:$port"
 

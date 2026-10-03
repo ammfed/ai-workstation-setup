@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Skip, which } from '../../lib/context.mjs';
 import { addSessionStartHook, claudeDir } from '../../lib/claude.mjs';
-import { TOOLS } from './tools.mjs';
+import { TOOLS, warnPathOrder } from './tools.mjs';
+import { mergePixelSettings, patchPixelAgents } from './pixel-agents.mjs';
 
 const DEFAULTS = ['gh-axi', 'chrome-devtools-axi', 'lavish-axi', 'tasks-axi', 'quota-axi', 'ctx7', 'no-mistakes', 'treehouse'];
 
@@ -14,15 +15,25 @@ const CSWAP_LABEL = 'local.ai-workstation-setup.cswap-auto';
 const unitQuote = (s) => `"${String(s).replace(/%/g, '%%').replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 const xml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+// Empty means cswap's own default threshold (no --threshold flag).
 export function cswapThreshold(text) {
+  if (String(text ?? '').trim() === '') return null;
   const pct = Number(String(text ?? '').trim());
   if (!Number.isFinite(pct) || pct < 50 || pct > 99.9) throw new Error(`CSWAP_AUTO_THRESHOLD: "${text}" should be a percentage from 50 to 99.9`);
   return pct;
 }
 
+export function researchBrowserPort(text) {
+  const port = Number(String(text ?? '').trim());
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error(`RESEARCH_BROWSER_PORT: "${text}" should be a port from 1024 to 65535`);
+  return port;
+}
+
 async function cswapAutoService(ctx) {
   const pct = cswapThreshold(ctx.get('CSWAP_AUTO_THRESHOLD'));
-  if (ctx.os === 'windows') throw new Skip(`no user service on Windows; keep \`cswap auto --threshold ${pct}\` running in a terminal, or use it inside WSL`);
+  const args = pct === null ? ['auto'] : ['auto', '--threshold', String(pct)];
+  const cmd = `cswap ${args.join(' ')}`;
+  if (ctx.os === 'windows') throw new Skip(`no user service on Windows; keep \`${cmd}\` running in a terminal, or use it inside WSL`);
   const bin = (!ctx.platform.simulated && which('cswap')) || ctx.path('~/.local/bin/cswap');
   if (ctx.os === 'macos') {
     const plist = path.join(ctx.home, 'Library', 'LaunchAgents', `${CSWAP_LABEL}.plist`);
@@ -33,7 +44,7 @@ async function cswapAutoService(ctx) {
 <dict>
   <key>Label</key><string>${CSWAP_LABEL}</string>
   <key>ProgramArguments</key>
-  <array><string>${xml(bin)}</string><string>auto</string><string>--threshold</string><string>${pct}</string></array>
+  <array>${[bin, ...args].map((a) => `<string>${xml(a)}</string>`).join('')}</array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>30</integer>
@@ -49,19 +60,19 @@ async function cswapAutoService(ctx) {
     return;
   }
   if (ctx.platform.simulated) {
-    ctx.info(`would run \`cswap auto --threshold ${pct}\` as the systemd user service ${CSWAP_UNIT}.service when \`systemctl --user\` works`);
+    ctx.info(`would run \`${cmd}\` as the systemd user service ${CSWAP_UNIT}.service when \`systemctl --user\` works`);
     return;
   }
   if (ctx.capture('systemctl --user show-environment') === null) {
     const hint = ctx.os === 'wsl' ? ' (in WSL, turn on systemd in /etc/wsl.conf)' : '';
-    throw new Skip(`no systemd user session found${hint}; keep \`cswap auto --threshold ${pct}\` running yourself`);
+    throw new Skip(`no systemd user session found${hint}; keep \`${cmd}\` running yourself`);
   }
   const unit = [
     '[Unit]',
     'Description=Switch Claude Code accounts near a usage limit (ai-workstation-setup agent-clis)',
     '',
     '[Service]',
-    `ExecStart=${unitQuote(bin)} auto --threshold ${pct}`,
+    `ExecStart=${unitQuote(bin)} ${args.join(' ')}`,
     'Restart=always',
     'RestartSec=30',
     '',
@@ -131,6 +142,34 @@ export default {
       when: (ctx) => ctx.get('AGENT_CLIS').includes('lavish-axi'),
     },
     {
+      key: 'LAVISH_NO_OPEN_WRAPPER',
+      type: 'confirm',
+      message: 'Also put a small lavish-axi wrapper in ~/.local/bin that always sets LAVISH_AXI_NO_OPEN, for launches that do not read your shell profile?',
+      default: false,
+      when: (ctx) => ctx.os !== 'windows' && ctx.get('AGENT_CLIS').includes('lavish-axi') && ctx.get('LAVISH_NO_OPEN'),
+    },
+    {
+      key: 'PIXEL_AGENTS_SETTINGS',
+      type: 'confirm',
+      message: 'Pixel Agents view settings: names always shown, every session watched, areas on, sound off (values you already set are kept)?',
+      default: true,
+      when: (ctx) => ctx.get('AGENT_CLIS').includes('pixel-agents'),
+    },
+    {
+      key: 'PIXEL_AGENTS_NAMES',
+      type: 'confirm',
+      message: 'Name office characters after their herdr agent or tab instead of their folder? Patches the installed pixel-agents (known versions only, a backup kept) and adds pixel-office-names',
+      default: false,
+      when: (ctx) => ctx.os !== 'windows' && ctx.get('AGENT_CLIS').includes('pixel-agents'),
+    },
+    {
+      key: 'PIXEL_AGENTS_TAB_PREFIX',
+      type: 'text',
+      message: 'Prefix to drop from herdr tab labels in office names (Firstmate names task tabs "fm-<task>"; empty for none)',
+      default: 'fm-',
+      when: (ctx) => ctx.get('AGENT_CLIS').includes('pixel-agents') && ctx.get('PIXEL_AGENTS_NAMES'),
+    },
+    {
       key: 'CSWAP_AUTO',
       type: 'confirm',
       message: 'Run `cswap auto` as a background service, so Claude Code switches to another saved account when the active one nears its limit?',
@@ -140,7 +179,7 @@ export default {
     {
       key: 'CSWAP_AUTO_THRESHOLD',
       type: 'text',
-      message: 'Switch when the active account reaches what percentage of its 5-hour or weekly limit (50 to 99.9)',
+      message: "Switch when the active account reaches what percentage of its 5-hour or weekly limit (50 to 99.9; empty for cswap's own default)",
       default: '90',
       when: (ctx) => ctx.get('AGENT_CLIS').includes('claude-swap') && ctx.get('CSWAP_AUTO'),
     },
@@ -150,6 +189,13 @@ export default {
       message: "Install `research-browser`: a visible Chrome window with its own profile for agent research, separate from your browser?",
       default: true,
       when: (ctx) => ctx.os !== 'windows' && ctx.get('AGENT_CLIS').includes('chrome-devtools-axi'),
+    },
+    {
+      key: 'RESEARCH_BROWSER_PORT',
+      type: 'text',
+      message: 'Remote-debugging port for research-browser (agents and voice mode reach it at http://127.0.0.1:<port>)',
+      default: '9333',
+      when: (ctx) => ctx.os !== 'windows' && ctx.get('AGENT_CLIS').includes('chrome-devtools-axi') && ctx.get('RESEARCH_BROWSER'),
     },
   ],
 
@@ -188,6 +234,32 @@ export default {
 
     if (chosen.includes('lavish-axi') && ctx.get('LAVISH_NO_OPEN')) {
       await ctx.step('LAVISH_AXI_NO_OPEN', () => ctx.setUserEnv('LAVISH_AXI_NO_OPEN', '1'));
+      if (ctx.os !== 'windows' && ctx.get('LAVISH_NO_OPEN_WRAPPER')) {
+        await ctx.step('lavish-axi no-open wrapper', async () => {
+          const target = ctx.path('~/.local/bin/lavish-axi');
+          await ctx.writeFile(target, ctx.template('lavish/lavish-axi.sh'), { onConflict: 'ask', mode: 0o755 });
+          warnPathOrder(ctx, target, 'lavish-axi');
+        });
+      }
+    }
+
+    if (chosen.includes('pixel-agents')) {
+      if (ctx.get('PIXEL_AGENTS_SETTINGS')) {
+        await ctx.step('pixel-agents settings', () => ctx.updateJson('~/.pixel-agents/config.json', mergePixelSettings, 'Pixel Agents view settings'));
+      }
+      if (ctx.os !== 'windows' && ctx.get('PIXEL_AGENTS_NAMES')) {
+        await ctx.step('pixel-agents office names', () => patchPixelAgents(ctx));
+        await ctx.step('pixel-office-names', () => {
+          const prefix = String(ctx.get('PIXEL_AGENTS_TAB_PREFIX') ?? '').trim();
+          if (!/^[\w.-]*$/.test(prefix)) throw new Error('PIXEL_AGENTS_TAB_PREFIX may hold only letters, digits, dot, dash and underscore');
+          return ctx.writeFile('~/.local/bin/pixel-office-names', ctx.template('pixel-agents/bin/pixel-office-names.mjs', { TAB_PREFIX: prefix }), {
+            onConflict: 'ask',
+            mode: 0o755,
+          });
+        });
+        ctx.info('office names: run `pixel-office-names --watch` next to Pixel Agents (it needs herdr); see docs/pixel-agents.md');
+      }
+      ctx.info('start Pixel Agents with `pixel-agents` and open the address it prints; see docs/pixel-agents.md');
     }
 
     if (chosen.includes('claude-swap') && ctx.get('CSWAP_AUTO')) {
@@ -198,7 +270,8 @@ export default {
     if (chosen.includes('chrome-devtools-axi') && ctx.get('RESEARCH_BROWSER')) {
       await ctx.step('research-browser', async () => {
         const target = ctx.path('~/.local/bin/research-browser');
-        const written = await ctx.writeFile(target, ctx.template('research-browser/research-browser.sh'), { onConflict: 'ask', mode: 0o755 });
+        const port = researchBrowserPort(ctx.get('RESEARCH_BROWSER_PORT'));
+        const written = await ctx.writeFile(target, ctx.template('research-browser/research-browser.sh', { PORT: port }), { onConflict: 'ask', mode: 0o755 });
         const onPath = (process.env.PATH || '').split(path.delimiter).includes(path.dirname(target));
         if (!onPath && !ctx.platform.simulated) ctx.warn(`${path.dirname(target)} is not on PATH; add it to use research-browser`);
         if (written) ctx.todo('research-browser   (opens its window; sign in there to the sites your agents research)');

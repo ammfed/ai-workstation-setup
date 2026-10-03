@@ -28,6 +28,9 @@ const PLUGINS = [
 ];
 
 const keep = { value: 'keep', label: 'keep (Claude Code default, or what you already set)' };
+
+// Allow rules that let an agent merge a pull request without asking first (CLAUDE_ALLOW_PR_MERGE).
+export const PR_MERGE_RULES = ['Bash(gh pr merge:*)', 'Bash(gh-axi pr merge:*)'];
 const EFFORTS = ['low', 'medium', 'high', 'xhigh'];
 
 // "claude-opus-5-5=xhigh, claude-sonnet-5-5=low" -> { 'claude-opus-5-5': 'xhigh', ... }
@@ -165,6 +168,19 @@ export default {
       choices: [keep, { value: 'on', label: 'on - no confirmation' }, { value: 'off', label: 'off - always confirm' }],
     },
     {
+      key: 'CLAUDE_SPINNER_TIPS',
+      type: 'choice',
+      message: 'Tips under the spinner while Claude works',
+      default: 'keep',
+      choices: [keep, { value: 'on' }, { value: 'off', label: 'off - a quieter screen' }],
+    },
+    {
+      key: 'CLAUDE_ALLOW_PR_MERGE',
+      type: 'confirm',
+      message: 'Let agents merge pull requests without asking you first (adds allow rules for `gh pr merge` and `gh-axi pr merge`)?',
+      default: false,
+    },
+    {
       key: 'CLAUDE_AUTOCOMPACT_WINDOW',
       type: 'text',
       message: 'Compact the conversation automatically at how many tokens (100000 to 1000000; empty to keep)',
@@ -247,6 +263,7 @@ export default {
           const tui = ctx.get('CLAUDE_TUI');
           if (tui && tui !== 'keep') s.tui = tui;
           for (const [key, answer] of [
+            ['spinnerTipsEnabled', 'CLAUDE_SPINNER_TIPS'],
             ['agentPushNotifEnabled', 'CLAUDE_PUSH_NOTIFICATIONS'],
             ['feedbackDrafts', 'CLAUDE_FEEDBACK_DRAFTS'],
             ['skipDangerousModePermissionPrompt', 'CLAUDE_SKIP_BYPASS_PROMPT'],
@@ -268,9 +285,25 @@ export default {
             s.autoCompactWindow = tokens;
           }
         },
-        'model, effort, theme, permission mode, thinking summaries, Remote Control, view, auto-compact, notifications, feedback drafts, session persistence and the bypass prompt',
+        'model, effort, theme, permission mode, thinking summaries, Remote Control, view, auto-compact, spinner tips, notifications, feedback drafts, session persistence and the bypass prompt',
       ),
     );
+
+    // Off by default: merging is a decision people usually keep for themselves. Answering no
+    // leaves any rule you added yourself in place.
+    if (ctx.get('CLAUDE_ALLOW_PR_MERGE')) {
+      await ctx.step('allow PR merge', () =>
+        ctx.updateJson(
+          settingsPath(ctx),
+          (s) => {
+            s.permissions ??= {};
+            s.permissions.allow ??= [];
+            for (const rule of PR_MERGE_RULES) if (!s.permissions.allow.includes(rule)) s.permissions.allow.push(rule);
+          },
+          'allow rules for merging pull requests',
+        ),
+      );
+    }
 
     if (ctx.get('CLAUDE_STATUSLINE') === 'gauges') {
       await ctx.step('status line', async () => {
