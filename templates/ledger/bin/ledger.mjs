@@ -32,7 +32,7 @@
 //
 // Installed by ai-workstation-setup (ledger module). No dependencies.
 
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -125,6 +125,28 @@ function alive(pid) {
   } catch (err) {
     return err.code === 'EPERM';
   }
+}
+
+/** What a live pid is running, as one command line; null where this system cannot say. */
+function commandOf(pid) {
+  try {
+    return fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0+/g, ' ').trim();
+  } catch {
+    // no /proc (macOS), or not readable: ask ps
+  }
+  try {
+    return execFileSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/** A pid that is alive and is (or cannot be told apart from) a ledger: after a power loss the pid
+ * in a lock file can belong to any process. Unknown counts as held, so two ledgers never run. */
+function ledgerAlive(pid) {
+  if (!alive(pid)) return false;
+  const command = commandOf(pid);
+  return command === null || /(?:^|[\\/\s])node(?:js)?(?:\.exe)?\s(?:.*[\\/\s])?ledger\.mjs(?:\s|$)/.test(command);
 }
 
 /** key=value lines, as Firstmate's .meta files and inbox note headers are written. */
@@ -1171,7 +1193,7 @@ function takeCapture() {
     } catch (err) {
       if (err.code !== 'EEXIST') throw err;
       const pid = Number(readText(FILES.owner)) || 0;
-      if (alive(pid) && pid !== process.pid) die(2, `the ledger service is already capturing (pid ${pid})`);
+      if (pid !== process.pid && ledgerAlive(pid)) die(2, `the ledger service is already capturing (pid ${pid})`);
       fs.rmSync(FILES.owner, { force: true });
     }
   }
