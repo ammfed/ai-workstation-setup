@@ -353,6 +353,35 @@ test('the service rebuilds the Now page from a watched change within seconds, an
   assert.match(r.stdout, /FAILED ledger: the service \(pid \d+\) is not running/);
 });
 
+// A lock file outlives a power loss, and its pid may then belong to any process.
+const idleScript = 'setInterval(() => {}, 1e6)';
+function lockedBy(w, t, args) {
+  const holder = spawn(process.execPath, args, { stdio: 'ignore' });
+  t.after(() => holder.kill('SIGKILL'));
+  fs.mkdirSync(w.data, { recursive: true, mode: 0o700 });
+  write(path.join(w.data, 'capture.pid'), String(holder.pid));
+  return holder.pid;
+}
+
+test('a lock whose pid is alive but is not a ledger is stale: it is taken over', (t) => {
+  const w = world();
+  lockedBy(w, t, ['-e', idleScript]);
+  const r = w.run('scan');
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.ok(!fs.existsSync(path.join(w.data, 'capture.pid')), 'the lock is released when the scan ends');
+});
+
+test('a lock whose pid is alive and is a ledger is still held', (t) => {
+  const w = world();
+  const standIn = path.join(w.root, 'ledger.mjs');
+  write(standIn, `${idleScript};\n`);
+  const pid = lockedBy(w, t, [standIn, 'serve']);
+  const r = w.run('scan');
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, new RegExp(`already capturing \\(pid ${pid}\\)`));
+  assert.equal(fs.readFileSync(path.join(w.data, 'capture.pid'), 'utf8'), String(pid), 'the lock is left alone');
+});
+
 // ---------------------------------------------------------------- the live board
 
 const { backlogRows, buildBoard, timeline } = await import(script);
