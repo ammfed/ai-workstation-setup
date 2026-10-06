@@ -164,6 +164,11 @@ Call before ten.
 due: 2026-03-10
 ```
 
+**The first meeting.** When a pair is newly linked, fields that are equal count as synced.
+For the rest: a done status wins, while open and in progress stay as each side has them (a queued
+row never pulls an in-progress task back); a value wins over an empty one; otherwise the home wins.
+Run `task-sync run --dry-run` after linking to see what that changes.
+
 **A clash.** The sync keeps, per place, the last value it synced for each field. One place
 changed a field: that place wins, whenever it happened. Several changed it to different values:
 the newest dated edit wins when the edits are more than `skewSeconds` (120) apart. Within that
