@@ -144,7 +144,7 @@ Only linked items sync, each linked on purpose:
 | Place | How an item is linked | Fields | Read and written with |
 | --- | --- | --- | --- |
 | Home | the truth; a row's id is the link key (`<home>/<task id>`), so a title change keeps it | title, status, due date, notes | its backlog file to read; `tasks-axi` to write |
-| TickTick | pair a home with a list in `config.json`: a new open item on either side gets its twin (an open row and an open task with the same title are linked, not duplicated) | title, status, due date, notes | the official TickTick CLI, `ticktick-cli` |
+| TickTick | pair a home with a list in `config.json`: a new open item on either side gets its twin (an open row and an open task with the same title are linked, not duplicated). Or link single tasks with `task-sync link <home>/<task id> ticktick <list id>/<task id>`: their list is read, and nothing new is created from it | title, status, due date, notes | the official TickTick CLI, `ticktick-cli` |
 | ClickUp | `task-sync link <home>/<task id> clickup <task id>`; a new home row never creates a ClickUp task | status, due date | the ClickUp v2 API with your token |
 | Vault | the note says so: `task: <home>/<task id>` in the frontmatter of a `type: project` note under `projects/` | `task-status: open\|active\|done` | the note's frontmatter, under the vault's run lock |
 

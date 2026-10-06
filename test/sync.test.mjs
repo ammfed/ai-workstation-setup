@@ -864,6 +864,27 @@ test('the command line: a dry run writes nothing, a run links both new items, ch
   assert.equal(sync('cards').stdout.trim(), 'no open cards');
 });
 
+test('the command line: a TickTick item linked on purpose syncs without pairing its list, and nothing new is created', { skip: process.platform === 'win32' }, () => {
+  const root = dir('cli-linked');
+  const h = path.join(root, 'home');
+  write(path.join(h, 'data', 'backlog.md'), '# Backlog\n\n## In flight\n## Queued\n- [ ] fence-a1 - Paint the fence (since 2026-01-02)\n- [ ] other-b2 - Not linked (since 2026-01-02)\n## Done\n');
+  const tasks = path.join(root, 'tt-tasks.json');
+  // The linked task was ticked: it is in the completed read only. tt5 is open and linked to nothing.
+  write(tasks, JSON.stringify([{ id: 'tt5', projectId: 'list1', title: 'Someone else', status: 0 }]));
+  const log = path.join(root, 'tt.log');
+  standIn(path.join(root, 'bin', 'ticktick-cli'), log, { 'project data list1': `@${tasks}`, 'task completed': JSON.stringify([{ id: 'tt1', projectId: 'list1', title: 'Paint the fence', status: 2, completedTime: '2026-01-05T08:10:00.000+0000' }]) });
+  const cfgDir = path.join(root, 'sync');
+  const cfg = path.join(cfgDir, 'config.json');
+  write(cfg, JSON.stringify({ timeZone: 'UTC', homes: [{ name: 'main', path: h, ticktick: '' }], ticktick: { command: path.join(root, 'bin', 'ticktick-cli') } }));
+  const synced = { title: 'Paint the fence', status: 'open', due: null, notes: '' };
+  write(path.join(cfgDir, 'links.json'), JSON.stringify({ version: 1, items: { 'main/fence-a1': { refs: { ticktick: 'list1/tt1' }, base: { home: synced, ticktick: synced }, seen: {}, force: {} } } }));
+  const r = spawnSync(process.execPath, [path.join(repoRoot, 'templates', 'ledger', 'bin', 'sync.mjs'), 'run', '--dry-run', '--config', cfg], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /would fix\s+TickTick→home main\/fence-a1 status: "done"/);
+  assert.doesNotMatch(r.stdout, /would add/, 'an unpaired list never creates items on either side');
+  assert.match(fs.readFileSync(log, 'utf8'), /"project","data","list1"/);
+});
+
 // ------------------------------------------------------------------ the shipped files
 
 test('sync scripts pass node --check and the CLI prints its usage', () => {
