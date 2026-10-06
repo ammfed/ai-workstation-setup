@@ -23,6 +23,14 @@ const DEFAULT_MODEL =
   'claude -p --model haiku --tools "" --strict-mcp-config --no-session-persistence --setting-sources "" ' +
   '--system-prompt "Answer in at most three short lines of plain text, from the evidence given only."';
 
+// What the vault step runs by default: the ingest the second-brain module installs. A vault that
+// ships its own daily script (a `bin/daily`) is opted in by answering DAILY_SYNC_VAULT_RUN, so a
+// vault without that script is never pointed at a file it does not have.
+const DEFAULT_VAULT_DRY_RUN = 'node bin/ingest.mjs --dry-run';
+const DEFAULT_VAULT_RUN = 'node bin/ingest.mjs --limit {limit}';
+// Each raw file is an agent run, so this is also the most model calls a day the vault step makes.
+const DEFAULT_VAULT_LIMIT = 25;
+
 const list = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
 const titleCase = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -32,7 +40,7 @@ function parseTime(value) {
   return { hour: Number(m[1]), minute: Number(m[2]), text: `${m[1].padStart(2, '0')}:${m[2]}` };
 }
 
-function buildConfig(ctx, base) {
+export function buildConfig(ctx, base) {
   const surfaces = ctx.get('DAILY_SYNC_SURFACES') || [];
   const config = {
     staleHours: 26,
@@ -47,9 +55,9 @@ function buildConfig(ctx, base) {
     config.vault = {
       path: ctx.get('DAILY_SYNC_VAULT_PATH'),
       rawDir: ctx.get('DAILY_SYNC_RAW_DIR'),
-      dryRun: 'node bin/ingest.mjs --dry-run',
-      run: 'node bin/ingest.mjs --limit {limit}',
-      limit: Number(ctx.get('DAILY_SYNC_INGEST_LIMIT')) || 3,
+      dryRun: DEFAULT_VAULT_DRY_RUN,
+      run: ctx.get('DAILY_SYNC_VAULT_RUN') || DEFAULT_VAULT_RUN,
+      limit: Number(ctx.get('DAILY_SYNC_INGEST_LIMIT')) || DEFAULT_VAULT_LIMIT,
       requireClean: true,
       ignoreDirty: ['.obsidian/'],
       timeoutMin: 120,
@@ -236,7 +244,20 @@ export default {
       default: (ctx) => ctx.values.VAULT_RAW_DIR || '~/raw-sources',
       when: (ctx) => ctx.get('DAILY_SYNC_VAULT'),
     },
-    { key: 'DAILY_SYNC_INGEST_LIMIT', type: 'text', message: 'At most this many raw files ingested per run (each one is an agent run)', default: '3', when: (ctx) => ctx.get('DAILY_SYNC_VAULT') },
+    {
+      key: 'DAILY_SYNC_VAULT_RUN',
+      type: 'text',
+      message: "Command run in the vault for the real work, {limit} replaced by the limit below (`bin/daily --limit {limit}` if your vault ships a daily script)",
+      default: DEFAULT_VAULT_RUN,
+      when: (ctx) => ctx.get('DAILY_SYNC_VAULT'),
+    },
+    {
+      key: 'DAILY_SYNC_INGEST_LIMIT',
+      type: 'text',
+      message: 'At most this many raw files processed per run (each one is an agent run)',
+      default: String(DEFAULT_VAULT_LIMIT),
+      when: (ctx) => ctx.get('DAILY_SYNC_VAULT'),
+    },
     {
       key: 'DAILY_SYNC_SURFACES',
       type: 'multi',

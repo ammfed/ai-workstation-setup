@@ -283,8 +283,8 @@ function countFiles(dir, cap = 100_000) {
   return n;
 }
 
-// The vault's own ingest, with RAW_DIR passed explicitly so the schedule never depends on a
-// shell profile. A raw folder that is missing or empty is a failure, never a quiet "nothing
+// The vault's own ingest (or its own daily script: `run` decides), with RAW_DIR passed
+// explicitly so the schedule never depends on a shell profile. A raw folder that is missing or empty is a failure, never a quiet "nothing
 // new": an ingest pointed at the wrong folder reads nothing and says so politely.
 function vault(v) {
   const vp = expandHome(v.path);
@@ -301,7 +301,7 @@ function vault(v) {
   if (!files) return add('failed', 'vault:raw-empty', `vault: raw folder ${tilde(raw)} has no files, so ingest would read nothing (wrong folder?)`);
 
   const env = { RAW_DIR: raw, VAULT_PATH: vp, ...expandEnv(v.env) };
-  const limit = Number(v.limit) || 3;
+  const limit = Number(v.limit) || 25;
   const d = sh(v.dryRun, { cwd: vp, env, timeoutSec: 600 });
   const text = d.out + d.err;
   if (d.code !== 0 && /holds the lock/i.test(text)) return add('attention', 'vault:busy', 'vault: another vault job holds its lock; ingest is checked again next run');
