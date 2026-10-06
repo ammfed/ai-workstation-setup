@@ -1,13 +1,16 @@
 // `voice-mode tasks`: today's and overdue tasks, read only when the voice is asked (a command
-// record source). It runs the configured read command (by default the TickTick CLI the
-// daily-sync module also uses, `ticktick --format json tasks due 1`), never through a shell,
-// and prints titles grouped as overdue and due today. A failed read is said plainly.
+// record source). It runs the configured read command (by default the official TickTick CLI
+// the daily-sync module also uses, `ticktick-cli task filter --status 0 --json`), never through
+// a shell, and prints titles grouped as overdue and due today. A failed read is said plainly.
 // The titles go to the realtime voice provider only when the voice reads this source.
 
 import { spawnSync } from 'node:child_process';
 
 /** Local calendar day of a date, as YYYY-MM-DD. */
 const day = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/** High priority, as the official CLI numbers it (5) or as a word. */
+const isHigh = (p) => p === 'high' || Number(p) === 5;
 
 /** A due date as the CLI prints it ("2026-01-05T20:00:00.000+0000" or an ISO date), or null. */
 export function parseDue(s) {
@@ -41,7 +44,7 @@ export function dueToday(data, now = new Date()) {
 /** The two lists as plain lines for the voice. */
 export function tasksSummary({ overdue, today }) {
   if (!overdue.length && !today.length) return 'Nothing is overdue and nothing is due today.';
-  const names = (xs) => xs.map((t) => `${t.title}${t.priority === 'high' ? ' (high priority)' : ''}`).join('; ');
+  const names = (xs) => xs.map((t) => `${t.title}${isHigh(t.priority) ? ' (high priority)' : ''}`).join('; ');
   const out = [];
   out.push(overdue.length ? `Overdue (${overdue.length}): ${names(overdue)}.` : 'Nothing is overdue.');
   out.push(today.length ? `Due today (${today.length}): ${names(today)}.` : 'Nothing else is due today.');

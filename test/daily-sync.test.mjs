@@ -283,6 +283,17 @@ test('TickTick lists are compared with the ones you expect, and an expiring sign
   assert.doesNotMatch(note, /"Work"|"work"|"Personal"/);
 });
 
+test("TickTick sign-in check: the official CLI's `Not signed in` (exit 0) is reported, `Signed in` is not", () => {
+  const lists = ['Work', 'Personal', 'Errands'];
+  const out = job({ ticktick: { command: node('ticktick.cjs'), authCommand: node('print.cjs', 'Not signed in'), lists } });
+  assert.equal(out.run().code, 0);
+  assert.match(out.notified()[0], /ticktick: not signed in \(`.*print\.cjs.*`: Not signed in\)/);
+  assert.doesNotMatch(out.notified()[0], /expected list|not one you expect/, 'it does not go on to compare lists');
+  const inn = job({ ticktick: { command: node('ticktick.cjs'), authCommand: node('print.cjs', '✓ Signed in  Token: 5003922c...cd51'), lists } });
+  assert.equal(inn.run().code, 0);
+  assert.deepEqual(inn.notified(), []);
+});
+
 test('--dry-run changes nothing and sends nothing', () => {
   const { clone, upstreamCommit } = remoteAndClone();
   upstreamCommit();

@@ -99,7 +99,7 @@ Paths may start with `~`.
     }
   ],
   "clickup": { "workspace": "<workspace id>", "space": "<space name or id>", "lists": ["<list id>", "<list id>"] },
-  "ticktick": { "command": "ticktick-cli project list --json", "authCommand": "", "lists": ["Work", "Personal"] }
+  "ticktick": { "command": "ticktick-cli project list --json", "authCommand": "ticktick-cli auth status", "lists": ["Work", "Personal"] }
 }
 ```
 
@@ -112,8 +112,10 @@ Paths may start with `~`.
   `{ "file": "~/notes/board.json", "key": "lists" }` (an object or list of `{ "id", "name" }`).
 - `clickup.workspace` is passed to clickup-axi as `CLICKUP_AXI_WORKSPACE`; set it when your
   token sees more than one workspace, since a scheduled run does not read your shell profile.
-- `ticktick.authCommand`, when set, is run first; a non-zero exit is reported as signed out,
-  and output such as `expires 86400 seconds` is warned about two weeks ahead.
+- `ticktick.authCommand`, when set, is run first. A non-zero exit, or output that says "not
+  signed in", is reported as signed out. Output such as `expires 86400 seconds` is warned about
+  two weeks ahead. The official CLI's `ticktick-cli auth status` prints `Not signed in` and exits
+  0 when no token is stored; it prints no expiry.
 - Network reads (git fetch and ls-remote, ClickUp, TickTick) get a second try
   `retryWaitSec` (20) seconds later before they count as failed.
 - `notify` and `model.command` are shell commands that read the report or prompt on stdin.

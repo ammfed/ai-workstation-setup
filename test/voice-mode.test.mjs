@@ -1740,6 +1740,22 @@ test("tasks: today's and overdue titles from invented task JSON; a failed read i
   assert.deepEqual(readTasks(c, { run: () => ({ status: 0, stdout: '{"nope":1}' }) }), { ok: false, text: 'The task list could not be read just now (the read command did not print a list of tasks).' });
 });
 
+test("tasks: the default read command is the official TickTick CLI, and its JSON (numeric priority) reads the same", () => {
+  assert.deepEqual(DEFAULTS.tasks.command, ['ticktick-cli', 'task', 'filter', '--status', '0', '--json']);
+  const now = new Date(2026, 0, 5, 12, 0, 0);
+  const at = (d, h) => new Date(2026, 0, d, h, 0, 0).toISOString().replace('Z', '+0000');
+  // The shape `ticktick-cli task filter --json` prints: a bare list, priority 0, 1, 3 or 5, a status code.
+  const out = JSON.stringify([
+    { id: 'a1', projectId: 'p1', title: 'Water the plants', status: 0, priority: 5, dueDate: at(3, 9), isAllDay: false, kind: 'TEXT' },
+    { id: 'a2', projectId: 'p1', title: 'Call the plumber', status: 0, priority: 3, dueDate: at(5, 18), isAllDay: false, kind: 'TEXT' },
+    { id: 'a3', projectId: 'p2', title: 'Someday', status: 0, priority: 0, kind: 'NOTE' },
+  ]);
+  const calls = [];
+  const r = readTasks(config({ tasks: DEFAULTS.tasks }), { now, run: (cmd, args) => (calls.push([cmd, ...args]), { status: 0, stdout: out }) });
+  assert.deepEqual(calls, [['ticktick-cli', 'task', 'filter', '--status', '0', '--json']]);
+  assert.deepEqual(r, { ok: true, text: 'Overdue (1): Water the plants (high priority).\nDue today (1): Call the plumber.' });
+});
+
 test('exclude: matching folders and files are never offered, listed, searched, read or opened', async () => {
   const docsX = path.join(tmp, 'DocsX');
   const dataX = path.join(tmp, 'dataX');
