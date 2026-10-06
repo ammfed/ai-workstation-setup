@@ -85,7 +85,11 @@ function buildConfig(ctx, base) {
     };
   }
   if (surfaces.includes('ticktick')) {
-    config.ticktick = { command: ctx.get('DAILY_SYNC_TICKTICK_COMMAND'), lists: list(ctx.get('DAILY_SYNC_TICKTICK_LISTS')) };
+    config.ticktick = {
+      command: ctx.get('DAILY_SYNC_TICKTICK_COMMAND'),
+      ...(ctx.get('DAILY_SYNC_TICKTICK_AUTH_COMMAND') ? { authCommand: ctx.get('DAILY_SYNC_TICKTICK_AUTH_COMMAND') } : {}),
+      lists: list(ctx.get('DAILY_SYNC_TICKTICK_LISTS')),
+    };
   }
   config.versions = [];
   return config;
@@ -280,6 +284,13 @@ export default {
       type: 'text',
       message: 'A read-only command that prints your TickTick lists as JSON (a list of objects with a "name"), signed in beforehand',
       default: 'ticktick-cli project list --json',
+      when: (ctx) => ctx.get('DAILY_SYNC_SURFACES').includes('ticktick'),
+    },
+    {
+      key: 'DAILY_SYNC_TICKTICK_AUTH_COMMAND',
+      type: 'text',
+      message: 'A command run first to check you are signed in to TickTick (empty: skip the check; a failed read is reported anyway)',
+      default: 'ticktick-cli auth status',
       when: (ctx) => ctx.get('DAILY_SYNC_SURFACES').includes('ticktick'),
     },
     {

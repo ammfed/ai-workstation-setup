@@ -65,7 +65,7 @@ points at another one). Everything not in the file takes the defaults in `bin/co
 | `exclude` | Name patterns (`*` and `?`, any case) of files and folders that are never listed, searched, read, offered to the decision model or opened, in the documents folder and every source. Empty unless you fill it in; see Keeping files out. |
 | `lookout` | `enabled`, `url` (the ledger board's `/api/board`; loopback only), `command` (`ledger board --json`, used when the board is off), `everySec` (5), `batchSec` (30), `gapSec` (120), `stateFile`. See The lookout. |
 | `notes` | `enabled`, `vault` (a git repository), `agy` (the agy command), `rawDir` (raw material agy is told never to read), `waitSec` (30). See Answers from your notes. |
-| `tasks` | `command` (default `ticktick --format json tasks due 1`), `timeoutSec` (5): what `voice-mode tasks` runs. |
+| `tasks` | `command` (default `ticktick-cli task filter --status 0 --json`), `timeoutSec` (5): what `voice-mode tasks` runs. |
 | `queue` | `{ "command": [...], "env": {} }`: how a hand-off reaches your assistant; the note is added as the last argument. Never run through a shell. Without it there is no hand-off. |
 | `handoff` | `replyCommand` (default `voice-mode reply`: the command written into each note; give the full path if your assistant's shell does not have it on PATH), `dir` (the reply queue; default `handoff/` next to the config), `waitMin` (15: how long a conversation stays open for an answer that is still coming), `stillComingSec` (20: when it says, once, that the answer is still coming; 0 never). |
 | `briefing` | `enabled`, `refreshMin` (3), `maxChars` (120000 in all; see What a big briefing costs), `parts` (see Briefing and hand-off). |
@@ -328,8 +328,8 @@ battery?", "what's due today?"):
   network (`nmcli`, else whether an interface is up), the three busiest apps (`ps`, grouped by
   executable, so a browser's many processes count once) and uptime. It takes about 0.15 s.
   It never speaks up about these on its own.
-- **`tasks`** runs `voice-mode tasks`: the `tasks.command` (by default the TickTick CLI that the
-  daily-sync module also uses, `ticktick --format json tasks due 1`), keeping what is overdue or
+- **`tasks`** runs `voice-mode tasks`: the `tasks.command` (by default the official TickTick CLI that
+  the daily-sync module also uses, `ticktick-cli task filter --status 0 --json`), keeping what is overdue or
   due today by your local calendar day, with titles. A failed read is said plainly ("the task
   list could not be read just now"). The titles go to the realtime voice provider when the
   voice reads this source.

@@ -447,7 +447,7 @@ function ticktick(t) {
   if (!t.command) return add('failed', 'ticktick:config', 'ticktick: no read command configured (ticktick.command)');
   if (t.authCommand) {
     const a = retry(() => sh(t.authCommand, { timeoutSec: 60 }));
-    if (a.code !== 0 || /not authenticated|unauthenticated|expired/i.test(a.out)) {
+    if (a.code !== 0 || /not signed in|not authenticated|unauthenticated|expired/i.test(a.out)) {
       return add('attention', 'ticktick:auth', `ticktick: not signed in (\`${t.authCommand}\`: ${clip(lastLine(a.out + a.err))}); sign in once and it is read without prompts again`);
     }
     const secs = Number((a.out.match(/expires\s+(?:in\s+)?(\d+)\s*s/i) || [])[1]);

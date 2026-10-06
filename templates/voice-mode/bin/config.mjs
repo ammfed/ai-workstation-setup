@@ -97,7 +97,7 @@ export const DEFAULTS = {
   // never to read; waitSec: how long an answer may take.
   notes: { enabled: false, vault: '', agy: 'agy', rawDir: '', waitSec: 30 },
   // Today's and overdue tasks (tasks.mjs), read when asked through the `voice-mode tasks` source.
-  tasks: { command: ['ticktick', '--format', 'json', 'tasks', 'due', '1'], timeoutSec: 5 },
+  tasks: { command: ['ticktick-cli', 'task', 'filter', '--status', '0', '--json'], timeoutSec: 5 },
   // Where real work and deeper questions are handed over: argv with the note appended; env is added.
   queue: { command: [], env: {} },
   // Answers to hand-offs come back with `<replyCommand> <id> "<answer>"` (see handoff.mjs).

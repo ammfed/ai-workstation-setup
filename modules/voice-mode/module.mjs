@@ -187,8 +187,8 @@ export default {
     {
       key: 'VOICE_TASKS_COMMAND',
       type: 'text',
-      message: "Command that prints your tasks as JSON, for today's and overdue tasks when asked (TickTick: ticktick --format json tasks due 1; empty: none)",
-      default: (ctx) => (ctx.values.DAILY_SYNC_TICKTICK_COMMAND ? 'ticktick --format json tasks due 1' : ''),
+      message: "Command that prints your tasks as JSON, for today's and overdue tasks when asked (TickTick: ticktick-cli task filter --status 0 --json; empty: none)",
+      default: (ctx) => (ctx.values.DAILY_SYNC_TICKTICK_COMMAND ? 'ticktick-cli task filter --status 0 --json' : ''),
     },
     {
       key: 'VOICE_QUEUE_COMMAND',
