@@ -789,7 +789,8 @@ function rowTitle(rest) {
  * Every structured row of a backlog, each captain hold with its bucket: "blocked" when any
  * blocked-by id is not Done, else "dated" while hold-until is after today (UTC), else "aged"
  * when an undated hold was set at least `ageDays` ago, else "live" (it needs you now).
- * Mirrors hold_bucket in bin/fm-fleet-snapshot.sh; prose is never read.
+ * Mirrors hold_bucket in bin/fm-fleet-snapshot.sh; prose is never read. `text` is the row's body
+ * as written, without its indent, for the task sync (sync.mjs).
  */
 export function backlogRows(text, { now = Date.now(), ageDays = 14 } = {}) {
   const rows = [];
@@ -802,7 +803,11 @@ export function backlogRows(text, { now = Date.now(), ageDays = 14 } = {}) {
       last = null;
       continue;
     }
-    if (!section || !line.trim()) continue;
+    if (!section) continue;
+    if (!line.trim()) {
+      if (last) last.raw.push('');
+      continue;
+    }
     const m = /^[-*]\s+\[[ xX]\]\s+(\S+)\s+-\s+(.*)$/.exec(line) || /^[-*]\s+\*\*([^*]+)\*\*\s+-\s+(.*)$/.exec(line);
     if (m) {
       const rest = m[2];
@@ -818,15 +823,20 @@ export function backlogRows(text, { now = Date.now(), ageDays = 14 } = {}) {
         since: metaWord(rest, 'since'),
         completion: ['merged', 'reported', 'done'].map((verb) => ({ verb, date: metaWord(rest, verb) })).find((c) => c.date) || null,
         body: [],
+        raw: [],
       };
       rows.push(last);
-    } else if (last && /^\s/.test(line)) last.body.push(line.trim());
-    else last = null;
+    } else if (last && /^\s/.test(line)) {
+      last.body.push(line.trim());
+      last.raw.push(line.replace(/^ {1,2}/, ''));
+    } else last = null;
   }
   const done = {};
   for (const r of rows) done[r.id] = (done[r.id] ?? true) && r.state === 'done';
   const today = new Date(now).toISOString().slice(0, 10);
   for (const r of rows) {
+    r.text = r.raw.join('\n').trim();
+    delete r.raw;
     r.holdSet = /^Captain hold set:\s*(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}Z)?)$/.exec(r.body[0] || '')?.[1] || null;
     const from = epochOf(r.holdSet || r.since);
     r.holdAgeDays = from === null ? null : Math.floor((now - from) / 86_400_000);

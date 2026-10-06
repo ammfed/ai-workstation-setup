@@ -1,12 +1,14 @@
 import path from 'node:path';
 import { Skip } from '../../lib/context.mjs';
+import { SYNC_QUESTIONS, installSync } from './sync.mjs';
 
 // One append-only record of what you say and decide and of the work under way, captured the
 // moment it happens, and a live "Now" page rebuilt from it within seconds. The capture and the
 // page are one plain Node script, templates/ledger/bin/ledger.mjs, run as a small always-on
 // user service (systemd user unit, launchd agent on macOS). It only reads Firstmate homes and
 // Claude Code session transcripts; the ledger itself lives in your data folder, outside this
-// clone, readable by you alone. See docs/ledger.md.
+// clone, readable by you alone. The optional task sync (sync.mjs, ./sync.mjs here) runs as a
+// second service next to it. See docs/ledger.md.
 
 const NAME = 'ledger';
 const UNIT = 'workstation-ledger';
@@ -65,11 +67,13 @@ function boardPort(ctx) {
 const unitQuote = (s) => `"${String(s).replace(/%/g, '%%').replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 const xml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-async function systemdService(ctx, script) {
-  const file = path.join(ctx.home, '.config', 'systemd', 'user', `${UNIT}.service`);
-  const unit = [
+const LEDGER_SERVICE = { unit: UNIT, label: LAUNCHD_LABEL, what: 'Ledger capture and live Now page', log: 'ai-workstation-setup-ledger.log' };
+
+async function systemdService(ctx, { unit, what, script }) {
+  const file = path.join(ctx.home, '.config', 'systemd', 'user', `${unit}.service`);
+  const text = [
     '[Unit]',
-    `Description=Ledger capture and live Now page (${TAG})`,
+    `Description=${what} (${TAG})`,
     '',
     '[Service]',
     'Type=simple',
@@ -83,25 +87,25 @@ async function systemdService(ctx, script) {
     'WantedBy=default.target',
     '',
   ].join('\n');
-  const wrote = await ctx.writeFile(file, unit, { onConflict: 'ask' });
-  const enabled = ctx.capture(`systemctl --user is-enabled ${UNIT}.service`) === 'enabled';
-  const active = ctx.capture(`systemctl --user is-active ${UNIT}.service`) === 'active';
-  if (wrote || !enabled || !active) ctx.run(`systemctl --user daemon-reload && systemctl --user enable ${UNIT}.service && systemctl --user restart ${UNIT}.service`);
-  else ctx.ok(`${UNIT}.service is enabled and running`);
+  const wrote = await ctx.writeFile(file, text, { onConflict: 'ask' });
+  const enabled = ctx.capture(`systemctl --user is-enabled ${unit}.service`) === 'enabled';
+  const active = ctx.capture(`systemctl --user is-active ${unit}.service`) === 'active';
+  if (wrote || !enabled || !active) ctx.run(`systemctl --user daemon-reload && systemctl --user enable ${unit}.service && systemctl --user restart ${unit}.service`);
+  else ctx.ok(`${unit}.service is enabled and running`);
   if (ctx.capture('loginctl show-user "$USER" --property=Linger --value') === 'no') {
     ctx.info('the service runs while you are logged in; `loginctl enable-linger` keeps it running while you are logged out too');
   }
-  ctx.info(`logs: journalctl --user -u ${UNIT}; stop it with: systemctl --user disable --now ${UNIT}.service`);
+  ctx.info(`logs: journalctl --user -u ${unit}; stop it with: systemctl --user disable --now ${unit}.service`);
 }
 
-async function launchdAgent(ctx, script) {
-  const plist = path.join(ctx.home, 'Library', 'LaunchAgents', `${LAUNCHD_LABEL}.plist`);
-  const logFile = path.join(ctx.home, 'Library', 'Logs', 'ai-workstation-setup-ledger.log');
+async function launchdAgent(ctx, { label, script, log }) {
+  const plist = path.join(ctx.home, 'Library', 'LaunchAgents', `${label}.plist`);
+  const logFile = path.join(ctx.home, 'Library', 'Logs', log);
   const content = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>${LAUNCHD_LABEL}</string>
+  <key>Label</key><string>${label}</string>
   <key>ProgramArguments</key>
   <array><string>${xml(process.execPath)}</string><string>${xml(script)}</string><string>serve</string></array>
   <key>EnvironmentVariables</key>
@@ -115,18 +119,20 @@ async function launchdAgent(ctx, script) {
 </plist>
 `;
   if (await ctx.writeFile(plist, content, { onConflict: 'ask' })) {
-    ctx.run(`launchctl bootout gui/$(id -u)/${LAUNCHD_LABEL} 2>/dev/null; launchctl bootstrap gui/$(id -u) "${plist}"`);
+    ctx.run(`launchctl bootout gui/$(id -u)/${label} 2>/dev/null; launchctl bootstrap gui/$(id -u) "${plist}"`);
   }
-  ctx.info(`logs: ${logFile}; stop it with: launchctl bootout gui/$(id -u)/${LAUNCHD_LABEL} (and delete ${plist})`);
+  ctx.info(`logs: ${logFile}; stop it with: launchctl bootout gui/$(id -u)/${label} (and delete ${plist})`);
 }
 
-async function service(ctx, script) {
-  if (ctx.os === 'macos') return launchdAgent(ctx, script);
+/** Run `<script> serve` always: a systemd user service, or a launchd agent on macOS. */
+async function service(ctx, spec) {
+  const { script } = spec;
+  if (ctx.os === 'macos') return launchdAgent(ctx, spec);
   if (ctx.platform.simulated) {
-    ctx.info(`would run \`${path.basename(script)} serve\` as the systemd user service ${UNIT}.service when \`systemctl --user\` works`);
+    ctx.info(`would run \`${path.basename(script)} serve\` as the systemd user service ${spec.unit}.service when \`systemctl --user\` works`);
     return;
   }
-  if (ctx.capture('systemctl --user show-environment') !== null) return systemdService(ctx, script);
+  if (ctx.capture('systemctl --user show-environment') !== null) return systemdService(ctx, spec);
   const hint = ctx.os === 'wsl' ? ' (in WSL, turn on systemd in /etc/wsl.conf)' : '';
   throw new Skip(`no systemd user session found${hint}; keep \`node "${script}" serve\` running yourself`);
 }
@@ -201,6 +207,7 @@ export default {
       default: '',
       when: (ctx) => ctx.get('LEDGER_BOARD'),
     },
+    ...SYNC_QUESTIONS,
   ],
 
   async install(ctx) {
@@ -233,7 +240,12 @@ export default {
       });
     }
 
-    if (ctx.get('LEDGER_SERVICE') === 'auto') await ctx.step('service', () => service(ctx, script));
+    if (ctx.get('LEDGER_SERVICE') === 'auto') await ctx.step('service', () => service(ctx, { ...LEDGER_SERVICE, script }));
+
+    if (ctx.get('LEDGER_SYNC')) {
+      const homes = [{ name: 'main', path: home }, ...folders(ctx, 'LEDGER_EXTRA_HOMES').map((p) => ({ name: path.basename(p).replace(/^\./, ''), path: p }))];
+      await installSync(ctx, { base, homes, service });
+    }
 
     ctx.todo('prove it runs and the Now page is fresh: ledger check (then read it: ledger now)');
     if (ctx.get('LEDGER_BOARD')) ctx.info(`the live board: http://127.0.0.1:${ctx.get('LEDGER_BOARD_PORT')}/ (served by the ledger service; \`ledger board\` serves it on its own)`);

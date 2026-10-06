@@ -15,10 +15,10 @@ Every step is plain scripting, in this order:
 | `pull` | Fetches each repo and fast-forwards it when it is on its default branch, clean and strictly behind. Dirty, diverged or off-branch repos are reported. | force, stash, reset, merge commit, rebase |
 | `watch` | Repos another tool updates (for example a Firstmate clone): reported when their remote has moved on, with read-only probes. | fetch, pull or any other change |
 | `vault` | Checks the raw folder exists and holds files, runs the vault's ingest in dry-run mode, and when there are new raw files runs the real ingest on at most `limit` of them. A missing or empty raw folder is a failure, not "nothing new". | ingest into a vault with uncommitted changes (`requireClean`) |
-| `commands` | Runs each command (such as Firstmate's tool-update check) and reports what it prints. | install anything |
+| `commands` | Runs each command (such as Firstmate's tool-update check) and reports what it prints. The `sync` choice adds the ledger's task sync check (`sync.mjs check`), which fixes settled drift between linked items and prints one line ([task sync](ledger.md#the-task-sync)). | install anything |
 | `versions` | Compares the version you have on record (a note, a lock file) with the folder or command that holds the thing itself. | change either side |
 | `clickup` | Reads a space's active lists with `clickup-axi` and compares them with the lists you expect. | write to ClickUp |
-| `ticktick` | Runs your read-only command that prints your TickTick lists as JSON and compares them with the lists you expect. | write to TickTick |
+| `ticktick` | Runs your read-only command that prints your TickTick lists as JSON (by default the official CLI: `ticktick-cli project list --json`) and compares them with the lists you expect. | write to TickTick |
 
 A model is called only for a **new** drift item a step could not settle itself (a diverged
 repo, an unexpected or missing list, a version mismatch): one short call per item, at most
@@ -99,7 +99,7 @@ Paths may start with `~`.
     }
   ],
   "clickup": { "workspace": "<workspace id>", "space": "<space name or id>", "lists": ["<list id>", "<list id>"] },
-  "ticktick": { "command": "ticktick --format json projects list", "authCommand": "", "lists": ["Work", "Personal"] }
+  "ticktick": { "command": "ticktick-cli project list --json", "authCommand": "", "lists": ["Work", "Personal"] }
 }
 ```
 
