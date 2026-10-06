@@ -107,14 +107,17 @@ function clickupToken(c) {
   }
 }
 
-/** The places this config turns on, and the home-to-TickTick pairs. */
-function placesFor(cfg, state) {
+/**
+ * The places this config turns on, and the home-to-TickTick pairs. TickTick reads the paired
+ * lists and the lists of items linked on purpose (`task-sync link`); only a paired list creates items.
+ */
+function placesFor(cfg, state, links) {
   const home = homePlace({ homes: cfg.homes, tasksAxi: cfg.tasksAxi, inbox: cfg.inbox });
   const places = { home };
   const pairs = cfg.homes.filter((h) => h.ticktick).map((h) => ({ home: h.name, list: String(h.ticktick) }));
-  if (pairs.length) {
-    places.ticktick = ticktickPlace({ lists: [...new Set(pairs.map((p) => p.list))], command: cfg.ticktick.command || 'ticktick-cli', timeZone: cfg.timeZone });
-  }
+  const linked = links.keys().map((k) => links.get(k).refs.ticktick).filter(Boolean).map((ref) => ref.slice(0, ref.indexOf('/')));
+  const lists = [...new Set([...pairs.map((p) => p.list), ...linked])];
+  if (lists.length) places.ticktick = ticktickPlace({ lists, command: cfg.ticktick.command || 'ticktick-cli', timeZone: cfg.timeZone });
   if ((cfg.clickup.lists || []).length) {
     const notifyHome = cfg.clickup.notifyHome ? expandHome(cfg.clickup.notifyHome) : null;
     const notify =
@@ -227,7 +230,7 @@ async function pass({ dryRun = false, quiet = false } = {}) {
   return withLock(async () => {
     const links = new Links(readJson(FILES.links, {}));
     const state = loadState();
-    const { places, pairs } = placesFor(cfg, state);
+    const { places, pairs } = placesFor(cfg, state, links);
     const result = await syncPass({ places, pairs, links, state, now: Date.now(), skewMs: cfg.skewMs, dryRun });
     if (!dryRun) saveAll(links, state, result.journal);
     if (!quiet) for (const e of result.journal) console.log(`${dryRun ? 'would ' : ''}${e.kind.padEnd(6)} ${describe(e)}`);
