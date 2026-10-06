@@ -2,6 +2,20 @@
 // an answer, so the same text is written for Claude Code and for firstmate.
 // Sections follow the question groups in module.mjs and docs/working-preferences.md.
 
+// A plain-English house style based on Simplified Technical English (ASD-STE100), adapted.
+const STE_RULES = [
+  'House style for everything written to the user (instructions, warnings, questions, action items, status lines), based on Simplified Technical English (ASD-STE100):',
+  'One instruction per sentence, as a command. Put the condition first, then the command ("If the check fails, stop and tell me.").',
+  'Use active voice and name who acts.',
+  'Keep sentences short: 20 words or fewer in steps, 25 or fewer in explanations. Keep paragraphs to six sentences or fewer, one topic each.',
+  'Use simple tenses (present, past, "will"). Keep the small words such as "the" and "to"; no telegraphic shorthand.',
+  'Use one word for one thing every time (for example start, stop, finish, examine, undo, pull request). Do not swap in synonyms for variety.',
+  'Use verbs, not noun phrases ("check", not "perform a check of"). No semicolons and no em dashes.',
+  'In a warning, state the risk in plain words first, then the command, then what can go wrong.',
+  'Relax the style for a warm opening or closing line, the reason behind a recommendation, and short acknowledgements, but never inside an instruction or a warning. Vary sentence length within the limits so it does not read as monotone.',
+  'The house style does not apply to anything written as the user for other people (documents, emails, decks, pull request text): those follow the rules for outward writing.',
+];
+
 export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
   const sections = [];
   const section = (title, lines) => {
@@ -24,6 +38,7 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
       'Writing for other people leads with the real point, gives each strong claim its reason or evidence, and states uncertainty plainly. No corporate filler, no hedging that hides the actual view.',
     get('PREFS_WRITING_PRINCIPLES') &&
       'Before building a deck or document, agree its one-sentence point with the user, draft it as plain paragraphs, then add a visual only where it is the evidence.',
+    ...(get('PREFS_WRITING_STYLE') === 'ste' ? STE_RULES : []),
     get('PREFS_ONE_DESIGN_SYSTEM') &&
       'When several design systems are available, use the one that matches the artifact type (for example documents, app screens, websites). Never mix two in one artifact.',
     get('PREFS_COPY_SECOND_OPINION') &&
@@ -141,6 +156,22 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     get('PREFS_BUILD_WHOLE_GOAL') &&
       "Then give one builder the whole goal in a single brief (the user's words, the constraints, what done means) and let it run. Never feed a builder step by step.",
     get('PREFS_BUILD_WHOLE_GOAL') && 'Run the full validation pipeline once the first complete pass exists, not on every step.',
+    get('PREFS_ROUTE') &&
+      'Take a software project (building or changing an app, a tool or a codebase) through six steps, each with its skill when installed: ' +
+        '1 Plan: write the idea down, judge fit and timing, and say so in one line (wayfinder maps an effort too big for one session). ' +
+        '2 Decide: settle the open decisions in rounds of questions and record the answers (grilling, or grill-with-docs). ' +
+        '3 Prototype: write a spec that names the test seams, with a throwaway prototype when the look or flow needs judging, and get it approved before building (to-spec, prototype). ' +
+        '4 Breakdown: cut a spec too big for one change into tickets with their blocking edges (to-tickets). ' +
+        '5 Build: one builder builds the whole spec test-first (tdd, codebase-design). ' +
+        '6 Ship: validate, open a pull request, and merge once approved (no-mistakes).',
+    get('PREFS_ROUTE') &&
+      'Short paths: a small clear change goes Plan, Build, Ship. A bug goes Plan, find the cause, Build with the reproduction as the regression test, Ship. Documents, review pages, research and one-off tasks do not take the route.',
+    get('PREFS_TEST_FIRST') &&
+      'Build product code test-first at the seams the spec names (tdd, codebase-design skills when installed). Prototypes, docs and config are not test-first.',
+    get('PREFS_GLOSSARY_ADR') &&
+      'Before building, read GLOSSARY.md and docs/adr/ if they exist. Add new terms and decision records in the same change that introduces them. Start these files in any project, but only when a term or a hard-to-reverse decision comes up.',
+    get('PREFS_PROTOTYPE_CHECK') &&
+      "Before the user sees a prototype, open it in the agent's browser at laptop width and at phone width (390 px). Fix broken layout, unclear labels and dead ends first.",
     get('PREFS_MODEL_GUIDE') &&
       "When a model is named for a task, read that vendor's official prompting guide first and brief the model the way it says.",
   ]);

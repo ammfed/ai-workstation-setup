@@ -59,6 +59,21 @@ export default {
     yes('PREFS_OUTWARD_AS_USER', 'Tone: write content for other people as you, with no agent or tooling labels?'),
     yes('PREFS_NATURAL_TRANSLATION', 'Tone: write other languages the way native speakers do, never as a literal translation?'),
     yes('PREFS_WRITING_PRINCIPLES', 'Tone: writing for other people leads with the point, backs claims with evidence, and agrees the point before building a deck or document?'),
+    {
+      key: 'PREFS_WRITING_STYLE',
+      type: 'choice',
+      message: 'Tone: a house style for what agents write to you',
+      default: 'plain',
+      choices: [
+        { value: 'plain', label: 'plain - no extra style rule beyond the tone answers here' },
+        {
+          value: 'ste',
+          label:
+            'ste - plain English based on Simplified Technical English (ASD-STE100): one instruction per sentence, active voice, short sentences, one word for one thing; ' +
+            'not for documents written as you for other people',
+        },
+      ],
+    },
     yes('PREFS_ONE_DESIGN_SYSTEM', 'Tone: if you use several design systems, pick the one matching the artifact type and never mix them?', { default: false }),
     yes('PREFS_COPY_SECOND_OPINION', 'Tone: get a second AI model to refine copywriting and translations (only the text being polished is sent)?', { default: false }),
     yes('PREFS_HABITS', 'Habits: replies end in actions, stay on your current topic, and treat claims as unproven until shown?'),
@@ -155,6 +170,10 @@ export default {
 
     // Building
     yes('PREFS_BUILD_WHOLE_GOAL', 'Building: show research and user journeys first, then give one builder the whole goal?'),
+    yes('PREFS_ROUTE', 'Building: take software projects through six steps (plan, decide, prototype, breakdown, build, ship), each with its skill (docs/route.md)?', { default: false }),
+    yes('PREFS_TEST_FIRST', 'Building: build product code test-first at the seams the spec names (not prototypes, docs or config)?', { default: false }),
+    yes('PREFS_GLOSSARY_ADR', 'Building: read GLOSSARY.md and docs/adr before building, and add new terms and decision records with the change?', { default: false }),
+    yes('PREFS_PROTOTYPE_CHECK', 'Building: check every prototype at laptop and phone width and fix broken layout, unclear labels and dead ends before you see it?', { default: false }),
     yes('PREFS_MODEL_GUIDE', 'Models: when a model is named for a task, read its vendor\'s prompting guide first?'),
 
     // Ideas and priorities

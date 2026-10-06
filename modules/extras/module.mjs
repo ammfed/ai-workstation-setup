@@ -132,6 +132,21 @@ async function installFontcacheGuard(ctx) {
   ctx.info('logs: journalctl --user -u fontcache-guard; stop it with: systemctl --user disable --now fontcache-guard.path');
 }
 
+/** An OpenWhispr AppImage in ~/.local/opt or ~/Applications, the usual homes for one; null when there is none. */
+export function findOpenWhisprAppImage(home) {
+  for (const dir of [path.join(home, '.local', 'opt'), path.join(home, 'Applications')]) {
+    let names = [];
+    try {
+      names = fs.readdirSync(dir);
+    } catch {
+      continue;
+    }
+    const hit = names.find((n) => /^open-?whispr.*\.appimage$/i.test(n));
+    if (hit) return path.join(dir, hit);
+  }
+  return null;
+}
+
 export function openGuardSeconds(text) {
   const n = Number(String(text ?? '').trim());
   if (!Number.isInteger(n) || n < 1 || n > 60) throw new Error(`OPEN_GUARD_SECONDS: "${text}" should be a whole number of seconds from 1 to 60`);
@@ -183,7 +198,9 @@ const EXTRAS = [
         ctx.run('winget install --id OpenWhispr.OpenWhispr -e --accept-source-agreements --accept-package-agreements');
       } else {
         if (ctx.has('openwhispr')) return ctx.ok('OpenWhispr already installed');
-        ctx.todo('install OpenWhispr from https://github.com/OpenWhispr/openwhispr/releases/latest (.deb, .rpm or .AppImage); then turn on its launch-at-login setting if you want it ready at login (it starts hidden in the tray)');
+        const appImage = !ctx.platform.simulated && findOpenWhisprAppImage(ctx.home);
+        if (appImage) return ctx.ok(`OpenWhispr already installed (${appImage})`);
+        ctx.todo('install OpenWhispr from https://github.com/OpenWhispr/openwhispr/releases/latest (.deb, .rpm, or an .AppImage kept in ~/.local/opt or ~/Applications so a rerun finds it); then turn on its launch-at-login setting if you want it ready at login (it starts hidden in the tray)');
         return;
       }
       ctx.todo('open OpenWhispr once: pick cloud, your own key, or a local model, and allow the microphone; to have it ready at login, turn on its launch-at-login setting (it starts hidden in the tray)');

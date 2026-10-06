@@ -1,6 +1,7 @@
 // Tests for the optional pieces: the Pixel Agents settings and office-names patch, the
 // office-names helper, the stow reminder, the merge permission, the link-open guard, the
-// lavish-axi wrapper, and the value checks behind their questions. Invented values and
+// lavish-axi wrapper, skill updates, OpenWhispr AppImage detection, and the value checks
+// behind their questions. Invented values and
 // invented program text only; a temporary folder stands in for the home.
 // Run: node --test test/optional-pieces.test.mjs
 
@@ -12,12 +13,13 @@ import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Context, Skip, detectPlatform } from '../lib/context.mjs';
-import { setHook, settingsPath } from '../lib/claude.mjs';
+import { installSkill, setHook, settingsPath } from '../lib/claude.mjs';
 import { cswapThreshold, researchBrowserPort } from '../modules/agent-clis/module.mjs';
 import { PATCH_MARKER, mergePixelSettings, patchPixelCli } from '../modules/agent-clis/pixel-agents.mjs';
 import { PR_MERGE_RULES } from '../modules/claude-code/module.mjs';
-import { openGuardSeconds } from '../modules/extras/module.mjs';
+import { findOpenWhisprAppImage, openGuardSeconds } from '../modules/extras/module.mjs';
 import { dispatchProfiles, stowTokens } from '../modules/firstmate/module.mjs';
+import skills from '../modules/skills/module.mjs';
 import { cursorBlinkMs } from '../modules/terminal/module.mjs';
 import { officeNames } from '../templates/pixel-agents/bin/pixel-office-names.mjs';
 
@@ -156,6 +158,78 @@ test('question values are checked', () => {
   assert.throws(() => openGuardSeconds('0'), /OPEN_GUARD_SECONDS/);
   assert.equal(cursorBlinkMs('0'), 0);
   assert.throws(() => cursorBlinkMs('fast'), /TERMINAL_CURSOR_BLINK_MS/);
+});
+
+function capture(fn) {
+  const lines = [];
+  const log = console.log;
+  console.log = (...a) => lines.push(a.join(' '));
+  return Promise.resolve()
+    .then(fn)
+    .finally(() => (console.log = log))
+    .then(() => lines.join('\n'));
+}
+
+// A home with grilling installed by the skills CLI (in its lock file) and teach copied in by hand.
+function skillsHome() {
+  const home = tempHome();
+  for (const name of ['grilling', 'teach']) {
+    fs.mkdirSync(path.join(home, '.claude', 'skills', name), { recursive: true });
+    fs.writeFileSync(path.join(home, '.claude', 'skills', name, 'SKILL.md'), `---\nname: ${name}\n---\n`);
+  }
+  fs.mkdirSync(path.join(home, '.agents'));
+  fs.writeFileSync(path.join(home, '.agents', '.skill-lock.json'), JSON.stringify({ version: 3, skills: { grilling: { source: 'example/skills' } } }));
+  return home;
+}
+
+test('an installed skill is kept, or updated through the skills CLI, or added again when the CLI does not track it', async () => {
+  const home = skillsHome();
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const ctx = context(home, { dryRun: true });
+    const kept = await capture(() => installSkill(ctx, 'example/skills', 'grilling'));
+    assert.match(kept, /skill grilling already installed/);
+    assert.doesNotMatch(kept, /would run/);
+    const update = { update: true };
+    assert.match(await capture(() => installSkill(ctx, 'example/skills', 'grilling', update)), /would run: npx -y skills update grilling -g -y/);
+    assert.match(await capture(() => installSkill(ctx, 'example/skills', 'teach', update)), /would run: npx -y skills add example\/skills --skill teach -g -a claude-code -y/);
+    assert.match(await capture(() => installSkill(ctx, 'example/skills', 'tdd', update)), /would run: npx -y skills add example\/skills --skill tdd -g -a claude-code -y/);
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+  }
+});
+
+test('the skill update question is asked only when a chosen skill is installed, and defaults to yes', async () => {
+  const home = skillsHome();
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const ask = (chosen) => {
+      const ctx = context(home, { dryRun: true });
+      ctx.values.SKILLS = chosen;
+      return skills.questions.find((q) => q.key === 'SKILLS_UPDATE').when(ctx);
+    };
+    assert.equal(ask(['tdd', 'codebase-design']), false);
+    assert.equal(ask(['teach', 'tdd']), true);
+    const choices = skills.questions.find((q) => q.key === 'SKILLS');
+    for (const name of ['tdd', 'codebase-design']) assert.ok(choices.default.includes(name), name);
+    for (const name of ['grill-with-docs', 'to-spec', 'to-tickets']) assert.ok(choices.choices.some((c) => c.value === name && c.repo === 'mattpocock/skills'), name);
+    assert.equal(skills.questions.find((q) => q.key === 'SKILLS_UPDATE').default, true);
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+  }
+});
+
+test('an OpenWhispr AppImage in ~/.local/opt or ~/Applications is found', () => {
+  const home = tempHome();
+  assert.equal(findOpenWhisprAppImage(home), null);
+  fs.mkdirSync(path.join(home, 'Applications'));
+  fs.writeFileSync(path.join(home, 'Applications', 'notes.AppImage'), '');
+  assert.equal(findOpenWhisprAppImage(home), null);
+  fs.writeFileSync(path.join(home, 'Applications', 'open-whispr-1.0.0-x86_64.AppImage'), '');
+  assert.equal(findOpenWhisprAppImage(home), path.join(home, 'Applications', 'open-whispr-1.0.0-x86_64.AppImage'));
+  fs.mkdirSync(path.join(home, '.local', 'opt'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.local', 'opt', 'OpenWhispr.AppImage'), '');
+  assert.equal(findOpenWhisprAppImage(home), path.join(home, '.local', 'opt', 'OpenWhispr.AppImage'));
 });
 
 function fakeTool(dir, name, line) {
