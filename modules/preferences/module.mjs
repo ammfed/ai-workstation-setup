@@ -4,13 +4,20 @@ import { claudeDir } from '../../lib/claude.mjs';
 import { renderPreferences } from './render.mjs';
 
 // Writes how you want your agents to work (status format, tone, decisions, review
-// pages, ideas, away mode, merges, research, quota) as a plain rules file your agents load.
+// pages, building, ideas, away mode, merges, research, quota) as a plain rules file your agents load.
 // Every rule is a generic default you answer for; nothing here is anyone's record.
 // docs/working-preferences.md describes each question and the rule it writes.
 
 const yes = (key, message, extra = {}) => ({ key, type: 'confirm', message, default: true, ...extra });
 
-const cardsOn = (ctx) => ctx.get('PREFS_DECISIONS') === 'cards';
+const cardsOn = (ctx) => ['cards', 'both'].includes(ctx.get('PREFS_DECISIONS'));
+
+// PREFS_GRILL replaced the yes-or-no PREFS_GRILL_ON_GAPS; an earlier answer to that carries over.
+function grillDefault(ctx) {
+  const old = ctx.answers.get('PREFS_GRILL_ON_GAPS');
+  if (old === undefined) return 'every';
+  return /^(y|yes|true|1)$/i.test(String(old)) ? 'gaps' : 'off';
+}
 
 function cardsPath(ctx) {
   return path.join(ctx.home, '.config', 'ai-workstation-setup', 'decision-cards.html');
@@ -31,7 +38,7 @@ const TARGETS = {
 export default {
   name: 'preferences',
   title: 'Working preferences',
-  description: 'How your agents work: language and tone, reporting, decisions, review pages, ideas, model use, research, safety',
+  description: 'How your agents work: language and tone, reporting, decisions, review pages, building, ideas, model use, research, safety',
   // After firstmate, so its clone directory is known and exists.
   order: 65,
   platforms: ['linux', 'macos', 'wsl', 'windows'],
@@ -54,6 +61,7 @@ export default {
     yes('PREFS_WRITING_PRINCIPLES', 'Tone: writing for other people leads with the point, backs claims with evidence, and agrees the point before building a deck or document?'),
     yes('PREFS_ONE_DESIGN_SYSTEM', 'Tone: if you use several design systems, pick the one matching the artifact type and never mix them?', { default: false }),
     yes('PREFS_COPY_SECOND_OPINION', 'Tone: get a second AI model to refine copywriting and translations (only the text being polished is sent)?', { default: false }),
+    yes('PREFS_HABITS', 'Habits: replies end in actions, stay on your current topic, and treat claims as unproven until shown?'),
     {
       key: 'PREFS_CALM_WORD',
       type: 'text',
@@ -66,10 +74,10 @@ export default {
       key: 'PREFS_STATUS',
       type: 'choice',
       message: 'Reporting: how status replies open',
-      default: 'actions',
+      default: 'board',
       choices: [
         { value: 'actions', label: 'actions - a very short list of action items, then where the full report is' },
-        { value: 'board', label: 'board - one table with TODO, DOING and DONE as three side-by-side columns, then brief action items' },
+        { value: 'board', label: 'board - one table with TODO, DOING and DONE as three side-by-side columns, then what is left grouped by who acts, your block labelled YOU' },
         { value: 'brief', label: 'brief - the answer in a sentence or two, then brief action items' },
         { value: 'none', label: 'none - no rule' },
       ],
@@ -91,8 +99,9 @@ export default {
       key: 'PREFS_DECISIONS',
       type: 'choice',
       message: 'Decisions: how they are put to you',
-      default: 'cards',
+      default: 'both',
       choices: [
+        { value: 'both', label: "both - quick questions through the agent's question tool with a preview on every option; larger or visual decisions on a Lavish decision-card page" },
         { value: 'cards', label: 'cards - one at a time on a Lavish decision-card page, with a preview for every option (needs lavish-axi)' },
         { value: 'tool', label: "tool - the agent's question tool, one at a time, a preview on every option" },
         { value: 'chat', label: 'chat - in plain chat, one at a time, recommendation first' },
@@ -119,18 +128,34 @@ export default {
       message: 'Decisions: a file where the agent keeps your decisions, what you ruled out, and what waits for later (empty for none)',
       default: '',
     },
-    yes('PREFS_GRILL_ON_GAPS', 'Decisions: question you hard about a plan only when it has a real gap, never as the default way to ask?'),
+    {
+      key: 'PREFS_GRILL',
+      type: 'choice',
+      message: 'Decisions: when questions to you run the grilling method',
+      default: grillDefault,
+      choices: [
+        { value: 'every', label: 'every - every round of questions, kept balanced: no questions when the intent and the request are clear enough' },
+        { value: 'gaps', label: 'gaps - only when a plan has a real gap, never as the default way to ask' },
+        { value: 'off', label: 'off - no rule' },
+      ],
+    },
 
     // Review pages
+    yes('PREFS_PAGES_ALL_CARDS', 'Review pages: use the card template for every page, not only decisions?', { when: cardsOn }),
     yes('PREFS_PAGE_SIDE_BY_SIDE', 'Review pages: decision card on one side and a canvas of the current decision on the other, never stacked?', { when: cardsOn }),
     yes('PREFS_PAGE_FLIP_PREVIEWS', "Review pages: let you flip between every option's preview, not only the recommended one?", { when: cardsOn }),
     yes('PREFS_PAGE_MINIMAL_TEXT', 'Review pages: minimal text, no fluff or helper text, visuals carry the meaning?'),
     yes('PREFS_PAGE_WIDE_HEADER', 'Review pages: a large title and intro spread across the full page width?'),
     yes('PREFS_PAGE_CHECK_BEFORE_SEND', 'Review pages: check the page by screenshot before its link is sent, and always send the link?'),
     yes('PREFS_PAGE_FIRST', 'Review pages: when a decision waits on a page, build and check the page first, send the link, then stand by until you answer?'),
+    yes('PREFS_PAGES_TOGETHER', 'Review pages: hold page links until all open work is done, then send the checked set together?'),
 
     // Working with a fleet
     yes('PREFS_FLEET_WORKFLOW', 'Workflow: dispatch, supervise and land work the way a supervising agent should (briefs, status lines, pull requests, what gets a review page)?'),
+
+    // Building
+    yes('PREFS_BUILD_WHOLE_GOAL', 'Building: show research and user journeys first, then give one builder the whole goal?'),
+    yes('PREFS_MODEL_GUIDE', 'Models: when a model is named for a task, read its vendor\'s prompting guide first?'),
 
     // Ideas and priorities
     yes('PREFS_CAPTURE_IDEAS', 'Ideas: capture every idea you share, fold it in or park it, and say in one line where it landed?'),

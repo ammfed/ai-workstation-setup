@@ -4,7 +4,8 @@ A review page is an HTML page an agent serves with
 [lavish-axi](https://www.npmjs.com/package/lavish-axi) so you can look at a proposal and
 answer it in the browser, instead of reading a long chat reply. The `preferences` module
 installs a decision-card template for this (`decision-cards.html`) when you pick
-`PREFS_DECISIONS=cards`. This page is the loop an agent follows with it.
+`PREFS_DECISIONS=both` (the default) or `cards`; with `PREFS_PAGES_ALL_CARDS` every review
+page starts from it, not only decisions. This page is the loop an agent follows with it.
 
 ## The loop
 
@@ -46,6 +47,12 @@ installs a decision-card template for this (`decision-cards.html`) when you pick
 | `headline` | Optional `{ num, cap }`: the one number that matters, shown first |
 | `evidence` | Optional one sentence shown above "Why" |
 | `why` | Short detail, closed by default |
+| `label` | Optional small label above the question, such as `D-1`; "1 of N" is added to it |
+
+A card with no `options` is a content card (a report, plan or explainer step) and gets a
+Next button instead of options. `WAITING` lists things you only have to press (a merge, a
+sign-in); they show in a strip under the intro, apart from the real decisions. Below 720px
+the card and its picture stack, and a picture opens full size on tap.
 
 The comment block at the top of the template lists the visual rules (bars on one scale,
 "3 of 10" before percentages, never colour alone, and so on).

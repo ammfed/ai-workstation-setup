@@ -28,13 +28,14 @@ changed file and keeps a timestamped backup.
 | `PREFS_WRITING_PRINCIPLES` | yes | Writing for others leads with the point, backs claims with a reason or evidence and states uncertainty plainly; a deck or document starts from an agreed one-sentence point, then plain paragraphs, then visuals only where they are the evidence. |
 | `PREFS_ONE_DESIGN_SYSTEM` | no | With several design systems, the one matching the artifact type is used, never two mixed. |
 | `PREFS_COPY_SECOND_OPINION` | no | Copywriting and translations get a refinement pass from a second AI model; only the text being refined is sent. |
+| `PREFS_HABITS` | yes | Eight everyday habits: replies end with the next actions, yours first; "I'm lost" or "too long" gets the shortest plain answer; an opinion is a real one with its reason; status and questions stay on your current topic; "check X" is a question, not a go-ahead to widen the work; no menu of what to run next; a claim is unproven until something shows it, including the case that can fail; a record you call outdated is checked against reality before it is defended. The lines land in Language and tone, Ideas and priorities, and Safety. |
 | `PREFS_CALM_WORD` | `calm` | Saying this word switches the agent to a calm mode: batched tool calls, no in-between updates, only the answer. Empty for none. |
 
 ### Reporting and status
 
 | Key | Default | Rule |
 | --- | --- | --- |
-| `PREFS_STATUS` | `actions` | A status request gets a very short list of action items, yours first, then a pointer to the full report. `board` opens with one table whose three columns, TODO, DOING and DONE, sit side by side, then brief action items grouped by who acts; `brief` opens with a one-line answer instead. |
+| `PREFS_STATUS` | `board` | Every status reply opens with one table whose three columns, TODO, DOING and DONE, sit side by side, then groups what is left by who acts: your block labelled YOU, the agent's labelled with its own role name (never ME). Small text bars and boxes only where they carry meaning. `actions` gives a very short list of action items, yours first, then a pointer to the full report; `brief` opens with a one-line answer, then brief action items. |
 | `PREFS_HONEST_NUMBERS` | yes | Uncertain numbers are ranges or "not yet known"; charts are plain bars or small multiples, never radar or gauges. |
 | `PREFS_LINK_DELIVERABLES` | yes | Every finished item links to its output: a URL, or an absolute path for a local file. |
 | `PREFS_DAILY_CHECK` | yes | Once a day, a nothing-forgotten check: uncollected review answers, anything waiting longer than `PREFS_STALE_DAYS` (default 2), and standing rules with no evidence they ran. Each item is verified before it is called dropped. |
@@ -44,21 +45,22 @@ changed file and keeps a timestamped backup.
 
 | Key | Default | Rule |
 | --- | --- | --- |
-| `PREFS_DECISIONS` | `cards` | Decisions go one at a time on a Lavish decision-card page with a preview for every option. `tool` uses the agent's question tool; `chat` asks in chat. |
+| `PREFS_DECISIONS` | `both` | Quick questions go through the agent's question tool, one at a time, with a preview on every option and a recommendation; larger or visual decisions go on a Lavish decision-card page. `cards` puts every decision on a card page; `tool` uses only the question tool; `chat` asks in chat. |
 | `PREFS_YES_NO_IN_CHAT` | yes | Simple yes-or-no questions stay in plain chat. |
 | `PREFS_PREVIEW_BEFORE_BUILD` | yes | A change to how something looks or feels is shown on a review page before it is built. |
 | `PREFS_CHECK_ANSWERS_FIRST` | yes | The agent checks for your answer before calling a page or question open. |
 | `PREFS_ASK_BEFORE_CLOSING` | yes | The agent asks before closing finished agents, sessions and review pages. Research tabs follow the research rule. |
 | `PREFS_AUTONOMY` | `act` | Everyday judgment calls inside a direction you set are decided and reported; credentials, anything destructive and choices only you can make are always asked. `ask` asks about every one. |
 | `PREFS_DECISIONS_LOG` | empty | A file where the agent records each ruling with its date (newest wins, not in the file means not decided), what you ruled out (never offered again), and each "not yet" with the condition that brings it back. |
-| `PREFS_GRILL_ON_GAPS` | yes | Hard questioning of a plan only when it has a real gap, never as the default way to ask. |
+| `PREFS_GRILL` | `every` | Every round of questions runs the grilling method: map the open decisions, ask only those that can be answered now, each with a recommendation, look facts up instead of asking, and ask the next round only after the answers. Kept balanced: when the intent and the request are clear enough, the agent goes ahead without asking. A gap only someone else can fill becomes a short questionnaire for that person. `gaps` questions you hard only when a plan has a real gap; `off` writes no rule. An earlier `PREFS_GRILL_ON_GAPS` answer carries over (yes becomes `gaps`, no becomes `off`). |
 
 ### Review pages
 
-The first two apply with `PREFS_DECISIONS=cards`; the starter page already follows all four.
+The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page already follows the layout rules.
 
 | Key | Default | Rule |
 | --- | --- | --- |
+| `PREFS_PAGES_ALL_CARDS` | yes | Every Lavish page (decisions, reports, plans, explainers, lessons) starts from the card template: one card at a time, a visual beside it, minimal text, and a Next button on a card with nothing to choose. This overrides lavish-axi's own design default unless you name another look; diagrams use the diagram-design skill. |
 | `PREFS_PAGE_SIDE_BY_SIDE` | yes | The decision card sits on one side and a canvas showing the current decision on the other, horizontally, never stacked. |
 | `PREFS_PAGE_FLIP_PREVIEWS` | yes | Every option of a visual choice has a preview, and you can flip between all of them; never only the recommended one. |
 | `PREFS_PAGE_MINIMAL_TEXT` | yes | A title, the question and short option labels: no fluff, no helper text, no explaining the obvious. Visuals carry the meaning. |
@@ -70,7 +72,15 @@ The first two apply with `PREFS_DECISIONS=cards`; the starter page already follo
 | --- | --- | --- |
 | `PREFS_PAGE_CHECK_BEFORE_SEND` | yes | A page is opened in the agent's own browser and checked by screenshot before its link is sent, and the link is always sent. |
 | `PREFS_PAGE_FIRST` | yes | When a decision waits on a page, the page is built and checked first, the link is sent, and the agent stands by until you answer. |
+| `PREFS_PAGES_TOGETHER` | yes | While several review pages are in progress, links are held until all open work is done; the pages are checked against each other (each question once, dependencies in order, no clashing recommendations, one set of names) and sent together in the order to take them, with brief status meanwhile. |
 | `PREFS_FLEET_WORKFLOW` | yes | Supervising agents brief workers with a goal, branch and definition of done; workers report only at phase changes and land through a pull request with green checks; review pages are for real decisions and look-and-feel changes, never status or routine choices; permission prompts and command mechanics are never escalated. |
+
+### Building
+
+| Key | Default | Rule |
+| --- | --- | --- |
+| `PREFS_BUILD_WHOLE_GOAL` | yes | Before something new is built, the research and the user journeys are shown on one review page. Then one builder gets the whole goal in a single brief (your words, the constraints, what done means) and runs, never fed step by step; the full validation pipeline runs once the first complete pass exists. |
+| `PREFS_MODEL_GUIDE` | yes | When a model is named for a task, the agent reads that vendor's official prompting guide first and briefs the model the way it says. |
 
 ### Ideas and priorities
 
@@ -115,7 +125,7 @@ to you, and saying plainly when something was reasoned about rather than tested.
 
 ## Tools the rules point to
 
-- **Decision cards**: with `PREFS_DECISIONS=cards` the module installs a starter page at
+- **Decision cards**: with `PREFS_DECISIONS=both` or `cards` the module installs a starter page at
   `~/.config/ai-workstation-setup/decision-cards.html`. It needs `lavish-axi` (agent-clis).
   Agents copy it, replace the example cards, and open it with `lavish-axi --no-open`. It shows
   the review-page rules: a full-width header, the card beside a canvas, and buttons to flip
