@@ -72,6 +72,11 @@ function buildConfig(ctx, base) {
       },
     ];
   }
+  if (surfaces.includes('sync')) {
+    // The ledger module's task sync: a full pass with its settled fixes, then its one status line.
+    const script = path.join(ctx.home, '.config', 'ai-workstation-setup', 'ledger', 'sync.mjs');
+    (config.commands ??= []).push({ name: 'task sync', run: `"${process.execPath}" "${script}" check`, timeoutSec: 600 });
+  }
   if (surfaces.includes('clickup')) {
     config.clickup = {
       workspace: ctx.get('DAILY_SYNC_CLICKUP_WORKSPACE'),
@@ -231,10 +236,11 @@ export default {
     {
       key: 'DAILY_SYNC_SURFACES',
       type: 'multi',
-      message: 'What else to check (all read-only)',
+      message: 'What else to check (all read-only, except the task sync, which fixes settled drift)',
       default: (ctx) => ('FIRSTMATE_DIR' in ctx.values ? ['tool-updates'] : []),
       choices: [
         { value: 'tool-updates', label: "tool-updates - firstmate's watched-tools update check (reports, never installs)" },
+        { value: 'sync', label: "sync - the task sync's daily check (ledger module): fixes settled drift, reports one line" },
         { value: 'clickup', label: 'clickup - the lists you expect in a ClickUp space, read with clickup-axi' },
         { value: 'ticktick', label: 'ticktick - the lists you expect in TickTick, read with a command you give' },
       ],
@@ -273,7 +279,7 @@ export default {
       key: 'DAILY_SYNC_TICKTICK_COMMAND',
       type: 'text',
       message: 'A read-only command that prints your TickTick lists as JSON (a list of objects with a "name"), signed in beforehand',
-      default: 'ticktick --format json projects list',
+      default: 'ticktick-cli project list --json',
       when: (ctx) => ctx.get('DAILY_SYNC_SURFACES').includes('ticktick'),
     },
     {

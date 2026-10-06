@@ -130,8 +130,134 @@ ledger board                      # the board on its own when no service serves 
 `ledger` is a small wrapper in `~/.local/bin`; without it run
 `node ~/.config/ai-workstation-setup/ledger/ledger.mjs <command>`.
 
+## The task sync
+
+An optional piece of the module (`LEDGER_SYNC=yes`) keeps one record of each linked work item
+the same across your trackers, so they stop drifting apart: the home records (each home's
+`data/backlog.md`, the truth), TickTick, ClickUp and your notes vault. A change on any side
+flows to the others. It is `sync.mjs` next to `ledger.mjs` (it shares the ledger's backlog
+reader), run as its own service, `workstation-sync.service` (a launchd agent on macOS), with a
+`task-sync` command. The ledger itself stays read-only.
+
+Only linked items sync, each linked on purpose:
+
+| Place | How an item is linked | Fields | Read and written with |
+| --- | --- | --- | --- |
+| Home | the truth; a row's id is the link key (`<home>/<task id>`), so a title change keeps it | title, status, due date, notes | its backlog file to read; `tasks-axi` to write |
+| TickTick | pair a home with a list in `config.json`: a new open item on either side gets its twin (an open row and an open task with the same title are linked, not duplicated) | title, status, due date, notes | the official TickTick CLI, `ticktick-cli` |
+| ClickUp | `task-sync link <home>/<task id> clickup <task id>`; a new home row never creates a ClickUp task | status, due date | the ClickUp v2 API with your token |
+| Vault | the note says so: `task: <home>/<task id>` in the frontmatter of a `type: project` note under `projects/` | `task-status: open\|active\|done` | the note's frontmatter, under the vault's run lock |
+
+**Status** is a bucket: open (Queued), active (In flight), done. TickTick has only open and
+done; a ClickUp status maps by its list's table (its done and closed types are done). Only
+done moves a home row by itself (`tasks-axi done`, or `reopen` when it comes back): a move to
+active elsewhere starts no work, it becomes a note in that home's inbox and its firstmate decides.
+
+**Notes** sync two-way between a home row and TickTick. The sync owns only one part of a row's
+body, its `## Notes` section; every other line is copied unchanged, and each write archives the
+old body (`tasks-axi update --body-file --archive-body`), so an overwrite can be undone. The due
+date is a line of its own inside that section:
+
+```markdown
+## Notes
+Call before ten.
+due: 2026-03-10
+```
+
+**A clash.** The sync keeps, per place, the last value it synced for each field. One place
+changed a field: that place wins, whenever it happened. Several changed it to different values:
+the newest dated edit wins when the edits are more than `skewSeconds` (120) apart. Within that
+window, or when one side has only a day and not a time, the clash is a card for you. A done
+signal for a row held for you (a captain hold) is always a card: only your own answer closes one.
+
+| Place | Its edit time |
+| --- | --- |
+| Home | when the sync first saw the change (the backlog file's time) |
+| TickTick | `modifiedTime`; for done, `completedTime` |
+| ClickUp | `date_updated`; for done, `date_done`, then `date_closed` |
+| Vault | the note's last commit |
+
+Remote times are corrected by the server clock (ClickUp's `Date` header, TickTick's own
+`modifiedTime` on a write).
+
+**Cards** go once into the home's inbox (`fm-inbox.sh note`) and stay listed in `task-sync cards`
+until they close: make both sides agree, or answer with `task-sync pick <card> <place>`, `task-sync
+map <list> "<status>" open|active|done` (a new ClickUp status, remembered from then on), or
+`task-sync unlink`. Things that are always a card: a clash inside the window, a linked item
+deleted or archived in one place while its home row is open, an abandoned TickTick task, and a
+ClickUp status nobody mapped yet.
+
+**When it runs.** The service starts a pass within `debounceMs` (2 s) of a backlog change (a
+watch, plus a rescan every `rescanSeconds`) and every `pollSeconds` (120) for the other places,
+which have no push. The daily sync's `sync` check runs a full pass and reports one line:
+
+```
+sync 07:30: 4 fixed (3 TickTick→home, 1 home→ClickUp), 1 for you, 0 failed
+```
+
+A place that cannot be read (signed out, offline) changes nothing and counts as failed; an item
+it could not read is never taken as deleted.
+
+### Its config
+
+`~/.config/ai-workstation-setup/sync/config.json` (written once, then yours), with `links.json`,
+`state.json` (cards and your status answers) and `journal.jsonl` next to it. Every id below is a
+placeholder; yours stay in this file only.
+
+```json
+{
+  "timeZone": "",
+  "skewSeconds": 120,
+  "pollSeconds": 120,
+  "tasksAxi": "tasks-axi",
+  "inbox": "~/firstmate/bin/fm-inbox.sh",
+  "homes": [
+    { "name": "main", "path": "~/firstmate", "ticktick": "<TickTick list id>" },
+    { "name": "<home>", "path": "~/<home folder>", "ticktick": "" }
+  ],
+  "ticktick": { "command": "ticktick-cli" },
+  "clickup": {
+    "tokenFile": "~/<file holding your ClickUp token>",
+    "notifyHome": "~/<the home that drafts ClickUp updates>",
+    "lists": [
+      { "id": "<ClickUp list id>", "statuses": { "<status>": "active" }, "write": { "done": "<status>" } }
+    ]
+  },
+  "vault": { "path": "~/<vault>", "folder": "projects", "write": true, "lockHelper": "bin/lib-lock.sh", "lint": "bin/lint" }
+}
+```
+
+- `timeZone` (empty: this machine's) turns a due day into a time for TickTick and ClickUp.
+- TickTick list ids: `ticktick-cli project list --json`. Sign in once with `ticktick-cli auth
+  login` (`ticktick-cli auth token <token>` without a browser).
+- ClickUp: the token comes from `CLICKUP_TOKEN`, else `tokenFile`. List only the lists whose
+  tasks are work items; leave out lists whose statuses are rulings (such as findings). Names
+  and descriptions never sync. After each status or due-date change the sync leaves a note in
+  `notifyHome`'s inbox, so the stakeholder update can be drafted for your OK. `statuses` maps
+  a list's custom statuses to buckets; `write` names the status to set per bucket (by default:
+  the list's first done-type status, its open status, its first active one).
+- Vault: only `task-status` changes, in notes with `type: project` and `task:`; a board card
+  note (with `board_list`) keeps its `board_state` and is only read. Each write takes the
+  vault's run lock (`lockHelper`'s `acquire_run_lock`), runs `lint` on the note, and commits
+  only that file; a note with uncommitted changes is left alone. `"write": false` reads it only.
+
+```sh
+task-sync run --dry-run           # what a pass would change, writing nothing (start here)
+task-sync run                     # one pass
+task-sync check                   # a full pass, then the one line (--verbose: each change)
+task-sync cards                   # what waits on you
+task-sync pick main/<id>:status ticktick
+task-sync link main/<id> clickup <task id>
+```
+
+The TickTick CLI is installed by the module through npm. Both it and the unofficial
+`ticktick-cli` npm package install a command named `ticktick`; when that one is there, the
+official CLI goes into its own folder and only `ticktick-cli` is linked into `~/.local/bin`,
+so nothing that calls `ticktick` changes.
+
 ## Privacy
 
 The ledger holds your own words, so it lives only in your data folder, readable by you
-alone, never in a repo. The service only reads homes, transcripts and backlogs; it never
-writes into a Firstmate home, a project or a vault.
+alone, never in a repo. The ledger service only reads homes, transcripts and backlogs; it never
+writes into a Firstmate home, a project or a vault. The task sync, when you turn it on, writes
+only what is described above, and keeps its links and journal in its own config folder.
