@@ -11,6 +11,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { Context, detectPlatform } from '../lib/context.mjs';
+import dailySync, { buildConfig } from '../modules/daily-sync/module.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const script = path.join(repoRoot, 'templates', 'daily-sync', 'bin', 'daily-sync.mjs');
@@ -35,6 +37,8 @@ fs.mkdirSync(helpers);
 fs.writeFileSync(path.join(helpers, 'notify.cjs'), "require('fs').appendFileSync(process.argv[2], require('fs').readFileSync(0, 'utf8') + '\\n=====\\n');");
 fs.writeFileSync(path.join(helpers, 'model.cjs'), "require('fs').readFileSync(0); require('fs').appendFileSync(process.argv[2], 'call\\n'); console.log('stub explanation');");
 fs.writeFileSync(path.join(helpers, 'print.cjs'), 'console.log(process.argv.slice(2).join(" "));');
+// `lines.cjs <text> <count>` prints the text <count> times, one per line.
+fs.writeFileSync(path.join(helpers, 'lines.cjs'), 'for (let i = 0; i < Number(process.argv[3]); i += 1) console.log(`${process.argv[2]} f${i}`);');
 // Stand-ins for clickup-axi and a TickTick CLI, printing the shapes the real ones print.
 fs.writeFileSync(
   path.join(helpers, 'clickup.cjs'),
@@ -152,6 +156,57 @@ test('new raw files are ingested and reported as changed, counted as model use',
   const [note] = j.notified();
   assert.match(note, /1 changed \(model calls: 1 by the vault ingest\)/);
   assert.match(note, /vault: ingested 1 new raw file\(s\)/);
+});
+
+test('the vault step handles 50 raw files a day unless the config sets another limit', () => {
+  const pending = (limit) => ({
+    ...vault(rawFolder()),
+    dryRun: node('lines.cjs', 'would ingest:', 60),
+    run: node('lines.cjs', 'ingesting:', '{limit}'),
+    ...limit,
+  });
+  const dry = job({ vault: pending() });
+  const planned = dry.run('--dry-run');
+  assert.equal(planned.code, 0);
+  assert.match(planned.out, /vault: would ingest 50 of 60 new raw file\(s\); 10 more wait for the next run/);
+  const real = job({ vault: pending() });
+  assert.equal(real.run().code, 0);
+  assert.match(real.notified()[0], /vault: ingested 50 new raw file\(s\) with the vault's own agent; 10 more wait for the next run/);
+  const own = job({ vault: pending({ limit: 10 }) });
+  assert.equal(own.run().code, 0);
+  assert.match(own.notified()[0], /vault: ingested 10 new raw file\(s\) with the vault's own agent; 50 more wait for the next run/);
+});
+
+// Answers the daily-sync questions the way an unattended run does: given answers first, then
+// defaults, skipping the questions whose condition is not met; returns the config it would write.
+async function configFor(given = {}) {
+  const ctx = new Context({ platform: detectPlatform(), dryRun: true, interactive: false, answers: new Map(Object.entries(given)), prompter: null, repoRoot });
+  for (const q of dailySync.questions) {
+    if (q.when && !q.when(ctx)) continue;
+    await ctx.ask(q);
+  }
+  return buildConfig(ctx, path.join(tmp, 'installed'));
+}
+
+test('the installer defaults the vault step to the template ingest and 50 files a day', async () => {
+  const { vault: v } = await configFor({ DAILY_SYNC_VAULT: 'yes' });
+  assert.equal(v.dryRun, 'node bin/ingest.mjs --dry-run');
+  assert.equal(v.run, 'node bin/ingest.mjs --limit {limit}');
+  assert.equal(v.limit, 50);
+});
+
+test('the installer takes the vault run command and limit from the answers', async () => {
+  const { vault: v } = await configFor({ DAILY_SYNC_VAULT: 'yes', DAILY_SYNC_VAULT_RUN: 'bin/daily --limit {limit}', DAILY_SYNC_INGEST_LIMIT: '40' });
+  assert.equal(v.run, 'bin/daily --limit {limit}');
+  assert.equal(v.limit, 40);
+  // An empty or unusable answer falls back to the defaults instead of writing a vault step that cannot run.
+  const blank = (await configFor({ DAILY_SYNC_VAULT: 'yes', DAILY_SYNC_VAULT_RUN: '', DAILY_SYNC_INGEST_LIMIT: 'many' })).vault;
+  assert.equal(blank.run, 'node bin/ingest.mjs --limit {limit}');
+  assert.equal(blank.limit, 50);
+});
+
+test('no vault step is written when the vault question is answered no', async () => {
+  assert.equal((await configFor({ DAILY_SYNC_VAULT: 'no' })).vault, undefined);
 });
 
 test('a previous run that never finished and a stale last success are both FAILED', () => {
