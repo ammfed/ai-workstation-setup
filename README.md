@@ -122,7 +122,7 @@ diverged, it stops, explains, and changes nothing. See
 | `skills` | Claude Code skills: kun, grilling, teach, find-docs; optional grill-me, to-questionnaire, wayfinder, no-mistakes, composio-cli | ✓ | ✓ | ✓ | ✓ |
 | `backpass` | Opt-in [backpass](https://github.com/kunchenguid/backpass) behind a privacy gate: project allowlist, denylist check before any model call, one pinned model, never auto-applies; optional schedule (cron) | ✓ | ✓ | ✓ | ✓ |
 | `firstmate` | Upstream Firstmate clone plus its local config: an operational home apart from the code (FM_HOME, pinned per home and second mate), backend, harnesses, permission mode, backlog, dispatch profiles, Herdr presentation, startup memory budget, tool update watch, optional /stow reminder for the main session; [notes](docs/firstmate.md) | ✓ | ✓ | ✓ | via `wsl` |
-| `preferences` | How your agents work, as a rules file: language and tone, reporting, decisions, review pages, fleet workflow, ideas, model use, research, safety; [guide](docs/working-preferences.md), [review pages](docs/review-pages.md) | ✓ | ✓ | ✓ | ✓ |
+| `preferences` | How your agents work, as a rules file: language and tone, everyday habits, reporting, decisions, review pages, fleet workflow, building, ideas, model use, research, safety; [guide](docs/working-preferences.md), [review pages](docs/review-pages.md) | ✓ | ✓ | ✓ | ✓ |
 | `second-brain` | Markdown vault: life-area and fixed-type entity folders, note contract, provenance rules, eight note templates, map/checker/ingest/housekeeping scripts; optional search, capture, garden and bookmarks tools and housekeeping and garden timers; obsidian-axi wiring; [design notes](docs/second-brain.md) | ✓ | ✓ | ✓ | ✓ |
 | `clickup` | clickup-axi (checksum-verified release binary), skill, session hook, default list; [structure guide](docs/clickup-structure.md) | ✓ | ✓ | ✓ | ✓ |
 | `extras` | Optional docling (documents to markdown), OpenWhispr (voice dictation), llama.cpp (local models; Homebrew or winget), Lavish Library (find and reopen review pages; Linux, macOS, WSL), and the Linux desktop fixes open-guard and fontcache-guard | ✓ | ✓ | app on Windows side | ✓ |
@@ -148,6 +148,14 @@ Without `--answers`, a run reads and saves `answers.env` itself; `--save-answers
 also records a run's answers elsewhere. Secrets are
 never read from or written to answers files: export `CLICKUP_TOKEN`,
 `CONTEXT7_API_KEY` or `OPENROUTER_API_KEY`, or sign in afterwards. See `./install.sh --help`.
+
+## Sharing this setup
+
+- Send the repository link, not files. The other person runs `./install.sh` (or
+  `./update.sh` then `./install.sh` on an existing clone); new questions are asked with
+  their defaults.
+- A working habit you want others to have belongs here as a generic rule, not in an
+  exported bundle.
 
 ## Privacy
 

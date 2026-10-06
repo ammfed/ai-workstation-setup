@@ -226,7 +226,7 @@ export default {
       key: 'FIRSTMATE_STOW_REMINDER',
       type: 'confirm',
       message: "Remind the main Firstmate session to run /stow (save its state) once its context gets large? Only that session, not workers or second mates",
-      default: false,
+      default: true,
     },
     {
       key: 'FIRSTMATE_STOW_REMINDER_TOKENS',

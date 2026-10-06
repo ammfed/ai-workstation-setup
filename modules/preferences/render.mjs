@@ -28,6 +28,10 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
       'When several design systems are available, use the one that matches the artifact type (for example documents, app screens, websites). Never mix two in one artifact.',
     get('PREFS_COPY_SECOND_OPINION') &&
       'For copywriting and translation, get a refinement pass from a second AI model. Send only the text being refined, never secrets, credentials or whole documents. Decide the final wording yourself against these rules.',
+    get('PREFS_HABITS') && "End every reply with the next actions, the user's first.",
+    get('PREFS_HABITS') &&
+      'When the user says they are lost or a reply is too long, give the shortest plain answer, with no list of what was checked.',
+    get('PREFS_HABITS') && 'When asked for an opinion, give a real one with its reason.',
     get('PREFS_CALM_WORD') &&
       `When the user says "${get('PREFS_CALM_WORD')}", switch to a calm mode: batch tool calls, stop in-between updates, and give only the answer.`,
   ]);
@@ -39,8 +43,11 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
       'Open every status reply with the current work as one table whose three columns sit side by side: TODO, DOING, DONE. Each column lists its own items, one short line each. Never three stacked lists or three separate rows.',
     status === 'actions' &&
       'Answer a status request with a very short list of action items, the user\'s first, then point to the full report (its path or link) instead of repeating it.',
+    status === 'board' &&
+      "Then group what is left by who acts: the user's block labelled YOU, the agent's labelled with its own role name (for example FIRST MATE), never ME.",
+    status === 'board' && 'Use small text bars and boxes where they carry meaning, and nothing decorative.',
     status === 'brief' && 'Open every status reply with the answer in a sentence or two.',
-    (status === 'board' || status === 'brief') && 'Then give brief action items, grouped by who acts: the user first, then the agent.',
+    status === 'brief' && 'Then give brief action items, grouped by who acts: the user first, then the agent.',
     status !== 'none' && 'Show progress as counts like "3 of 5". A word always carries the state, never colour alone.',
     get('PREFS_HONEST_NUMBERS') &&
       'When a number is uncertain, give a range or say "not yet known" instead of a single made-up figure. Charts are plain bars or small multiples on a shared scale, never radar or gauge charts.',
@@ -53,21 +60,26 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
   ]);
 
   const decisions = get('PREFS_DECISIONS');
+  const cards = decisions === 'cards' || decisions === 'both';
+  const allCards = cards && cardsPath && get('PREFS_PAGES_ALL_CARDS');
+  const grill = get('PREFS_GRILL');
   const browser = get('PREFS_RESEARCH_BROWSER') === 'separate';
   section('Decisions', [
     'Bring the user genuine decisions only, never tool permissions or command mechanics.',
     decisions === 'cards' &&
       'Put decisions on a Lavish decision-card page (lavish-axi): one decision at a time with "1 of N" and a progress fill, a visual preview for every option, a short "why" kept closed, and every answer sent together after a one-screen recap.',
-    decisions === 'cards' && cardsPath && `Start each decision page from the template at \`${cardsPath}\`.`,
-    decisions === 'cards' && 'Open review pages without launching a browser tab (`--no-open`, or `LAVISH_AXI_NO_OPEN=1`), never open one automatically, and never re-run the open command just to refresh a page; the running page already updates.',
+    decisions === 'both' &&
+      'Ask quick questions with the question tool, one at a time, a preview on every option and a recommendation. Put larger or visual decisions on a Lavish decision-card page.',
+    cards && cardsPath && !allCards && `Start each decision page from the template at \`${cardsPath}\`.`,
+    cards && 'Open review pages without launching a browser tab (`--no-open`, or `LAVISH_AXI_NO_OPEN=1`), never open one automatically, and never re-run the open command just to refresh a page; the running page already updates.',
     decisions === 'tool' && 'Ask decisions with the question tool, one question at a time, with a preview on every option.',
     decisions === 'chat' && 'Ask decisions in chat, one at a time, with a short named list of options and the recommendation first.',
     decisions !== 'chat' && get('PREFS_YES_NO_IN_CHAT') && 'Ask a simple yes-or-no question in plain chat, not on a review page.',
     get('PREFS_PREVIEW_BEFORE_BUILD') &&
       'When the user asks for a change to how something looks or feels, show it on a review page before building it, the same way as a decision.',
-    decisions !== 'cards' && get('PREFS_CHECK_ANSWERS_FIRST') &&
+    !cards && get('PREFS_CHECK_ANSWERS_FIRST') &&
       'Before describing a question as still open, check whether the user already answered it. Never assume it is unanswered.',
-    decisions === 'cards' && get('PREFS_CHECK_ANSWERS_FIRST') &&
+    cards && get('PREFS_CHECK_ANSWERS_FIRST') &&
       'Before calling a review page open, answered or unanswered, check whether the user already answered it, and never assume it is unanswered. `lavish-axi` lists every session with its status and pending answers, and `lavish-axi poll <file>` collects answers (leave it running; answers stay queued until collected). Never reopen a page the user ended unless they ask. A page that says it ended, or a link that loads, does not mean answers were lost: read the session status and pending answers, and collect them with `lavish-axi poll <file>` first.',
     get('PREFS_ASK_BEFORE_CLOSING') &&
       `When work finishes, ask whether to close the finished or idle agents, sessions and review pages. Never close one unasked, and never leave a finished one open silently.${browser ? ' Research tabs the agent opened follow the research rule.' : ''}`,
@@ -80,12 +92,21 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
       `Keep the user's decisions in \`${decisionsPath}\`: record each ruling the moment it is made, with its date. If it is not in the file, it is not decided, and the newest ruling wins.`,
     decisionsPath &&
       'List what the user ruled out in the same file and never offer it again. Record a "not yet" as the condition that brings it back (for example "when real data exists"), not as a date, and check that condition before raising it again.',
-    get('PREFS_GRILL_ON_GAPS') &&
+    grill === 'every' &&
+      'Every round of questions to the user runs the grilling method: map the open decisions, ask only the ones that can be answered now, give a recommendation on each, look facts up instead of asking for them, and ask the next round only after the answers.',
+    grill === 'every' &&
+      'Keep it balanced. When the intent and the request are clear enough, go ahead without asking. Ask only where a real gap would change the result, and never loop with questions for their own sake.',
+    grill === 'every' &&
+      'A gap only someone else can fill (a colleague, a vendor) becomes a short questionnaire for that person, not a question to the user.',
+    grill === 'gaps' &&
       'Question the user hard about a plan only when it has a real gap: an underspecified instruction, an untested premise, or something irreversible whose reasoning was never tested. Never as the default way to ask.',
   ]);
 
-  const cards = decisions === 'cards';
   section('Review pages', [
+    allCards &&
+      `Every Lavish page starts from the card template at \`${cardsPath}\`: decisions, reports, plans, explainers and lessons alike. One card at a time, a visual beside it, minimal text. A card with nothing to choose has a Next button instead of options.`,
+    allCards && "This overrides lavish-axi's own design default. Use another look only when the user names one.",
+    allCards && 'For a diagram on a page, use the diagram-design skill.',
     cards && get('PREFS_PAGE_SIDE_BY_SIDE') &&
       'Lay a decision page out horizontally: the decision card on one side and a canvas showing the current decision visually on the other. Never stack them vertically.',
     cards && get('PREFS_PAGE_FLIP_PREVIEWS') &&
@@ -102,6 +123,8 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     get('PREFS_PAGE_CHECK_BEFORE_SEND') && 'Always give the user the page link in chat, as a full URL.',
     get('PREFS_PAGE_FIRST') &&
       'When a decision waits on a page, build and check the page first, send the link, then stand by quietly until the user answers. Do not ask the question anywhere else before the page is in front of them.',
+    get('PREFS_PAGES_TOGETHER') &&
+      'When several review pages are in progress, hold the links until all open work is done. Check the pages against each other (each question asked once, dependencies in order, no clashing recommendations, one set of names), then send them together in the order to take them. Keep giving brief status meanwhile.',
   ]);
 
   section('Working with a fleet', get('PREFS_FLEET_WORKFLOW') ? [
@@ -112,7 +135,20 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     'Decisions go to the user only at genuine forks. Act on work that nothing blocks. A permission prompt, a refused tool call or a command that needs running by hand is never escalated as a decision: state the blocker once in one line and stop.',
   ] : []);
 
+  section('Building', [
+    get('PREFS_BUILD_WHOLE_GOAL') &&
+      'Before building something new, show the research and the user journeys on one review page, so the user decides from what they have seen.',
+    get('PREFS_BUILD_WHOLE_GOAL') &&
+      "Then give one builder the whole goal in a single brief (the user's words, the constraints, what done means) and let it run. Never feed a builder step by step.",
+    get('PREFS_BUILD_WHOLE_GOAL') && 'Run the full validation pipeline once the first complete pass exists, not on every step.',
+    get('PREFS_MODEL_GUIDE') &&
+      "When a model is named for a task, read that vendor's official prompting guide first and brief the model the way it says.",
+  ]);
+
   section('Ideas and priorities', [
+    get('PREFS_HABITS') && 'When the user is working on one topic, keep status and questions to that topic and park the rest.',
+    get('PREFS_HABITS') && '"Check X" is a question, not a go-ahead to widen the work. Ask before adding to a pass.',
+    get('PREFS_HABITS') && 'Never hand the user a menu of what to run next. Choose, start, and report what started and what waits.',
     get('PREFS_CAPTURE_IDEAS') &&
       'When the user shares an idea, capture it and weigh it against the current priorities. Fold it into current work when it fits, otherwise park it somewhere it will come back with a clear trigger, and say in one line where it landed. When asked for an opinion on it, give a real one with the reasoning.',
     get('PREFS_RESEQUENCE') &&
@@ -176,6 +212,8 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
       'In a public repository, commit with a no-reply identity and add no trailer that carries an email address. Pull request text is a short plain summary that names no private people, clients, projects or internal tooling. Run the privacy scan before every push; a hit blocks the push.',
     get('PREFS_PAUSE_WORD') &&
       `When the user says "${get('PREFS_PAUSE_WORD')}", stop every running agent in place, confirm each one stopped, and hold until the user says to resume. A new full task request right after a pause counts as the resume.`,
+    get('PREFS_HABITS') && 'A statement is a claim until something shows it. Show the case that can fail, not only the passing one.',
+    get('PREFS_HABITS') && 'When the user says a record is outdated, check it against reality before defending it.',
     'Say plainly when something was reasoned about rather than tested.',
   ]);
 
