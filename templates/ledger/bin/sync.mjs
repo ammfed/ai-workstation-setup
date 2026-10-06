@@ -319,7 +319,7 @@ async function cmdLink() {
     }
     return { kind: 'link', key, place, ref };
   });
-  console.log(`ok: ${key} is linked to ${label(place)} ${ref}; the next pass meets them (a value wins over an empty one, else the home wins)`);
+  console.log(`ok: ${key} is linked to ${label(place)} ${ref}; the next pass meets them (a done status wins, open and in progress stay as they are; a value wins over an empty one, else the home wins); check it with task-sync run --dry-run`);
 }
 
 async function cmdUnlink() {

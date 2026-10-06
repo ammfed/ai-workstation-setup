@@ -472,7 +472,8 @@ export async function syncPass({ places, pairs = [], links: realLinks, state: re
     }
 
     // A place met for the first time: equal fields are synced; for the rest the done side wins
-    // the status, a value wins over an empty one, and otherwise the home (the truth) wins.
+    // the status (open and active stay as each side has them, so a queued row never pulls an
+    // in-progress task back), a value wins over an empty one, and otherwise the home (the truth) wins.
     for (const place of linked.slice(1)) {
       if (link.base[place]) continue;
       const it = present[place];
@@ -482,7 +483,7 @@ export async function syncPass({ places, pairs = [], links: realLinks, state: re
         const hv = norm(f, h[f]);
         const pv = norm(f, it[f]);
         if (f === 'status' && it.skipStatus) continue;
-        if (same(hv, pv)) {
+        if (same(hv, pv) || (f === 'status' && hv !== 'done' && pv !== 'done')) {
           base[f] = pv;
           continue;
         }

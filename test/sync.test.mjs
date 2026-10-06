@@ -424,6 +424,26 @@ test('pass: an open home row and an open TickTick task with the same title are l
   assert.deepEqual(tick.writes, [{ ref: 'list1/tt1', changes: { title: 'Paint the fence', notes: 'home notes' } }]);
 });
 
+test('pass: at first meet a queued home row never pulls an in-progress task back; done still wins', async () => {
+  const home = fakeHome([row('main/parked-a1', { status: 'open' }), row('main/done-b2', { status: 'open' })]);
+  const cu = fakePlace('clickup', ['status', 'due'], [
+    { ref: 'cu1', list: 'cl1', status: 'active', due: null, time: T0 - 60 * MIN },
+    { ref: 'cu2', list: 'cl1', status: 'done', due: null, time: T0 - 60 * MIN },
+  ]);
+  const tick = fakePlace('ticktick', ['title', 'status', 'due', 'notes'], [tt('list1/tt1', { title: 'Paint the fence' })]);
+  const links = new Links();
+  links.link('main/parked-a1', 'clickup', 'cu1');
+  links.link('main/parked-a1', 'ticktick', 'list1/tt1');
+  links.link('main/done-b2', 'clickup', 'cu2');
+  const w = { home, links, places: { home, ticktick: tick, clickup: cu }, state: { cards: {}, statusMap: {} } };
+  await syncPass({ places: w.places, links, state: w.state, now: T0, skewMs: SKEW });
+  assert.deepEqual(cu.writes, [], 'in progress stays in progress');
+  assert.deepEqual(tick.writes, []);
+  assert.deepEqual(home.writes, [{ ref: 'main/done-b2', changes: { status: 'done' } }]);
+  const again = await syncPass({ places: w.places, links, state: w.state, now: T0, skewMs: SKEW });
+  assert.equal(again.journal.length, 0, 'and it stays quiet');
+});
+
 test('pass: a vault note that names a home task is linked; the vault writer off writes nothing and stays stable', async () => {
   const w = linkedWorld({ homeRow: { status: 'done' } });
   const vault = fakePlace('vault', ['status'], [{ ref: 'projects/Fence.md', task: 'main/fence-a1', status: 'open', time: T0 - 90 * MIN }]);
