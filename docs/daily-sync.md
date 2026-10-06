@@ -14,7 +14,7 @@ Every step is plain scripting, in this order:
 | --- | --- | --- |
 | `pull` | Fetches each repo and fast-forwards it when it is on its default branch, clean and strictly behind. Dirty, diverged or off-branch repos are reported. | force, stash, reset, merge commit, rebase |
 | `watch` | Repos another tool updates (for example a Firstmate clone): reported when their remote has moved on, with read-only probes. | fetch, pull or any other change |
-| `vault` | Checks the raw folder exists and holds files, runs the vault's ingest in dry-run mode, and when there are new raw files runs the vault's command (the ingest, or its daily script) on at most `limit` of them a day (25 by default). A missing or empty raw folder is a failure, not "nothing new". | ingest into a vault with uncommitted changes (`requireClean`) |
+| `vault` | Checks the raw folder exists and holds files, runs the vault's ingest in dry-run mode, and when there are new raw files runs the vault's command (the ingest, or its daily script) on at most `limit` of them a day (50 by default). A missing or empty raw folder is a failure, not "nothing new". | ingest into a vault with uncommitted changes (`requireClean`) |
 | `commands` | Runs each command (such as Firstmate's tool-update check) and reports what it prints. The `sync` choice adds the ledger's task sync check (`sync.mjs check`), which fixes settled drift between linked items and prints one line ([task sync](ledger.md#the-task-sync)). | install anything |
 | `versions` | Compares the version you have on record (a note, a lock file) with the folder or command that holds the thing itself. | change either side |
 | `clickup` | Reads a space's active lists with `clickup-axi` and compares them with the lists you expect. | write to ClickUp |
@@ -84,7 +84,7 @@ Paths may start with `~`.
     "rawDir": "~/raw-sources",
     "dryRun": "node bin/ingest.mjs --dry-run",
     "run": "node bin/ingest.mjs --limit {limit}",
-    "limit": 25,
+    "limit": 50,
     "requireClean": true,
     "ignoreDirty": [".obsidian/"],
     "timeoutMin": 120
@@ -114,7 +114,7 @@ Paths may start with `~`.
   in the command, or the limit does not apply. The report counts the lines the command prints
   that start `ingesting:` or `ingest (` (for the model-call count) or `<name> failed on:` (for failed files), so
   a daily script should pass the ingest's own output through.
-- `vault.limit` is the most raw files a run processes (`DAILY_SYNC_INGEST_LIMIT`, 25 by
+- `vault.limit` is the most raw files a run processes (`DAILY_SYNC_INGEST_LIMIT`, 50 by
   default). Each file is an agent run; the rest wait for the next day. The whole run is
   stopped after `vault.timeoutMin` minutes (120 by default).
 - A version source is `{ "file" | "dir" | "command", "pattern" }`; the highest version the

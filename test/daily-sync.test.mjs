@@ -158,23 +158,23 @@ test('new raw files are ingested and reported as changed, counted as model use',
   assert.match(note, /vault: ingested 1 new raw file\(s\)/);
 });
 
-test('the vault step handles 25 raw files a day unless the config sets another limit', () => {
+test('the vault step handles 50 raw files a day unless the config sets another limit', () => {
   const pending = (limit) => ({
     ...vault(rawFolder()),
-    dryRun: node('lines.cjs', 'would ingest:', 30),
+    dryRun: node('lines.cjs', 'would ingest:', 60),
     run: node('lines.cjs', 'ingesting:', '{limit}'),
     ...limit,
   });
   const dry = job({ vault: pending() });
   const planned = dry.run('--dry-run');
   assert.equal(planned.code, 0);
-  assert.match(planned.out, /vault: would ingest 25 of 30 new raw file\(s\); 5 more wait for the next run/);
+  assert.match(planned.out, /vault: would ingest 50 of 60 new raw file\(s\); 10 more wait for the next run/);
   const real = job({ vault: pending() });
   assert.equal(real.run().code, 0);
-  assert.match(real.notified()[0], /vault: ingested 25 new raw file\(s\) with the vault's own agent; 5 more wait for the next run/);
+  assert.match(real.notified()[0], /vault: ingested 50 new raw file\(s\) with the vault's own agent; 10 more wait for the next run/);
   const own = job({ vault: pending({ limit: 10 }) });
   assert.equal(own.run().code, 0);
-  assert.match(own.notified()[0], /vault: ingested 10 new raw file\(s\) with the vault's own agent; 20 more wait for the next run/);
+  assert.match(own.notified()[0], /vault: ingested 10 new raw file\(s\) with the vault's own agent; 50 more wait for the next run/);
 });
 
 // Answers the daily-sync questions the way an unattended run does: given answers first, then
@@ -188,11 +188,11 @@ async function configFor(given = {}) {
   return buildConfig(ctx, path.join(tmp, 'installed'));
 }
 
-test('the installer defaults the vault step to the template ingest and 25 files a day', async () => {
+test('the installer defaults the vault step to the template ingest and 50 files a day', async () => {
   const { vault: v } = await configFor({ DAILY_SYNC_VAULT: 'yes' });
   assert.equal(v.dryRun, 'node bin/ingest.mjs --dry-run');
   assert.equal(v.run, 'node bin/ingest.mjs --limit {limit}');
-  assert.equal(v.limit, 25);
+  assert.equal(v.limit, 50);
 });
 
 test('the installer takes the vault run command and limit from the answers', async () => {
@@ -202,7 +202,7 @@ test('the installer takes the vault run command and limit from the answers', asy
   // An empty or unusable answer falls back to the defaults instead of writing a vault step that cannot run.
   const blank = (await configFor({ DAILY_SYNC_VAULT: 'yes', DAILY_SYNC_VAULT_RUN: '', DAILY_SYNC_INGEST_LIMIT: 'many' })).vault;
   assert.equal(blank.run, 'node bin/ingest.mjs --limit {limit}');
-  assert.equal(blank.limit, 25);
+  assert.equal(blank.limit, 50);
 });
 
 test('no vault step is written when the vault question is answered no', async () => {

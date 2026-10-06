@@ -29,7 +29,7 @@ const DEFAULT_MODEL =
 const DEFAULT_VAULT_DRY_RUN = 'node bin/ingest.mjs --dry-run';
 const DEFAULT_VAULT_RUN = 'node bin/ingest.mjs --limit {limit}';
 // Each raw file is an agent run, so this is also the most model calls a day the vault step makes.
-const DEFAULT_VAULT_LIMIT = 25;
+const DEFAULT_VAULT_LIMIT = 50;
 
 const list = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
 const titleCase = (s) => s.charAt(0).toUpperCase() + s.slice(1);

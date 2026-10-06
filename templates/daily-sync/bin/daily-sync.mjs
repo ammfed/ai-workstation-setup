@@ -301,7 +301,7 @@ function vault(v) {
   if (!files) return add('failed', 'vault:raw-empty', `vault: raw folder ${tilde(raw)} has no files, so ingest would read nothing (wrong folder?)`);
 
   const env = { RAW_DIR: raw, VAULT_PATH: vp, ...expandEnv(v.env) };
-  const limit = Number(v.limit) || 25;
+  const limit = Number(v.limit) || 50;
   const d = sh(v.dryRun, { cwd: vp, env, timeoutSec: 600 });
   const text = d.out + d.err;
   if (d.code !== 0 && /holds the lock/i.test(text)) return add('attention', 'vault:busy', 'vault: another vault job holds its lock; ingest is checked again next run');
