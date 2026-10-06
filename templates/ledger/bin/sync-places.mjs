@@ -179,6 +179,9 @@ export function ticktickPlace({ lists, command = 'ticktick-cli', timeZone, exec 
     const seen = t - (before + now()) / 2;
     offset = Math.abs(seen) > SKEW_MIN_MS ? seen : 0;
   };
+  // TickTick keeps a note as markdown and escapes punctuation such as ( ) . * with a backslash;
+  // a home row is plain text, so a backslash before ASCII punctuation is dropped on read.
+  const plain = (s) => s.replace(/\\([!-\/:-@[-`{-~])/g, '$1');
   const item = (t, list) => ({
     ref: `${list}/${t.id}`,
     list,
@@ -186,7 +189,7 @@ export function ticktickPlace({ lists, command = 'ticktick-cli', timeZone, exec 
     title: t.title || '',
     status: bucketOfTickTick(t.status),
     due: t.dueDate ? dayIn(parseTime(t.dueDate), t.timeZone || timeZone) : null,
-    notes: normText(t.content),
+    notes: plain(normText(t.content)),
     time: corrected(parseTime(t.modifiedTime)),
     statusTime: corrected(parseTime(t.completedTime)),
     repeat: Boolean(t.repeatFlag),

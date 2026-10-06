@@ -649,6 +649,14 @@ test('ticktick: open and recently ticked tasks read as normalized items', async 
   assert.equal(rec.calls[1].args.slice(0, 4).join(' '), 'task completed --projects list1');
 });
 
+test('ticktick: markdown escapes in a note are read as plain text', async () => {
+  const content = 'Date not set \\(maybe 3 Feb\\)\\. Use \\*one\\* room.\nPath C:\\Users\\example stays; so does a\\b.';
+  const open = { ...TT_OPEN, tasks: [{ ...TT_OPEN.tasks[0], content }] };
+  const { place } = ticktickWorld({ project: () => ({ code: 0, out: JSON.stringify(open), err: '' }) });
+  const items = await place.read();
+  assert.equal(items.get('list1/tt1').notes, 'Date not set (maybe 3 Feb). Use *one* room.\nPath C:\\Users\\example stays; so does a\\b.');
+});
+
 test('ticktick: writes go through the official CLI with the right flags', async () => {
   const { place, rec } = ticktickWorld();
   const item = { ref: 'list1/tt1', list: 'list1', id: 'tt1' };

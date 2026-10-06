@@ -155,8 +155,9 @@ active elsewhere starts no work, it becomes a note in that home's inbox and its 
 
 **Notes** sync two-way between a home row and TickTick. The sync owns only one part of a row's
 body, its `## Notes` section; every other line is copied unchanged, and each write archives the
-old body (`tasks-axi update --body-file --archive-body`), so an overwrite can be undone. The due
-date is a line of its own inside that section:
+old body (`tasks-axi update --body-file --archive-body`), so an overwrite can be undone. TickTick
+keeps a note as markdown and escapes punctuation with a backslash (`\(`); the sync reads it as
+plain text, so `(` reaches the row. The due date is a line of its own inside that section:
 
 ```markdown
 ## Notes
