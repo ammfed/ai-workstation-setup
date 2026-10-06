@@ -1,6 +1,7 @@
 // Tests for the working-preferences rules: what the defaults write, how the decision,
-// grilling and status choices change the text, that an earlier PREFS_GRILL_ON_GAPS answer
-// carries over to PREFS_GRILL, and that the card template ships its style and phone layout.
+// grilling, status and writing-style choices change the text, the route and its build
+// rules, that an earlier PREFS_GRILL_ON_GAPS answer carries over to PREFS_GRILL, and that
+// the card template ships its style and phone layout.
 // Run: node --test test/preferences.test.mjs
 
 import assert from 'node:assert/strict';
@@ -89,6 +90,35 @@ test('building and the everyday habits are written in their sections, and each c
   const off = await render({ PREFS_BUILD_WHOLE_GOAL: 'no', PREFS_MODEL_GUIDE: 'no', PREFS_HABITS: 'no' });
   assert.doesNotMatch(off, /## Building/);
   assert.doesNotMatch(off, /End every reply with the next actions|"Check X"|A statement is a claim/);
+});
+
+test('the route and its build rules are off by default and each writes its own Building rule', async () => {
+  assert.doesNotMatch(await render(), /six steps|test-first|GLOSSARY\.md|phone width/);
+  const building = sectionOf(
+    await render({ PREFS_ROUTE: 'yes', PREFS_TEST_FIRST: 'yes', PREFS_GLOSSARY_ADR: 'yes', PREFS_PROTOTYPE_CHECK: 'yes' }),
+    'Building',
+  );
+  assert.match(building, /1 Plan: .*2 Decide: .*3 Prototype: .*4 Breakdown: .*5 Build: .*6 Ship: /);
+  for (const skill of ['wayfinder', 'grilling', 'to-spec', 'to-tickets', 'tdd', 'no-mistakes']) assert.ok(building.includes(skill), skill);
+  assert.match(building, /a small clear change goes Plan, Build, Ship/);
+  assert.match(building, /Build product code test-first at the seams the spec names/);
+  assert.match(building, /Prototypes, docs and config are not test-first\./);
+  assert.match(building, /read GLOSSARY\.md and docs\/adr\/ if they exist/);
+  assert.match(building, /at laptop width and at phone width \(390 px\)/);
+  assert.doesNotMatch(sectionOf(await render({ PREFS_TEST_FIRST: 'yes' }), 'Building'), /six steps|GLOSSARY|phone width/);
+});
+
+test('the Simplified Technical English style is a choice that adds its rules and keeps outward writing out', async () => {
+  const ctx = await answer();
+  assert.equal(ctx.get('PREFS_WRITING_STYLE'), 'plain');
+  assert.doesNotMatch(await render(), /Simplified Technical English/);
+  const tone = sectionOf(await render({ PREFS_WRITING_STYLE: 'ste' }), 'Language and tone');
+  assert.match(tone, /based on Simplified Technical English \(ASD-STE100\)/);
+  assert.match(tone, /One instruction per sentence, as a command\. Put the condition first/);
+  assert.match(tone, /20 words or fewer in steps, 25 or fewer in explanations/);
+  assert.match(tone, /In a warning, state the risk in plain words first/);
+  assert.match(tone, /does not apply to anything written as the user for other people/);
+  await assert.rejects(answer({ PREFS_WRITING_STYLE: 'strict' }), /PREFS_WRITING_STYLE/);
 });
 
 test('an earlier PREFS_GRILL_ON_GAPS answer carries over to PREFS_GRILL', async () => {

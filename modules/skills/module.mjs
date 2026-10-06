@@ -1,5 +1,5 @@
 import { Skip } from '../../lib/context.mjs';
-import { installSkill } from '../../lib/claude.mjs';
+import { installSkill, skillInstalled } from '../../lib/claude.mjs';
 
 // Installed user-wide for Claude Code with the skills CLI (github.com/vercel-labs/skills).
 const SKILLS = [
@@ -7,6 +7,11 @@ const SKILLS = [
   { value: 'grill-me', repo: 'mattpocock/skills', label: 'grill-me - a relentless interview to sharpen a plan' },
   { value: 'grilling', repo: 'mattpocock/skills', label: 'grilling - stress-test a plan, decision or idea' },
   { value: 'teach', repo: 'mattpocock/skills', label: 'teach - learn a new skill or concept in your workspace' },
+  { value: 'tdd', repo: 'mattpocock/skills', label: 'tdd - build features and fix bugs test-first, red-green-refactor' },
+  { value: 'codebase-design', repo: 'mattpocock/skills', label: 'codebase-design - shared vocabulary for deep modules, seams and testable interfaces' },
+  { value: 'grill-with-docs', repo: 'mattpocock/skills', label: 'grill-with-docs - grilling that also writes GLOSSARY.md and docs/adr as it goes' },
+  { value: 'to-spec', repo: 'mattpocock/skills', label: 'to-spec - turn the current conversation into a spec in your issue tracker' },
+  { value: 'to-tickets', repo: 'mattpocock/skills', label: 'to-tickets - break a plan or spec into tickets with their blocking edges' },
   { value: 'to-questionnaire', repo: 'mattpocock/skills', label: 'to-questionnaire - turn an open decision into a questionnaire' },
   {
     value: 'wayfinder',
@@ -30,13 +35,18 @@ const SKILLS = [
     },
   },
 ];
-// The default set is the one in daily use; grill-me, to-questionnaire and wayfinder stay available as options.
-const DEFAULTS = ['kun', 'grilling', 'teach', 'find-docs'];
+// The default set is the one in daily use; the rest stay available as options.
+// docs/route.md shows where each skill fits in a software project.
+const DEFAULTS = ['kun', 'grilling', 'teach', 'tdd', 'codebase-design', 'find-docs'];
+
+// Every skill a choice installs, helpers included.
+const skillNames = (s) => (s.repo ? [s.value, ...(s.helpers ?? [])] : []);
+const chosenSkills = (ctx) => SKILLS.filter((s) => ctx.get('SKILLS').includes(s.value));
 
 export default {
   name: 'skills',
   title: 'Agent skills',
-  description: 'Claude Code skills: kun, grilling, teach, find-docs; grill-me, to-questionnaire, wayfinder, no-mistakes, composio-cli',
+  description: 'Claude Code skills: kun, grilling, teach, tdd, codebase-design, find-docs; grill-me, grill-with-docs, to-spec, to-tickets, to-questionnaire, wayfinder, no-mistakes, composio-cli',
   order: 50,
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],
@@ -49,14 +59,22 @@ export default {
       default: DEFAULTS,
       choices: SKILLS,
     },
+    {
+      key: 'SKILLS_UPDATE',
+      type: 'confirm',
+      message: 'Update the chosen skills you already have to their latest upstream version (replaces local edits to them)?',
+      default: true,
+      when: (ctx) => chosenSkills(ctx).some((s) => skillNames(s).some((n) => skillInstalled(ctx, n))),
+    },
   ],
 
   async install(ctx) {
-    const chosen = SKILLS.filter((s) => ctx.get('SKILLS').includes(s.value));
+    const chosen = chosenSkills(ctx);
     if (!chosen.length) ctx.ok('no skills selected');
+    const opts = { update: Boolean(ctx.get('SKILLS_UPDATE')) };
     for (const s of chosen) {
-      await ctx.step(s.value, () => (s.install ? s.install(ctx) : installSkill(ctx, s.repo, s.value)));
-      for (const h of s.helpers ?? []) await ctx.step(`${h} (for ${s.value})`, () => installSkill(ctx, s.repo, h));
+      await ctx.step(s.value, () => (s.install ? s.install(ctx) : installSkill(ctx, s.repo, s.value, opts)));
+      for (const h of s.helpers ?? []) await ctx.step(`${h} (for ${s.value})`, () => installSkill(ctx, s.repo, h, opts));
     }
     ctx.info('the clickup module installs its own skill');
   },

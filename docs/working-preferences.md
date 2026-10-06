@@ -26,6 +26,7 @@ changed file and keeps a timestamped backup.
 | `PREFS_OUTWARD_AS_USER` | yes | Content for other people is written as you, with no agent or tooling labels, internal ids or tags. |
 | `PREFS_NATURAL_TRANSLATION` | yes | Other languages are written the way a native speaker in that field would write them, never translated literally. |
 | `PREFS_WRITING_PRINCIPLES` | yes | Writing for others leads with the point, backs claims with a reason or evidence and states uncertainty plainly; a deck or document starts from an agreed one-sentence point, then plain paragraphs, then visuals only where they are the evidence. |
+| `PREFS_WRITING_STYLE` | `plain` | `ste` adds a plain-English house style for everything written to you, based on Simplified Technical English (ASD-STE100): one instruction per sentence with the condition first, active voice, short sentences and paragraphs, simple tenses, one word for one thing, verbs instead of noun phrases, no semicolons or em dashes, and warnings that state the risk first. Greetings, the reason behind a recommendation and short acknowledgements may relax it. Writing done as you for other people follows the outward rules instead. `plain` writes no extra rule. |
 | `PREFS_ONE_DESIGN_SYSTEM` | no | With several design systems, the one matching the artifact type is used, never two mixed. |
 | `PREFS_COPY_SECOND_OPINION` | no | Copywriting and translations get a refinement pass from a second AI model; only the text being refined is sent. |
 | `PREFS_HABITS` | yes | Eight everyday habits: replies end with the next actions, yours first; "I'm lost" or "too long" gets the shortest plain answer; an opinion is a real one with its reason; status and questions stay on your current topic; "check X" is a question, not a go-ahead to widen the work; no menu of what to run next; a claim is unproven until something shows it, including the case that can fail; a record you call outdated is checked against reality before it is defended. The lines land in Language and tone, Ideas and priorities, and Safety. |
@@ -80,6 +81,10 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | Key | Default | Rule |
 | --- | --- | --- |
 | `PREFS_BUILD_WHOLE_GOAL` | yes | Before something new is built, the research and the user journeys are shown on one review page. Then one builder gets the whole goal in a single brief (your words, the constraints, what done means) and runs, never fed step by step; the full validation pipeline runs once the first complete pass exists. |
+| `PREFS_ROUTE` | no | Software projects go through six steps, each with its skill: Plan, Decide, Prototype, Breakdown, Build, Ship, with short paths for a small change and a bug. [The route](route.md) describes each step. |
+| `PREFS_TEST_FIRST` | no | Product code is built test-first at the seams the spec names (tdd, codebase-design). Prototypes, docs and config are not test-first. |
+| `PREFS_GLOSSARY_ADR` | no | `GLOSSARY.md` and `docs/adr/` are read before building, and new terms and decision records land with the change that introduces them. The files start only when a term or a hard-to-reverse decision comes up. |
+| `PREFS_PROTOTYPE_CHECK` | no | Before you see a prototype, the agent opens it at laptop width and at phone width (390 px) and fixes broken layout, unclear labels and dead ends. |
 | `PREFS_MODEL_GUIDE` | yes | When a model is named for a task, the agent reads that vendor's official prompting guide first and briefs the model the way it says. |
 
 ### Ideas and priorities
