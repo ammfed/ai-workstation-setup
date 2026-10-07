@@ -33,8 +33,9 @@ async function typing(ctx) {
       `let your user reach /dev/uinput, which ydotoold needs, then log out and in: echo '${UINPUT_RULE}' | sudo tee /etc/udev/rules.d/70-uinput.rules && sudo usermod -aG input "$USER"`,
     );
   }
-  if (ctx.capture('systemctl --user show-environment') === null || ctx.capture('systemctl --user cat ydotool.service') === null) {
-    return ctx.todo('keep `ydotoold` running in the background (your ydotool package ships no systemd user unit here)');
+  if (ctx.capture('systemctl --user show-environment') === null) return ctx.todo('keep `ydotoold` running in the background (no systemd user session found)');
+  if (ctx.capture('systemctl --user cat ydotool.service') === null) {
+    return ctx.todo('keep `ydotoold` running in the background (your ydotool package ships no ydotool.service user unit)');
   }
   if (ctx.capture('systemctl --user is-active ydotool.service') === 'active') return ctx.ok('ydotool.service (ydotoold) is running');
   if (!writable) return ctx.run('systemctl --user enable ydotool.service');
