@@ -17,8 +17,8 @@ jobs:
         run: shellcheck install.sh update.sh scripts/*.sh templates/*/*.sh
       - name: node syntax
         run: for f in lib/*.mjs modules/*/*.mjs templates/*/bin/*.mjs; do node --check "$f"; done
-      - name: update, update-check, saved-answers, tool-check, privacy-scan, daily-sync, voice-mode, ledger and windows tests
-        run: node --test test/update.test.mjs test/update-check.test.mjs test/answers.test.mjs test/tools.test.mjs test/privacy.test.mjs test/daily-sync.test.mjs test/voice-mode.test.mjs test/ledger.test.mjs test/sync.test.mjs test/windows.test.mjs test/news-digest.test.mjs test/refresh.test.mjs test/second-brain.test.mjs test/optional-pieces.test.mjs test/preferences.test.mjs
+      - name: update, update-check, saved-answers, tool-check, privacy-scan, daily-sync, voice-mode, ledger, windows and wsl tests
+        run: node --test test/update.test.mjs test/update-check.test.mjs test/answers.test.mjs test/tools.test.mjs test/privacy.test.mjs test/daily-sync.test.mjs test/voice-mode.test.mjs test/ledger.test.mjs test/sync.test.mjs test/windows.test.mjs test/news-digest.test.mjs test/refresh.test.mjs test/second-brain.test.mjs test/optional-pieces.test.mjs test/preferences.test.mjs test/wsl.test.mjs
       - name: simulated dry runs for every platform
         run: |
           for os in linux macos wsl windows; do
@@ -34,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: update, update-check, saved-answers, tool-check, daily-sync and windows tests
-        run: node --test test/update.test.mjs test/update-check.test.mjs test/answers.test.mjs test/tools.test.mjs test/daily-sync.test.mjs test/windows.test.mjs test/news-digest.test.mjs test/refresh.test.mjs test/second-brain.test.mjs test/optional-pieces.test.mjs test/preferences.test.mjs
+        run: node --test test/update.test.mjs test/update-check.test.mjs test/answers.test.mjs test/tools.test.mjs test/daily-sync.test.mjs test/windows.test.mjs test/news-digest.test.mjs test/refresh.test.mjs test/second-brain.test.mjs test/optional-pieces.test.mjs test/preferences.test.mjs test/wsl.test.mjs
       - name: voice-mode tests (Linux and macOS, where the module runs)
         if: runner.os != 'Windows'
         run: node --test test/voice-mode.test.mjs
@@ -65,3 +65,53 @@ jobs:
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 --dry-run --yes --modules all --answers answers.example.env
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  # The Linux installer run for real inside WSL on a Windows runner (Ubuntu 24.04, WSL 2 when
+  # the runner offers it). The Windows checkout is on /mnt/d, where install.sh must refuse to
+  # run; a copy inside the Linux home then installs a set of modules and runs again unchanged.
+  wsl:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: wsl-bash -u tester {0}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: Vampire/setup-wsl@v7
+        with:
+          distribution: Ubuntu-24.04
+          wsl-shell-user: tester
+          additional-packages: git curl sudo cron
+      - name: give the test user sudo without a password
+        shell: wsl-bash -u root {0}
+        run: |
+          echo 'tester ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/tester
+          chmod 440 /etc/sudoers.d/tester
+          cat /proc/version
+          cat /etc/wsl.conf || true
+      - name: a clone on the Windows drive is refused
+        run: |
+          set +e
+          ./install.sh --dry-run --yes > refused.log 2>&1
+          code=$?
+          set -e
+          cat refused.log
+          test "$code" -eq 2
+          grep -q 'on a Windows drive' refused.log
+      - name: real install inside WSL
+        run: |
+          cp -r . ~/ai-workstation-setup
+          cd ~/ai-workstation-setup
+          if grep -q $'\r' install.sh; then echo 'install.sh has CRLF line endings'; exit 1; fi
+          modules=core,claude-code,skills,second-brain,daily-sync,news-digest
+          ./install.sh --yes --answers answers.example.env --modules "$modules" 2>&1 | tee ~/install.log
+          ./install.sh --yes --answers answers.example.env --modules "$modules" 2>&1 | tee ~/rerun.log
+      - name: the result inside WSL
+        run: |
+          . ~/.nvm/nvm.sh
+          case "$(command -v node)" in /mnt/*) echo "node is the Windows one"; exit 1 ;; esac
+          grep -q 'platform: wsl' ~/install.log
+          test -x ~/.local/bin/open-in-windows
+          grep -q 'BROWSER=' ~/.profile ~/.bashrc
+          grep -q 'On the Windows side' ~/install.log
+          test -f ~/second-brain/AGENTS.md
+          systemctl --user list-timers 2>/dev/null | grep -E 'daily-sync|news-digest' || crontab -l | grep -E 'daily-sync|news-digest'

@@ -13,9 +13,18 @@ $forward = $argv
 $dryRun = $argv -contains '--dry-run'
 $assumeYes = ($argv -contains '--yes') -or ($argv -contains '-y') -or ($argv -contains '--non-interactive')
 
-# One question up front when nothing else says what to do. Either setup choice is the only
-# yes needed: every dependency is then installed without asking again.
+# One question up front when nothing else says what to do. Linux inside Windows then asks
+# which Windows apps to add (Enter keeps the recommended set); Windows only asks nothing more.
+# Either way every dependency is then installed without asking again.
 $chosen = @('--yes', '-y', '--non-interactive', '--modules', '--answers', '--list', '--help', '-h', '--platform') | Where-Object { $argv -contains $_ }
+if (-not $chosen -and [Console]::IsInputRedirected) {
+    # No one to answer (an AI assistant's shell, a pipe): name the unattended commands instead.
+    Write-Host 'No terminal to ask on. Run one of these (see docs/install-with-ai.md):'
+    Write-Host '  .\install.ps1 --modules wsl --yes    Linux inside Windows (recommended)'
+    Write-Host '  .\install.ps1 --yes                  Windows only'
+    Write-Host 'Add --dry-run first to see the plan without changing anything.'
+    exit 2
+}
 if (-not $chosen) {
     Write-Host 'How should this machine be set up?'
     Write-Host '  1) Linux inside Windows (recommended): installs WSL and Ubuntu, then everything inside it, firstmate included'
@@ -24,7 +33,7 @@ if (-not $chosen) {
     Write-Host '  q) Stop'
     $reply = Read-Host 'Choice [1]'
     switch -Regex ($reply.Trim()) {
-        '^(1|)$' { $forward = @('--modules', 'wsl', '--yes') + $argv; $assumeYes = $true }
+        '^(1|)$' { $forward = @('--modules', 'wsl') + $argv; $assumeYes = $true }
         '^2$' { $forward = @('--yes') + $argv; $assumeYes = $true }
         '^3$' { }
         default { Write-Host 'Nothing was changed.'; exit 0 }

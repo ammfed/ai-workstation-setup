@@ -160,7 +160,7 @@ export default {
   order: 95,
   platforms: ['linux', 'macos'],
   unsupported: {
-    wsl: 'needs the desktop microphone and speaker; run it on a Linux or macOS desktop',
+    wsl: 'needs a desktop hotkey, window control and typing into other apps, which WSL does not give (WSLg passes sound, not the desktop); use OpenWhispr on the Windows side for dictation, or run it on a Linux or macOS desktop',
     windows: 'the microphone and speaker path uses PulseAudio/PipeWire or sox; Windows is not supported yet',
   },
   requires: ['core'],

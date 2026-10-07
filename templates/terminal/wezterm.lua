@@ -47,12 +47,19 @@ config.colors = {
   },
 }
 
--- On Windows, optionally open the first WSL distro instead of PowerShell.
+-- On Windows, optionally open a WSL distro instead of PowerShell: the one named here when it
+-- is installed, else the first that is not Docker Desktop's own.
 local use_wsl = {{WSL_DEFAULT}}
+local wsl_distro = '{{WSL_DISTRO}}'
 if is_windows and use_wsl then
-  local domains = wezterm.default_wsl_domains()
-  if #domains > 0 then
-    config.default_domain = domains[1].name
+  for _, domain in ipairs(wezterm.default_wsl_domains()) do
+    if domain.name == 'WSL:' .. wsl_distro then
+      config.default_domain = domain.name
+      break
+    end
+    if not config.default_domain and not domain.name:lower():find('docker') then
+      config.default_domain = domain.name
+    end
   end
 end
 
