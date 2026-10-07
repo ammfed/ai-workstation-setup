@@ -87,6 +87,20 @@ async function cswapAutoService(ctx) {
   ctx.info(`logs: journalctl --user -u ${CSWAP_UNIT}; stop it with: systemctl --user disable --now ${CSWAP_UNIT}.service`);
 }
 
+// Inside WSL the browser tools drive a Linux Chrome shown through WSLg: everything stays on
+// 127.0.0.1 inside Linux, with no debugging port opened across to Windows. The steps are
+// Microsoft's (learn.microsoft.com/windows/wsl/tutorials/gui-apps): Google's own .deb with apt.
+function linuxChrome(ctx) {
+  const found = ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'].find((b) => ctx.has(b));
+  if (found) return ctx.ok(`${found} is installed`);
+  if (ctx.platform.pkg !== 'apt' || process.arch !== 'x64') {
+    throw new Skip('Google ships Chrome for Linux as an x86-64 .deb only; install Chrome or Chromium with your package manager');
+  }
+  const deb = '/tmp/google-chrome-stable_current_amd64.deb';
+  ctx.run(`curl -fsSL -o ${deb} https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && ${ctx.sudo()}env DEBIAN_FRONTEND=noninteractive apt-get install -y ${deb}; s=$?; rm -f ${deb}; exit $s`);
+  if (ctx.platform.wslVersion === 1) ctx.warn('WSL 1 shows no Linux windows: Chrome runs headless only; WSL 2 shows it through WSLg');
+}
+
 function nodeAtLeast([major, minor]) {
   const [m, n] = process.versions.node.split('.').map(Number);
   return m > major || (m === major && n >= minor);
@@ -191,6 +205,13 @@ export default {
       when: (ctx) => ctx.get('AGENT_CLIS').includes('claude-swap') && ctx.get('CSWAP_AUTO'),
     },
     {
+      key: 'WSL_LINUX_CHROME',
+      type: 'confirm',
+      message: 'Inside WSL: install Google Chrome for Linux, so chrome-devtools-axi and research-browser have a browser (it opens as a window through WSLg)?',
+      default: true,
+      when: (ctx) => ctx.os === 'wsl' && ctx.get('AGENT_CLIS').includes('chrome-devtools-axi'),
+    },
+    {
       key: 'RESEARCH_BROWSER',
       type: 'confirm',
       message: "Install `research-browser`: a visible Chrome window with its own profile for agent research, separate from your browser?",
@@ -284,6 +305,10 @@ export default {
     if (chosen.includes('claude-swap') && ctx.get('CSWAP_AUTO')) {
       await ctx.step('cswap auto service', () => cswapAutoService(ctx));
       ctx.info('cswap auto switches only between accounts you saved with `cswap add`; it needs two or more');
+    }
+
+    if (chosen.includes('chrome-devtools-axi') && ctx.get('WSL_LINUX_CHROME')) {
+      await ctx.step('Google Chrome for Linux', () => linuxChrome(ctx));
     }
 
     if (chosen.includes('chrome-devtools-axi') && ctx.get('RESEARCH_BROWSER')) {

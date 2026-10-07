@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { cronCommand, ensureCronLine, shellQuote } from '../../lib/cron.mjs';
 import { Skip } from '../../lib/context.mjs';
 import { SYNC_QUESTIONS, installSync } from './sync.mjs';
 
@@ -134,7 +135,12 @@ async function service(ctx, spec) {
   }
   if (ctx.capture('systemctl --user show-environment') !== null) return systemdService(ctx, spec);
   const hint = ctx.os === 'wsl' ? ' (in WSL, turn on systemd in /etc/wsl.conf)' : '';
-  throw new Skip(`no systemd user session found${hint}; keep \`node "${script}" serve\` running yourself`);
+  if (!ctx.has('crontab')) throw new Skip(`no systemd user session and no crontab found${hint}; keep \`node "${script}" serve\` running yourself`);
+  // No systemd: cron starts it with cron itself (@reboot), and it is started now.
+  ensureCronLine(ctx, '@reboot', cronCommand(script, ['serve']), `${TAG} ${spec.unit}`);
+  if (ctx.capture(`pgrep -f ${shellQuote(`${script} serve`)}`) === null) ctx.run(`nohup env ${cronCommand(script, ['serve'])} >/dev/null 2>&1 &`);
+  else ctx.ok(`${spec.unit} is running`);
+  ctx.info(`no systemd user session found${hint}: cron starts it when cron starts; nothing restarts it if it stops`);
 }
 
 // ------------------------------------------------------------------ module

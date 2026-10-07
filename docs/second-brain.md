@@ -122,6 +122,6 @@ Picked with `VAULT_TOOLS` (all off by default), each a single Node script in `bi
   pass on its own.
 
 `VAULT_TIMERS` can also schedule `housekeeping` (every 3 hours) and `garden` (every 6 hours,
-with the agent command from `VAULT_AGENT_CMD`) as systemd user timers on Linux and WSL or
-launchd agents on macOS; on Windows it leaves a to-do for Task Scheduler. The agent CLI must
+with the agent command from `VAULT_AGENT_CMD`) as systemd user timers on Linux and WSL (a
+crontab line when no systemd user session runs) or launchd agents on macOS; on Windows it leaves a to-do for Task Scheduler. The agent CLI must
 already be signed in on its own: the timer passes only the command and its flags.

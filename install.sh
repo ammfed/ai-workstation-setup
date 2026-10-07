@@ -21,9 +21,27 @@ for arg in "$@"; do
   esac
 done
 
+in_wsl=0
+if [ -n "${WSL_DISTRO_NAME:-}" ] || grep -qi microsoft /proc/version 2>/dev/null; then in_wsl=1; fi
+
+# Inside WSL the clone must live in the Linux file system: /mnt/<drive> is Windows (slow,
+# no Linux permissions, CRLF line endings). See docs/windows-wsl.md.
+if [ "$in_wsl" -eq 1 ]; then
+  case "$here" in
+    /mnt/[a-zA-Z] | /mnt/[a-zA-Z]/*)
+      echo "This clone is on a Windows drive ($here). Inside WSL, clone it into Linux and run it there:" >&2
+      echo "  git clone https://github.com/ammfed/ai-workstation-setup ~/ai-workstation-setup && cd ~/ai-workstation-setup && ./install.sh" >&2
+      exit 2
+      ;;
+  esac
+fi
+
+# The Node.js on PATH, never the Windows one WSL appends to PATH (node.exe under /mnt/c).
 node_major() {
-  command -v node >/dev/null 2>&1 || { echo 0; return; }
-  node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0
+  local bin
+  bin=$(command -v node 2>/dev/null) || { echo 0; return; }
+  case "$bin" in /mnt/[a-zA-Z]/*) echo 0; return ;; esac
+  "$bin" -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0
 }
 
 load_nvm() {

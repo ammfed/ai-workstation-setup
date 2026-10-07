@@ -8,7 +8,8 @@ reads the same version of now.
 
 It is one plain Node script with no dependencies, `ledger.mjs`, and one `config.json`, both
 in `~/.config/ai-workstation-setup/ledger/`, run as a small always-on user service
-(`workstation-ledger.service` under systemd, a launchd agent on macOS). Windows is skipped:
+(`workstation-ledger.service` under systemd, a launchd agent on macOS; without a systemd user
+session, a crontab `@reboot` line that starts it with cron, and it is started right away). Windows is skipped:
 the records it reads come from Firstmate, which runs on Linux, macOS or WSL.
 
 ## What it captures

@@ -56,7 +56,8 @@ offline without signing in, give its `ensureTool` spec a `check` (see `checkTool
 
 To add a module: copy a small one (`modules/skills`), take install commands from the
 tool's official docs (never vendor binaries or copy upstream source), add its keys to
-`answers.example.env`, its row to `README.md`, then run the checks below.
+`answers.example.env`, its row to `README.md`, its WSL side to `WSL_SIDES` in `lib/wsl.mjs`
+and `docs/windows-wsl.md`, then run the checks below.
 
 Anything under `templates/` is content the installer writes onto the user's machine, not
 code this repo runs. `ctx.template` replaces `{{UPPER_CASE}}` placeholders it has a value
@@ -70,12 +71,13 @@ run on the user's machine, not here, so keep them free of dependencies and cross
 ```sh
 shellcheck install.sh update.sh scripts/*.sh templates/*/*.sh
 for f in lib/*.mjs modules/*/*.mjs templates/*/bin/*.mjs; do node --check "$f"; done
-node --test test/update.test.mjs test/update-check.test.mjs test/answers.test.mjs test/tools.test.mjs test/privacy.test.mjs test/daily-sync.test.mjs test/voice-mode.test.mjs test/ledger.test.mjs test/sync.test.mjs test/windows.test.mjs test/news-digest.test.mjs test/refresh.test.mjs test/second-brain.test.mjs test/optional-pieces.test.mjs test/preferences.test.mjs
+node --test test/update.test.mjs test/update-check.test.mjs test/answers.test.mjs test/tools.test.mjs test/privacy.test.mjs test/daily-sync.test.mjs test/voice-mode.test.mjs test/ledger.test.mjs test/sync.test.mjs test/windows.test.mjs test/news-digest.test.mjs test/refresh.test.mjs test/second-brain.test.mjs test/optional-pieces.test.mjs test/preferences.test.mjs test/wsl.test.mjs
 for os in linux macos wsl windows; do node lib/installer.mjs --dry-run --yes --modules all --answers answers.example.env --platform "$os"; done
 scripts/privacy-scan.sh --denylist <local denylist>
 ```
 
-CI (`.github/workflows/`) runs these plus real dry runs on Ubuntu, macOS and Windows.
+CI (`.github/workflows/`) runs these plus real dry runs on Ubuntu, macOS and Windows, and a
+real Linux install inside WSL on a Windows runner.
 
 ## Privacy rules (this repo is public)
 

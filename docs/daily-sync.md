@@ -52,7 +52,7 @@ passes after a FAILED one sends a short `recovered` note, so the failure does no
 | System | How | A missed run |
 | --- | --- | --- |
 | Linux, WSL with systemd | `~/.config/systemd/user/daily-sync.timer`, `Persistent=true` | runs at the next login (or boot, with `loginctl enable-linger`) |
-| Linux without systemd | a crontab line marked `# ai-workstation-setup daily-sync` | reported as FAILED by the next run |
+| Linux or WSL without systemd | a crontab line marked `# ai-workstation-setup daily-sync` (in WSL, cron itself must be started: [docs/windows-wsl.md](windows-wsl.md#systemd-and-the-cron-fallback)) | reported as FAILED by the next run |
 | macOS | `~/Library/LaunchAgents/local.ai-workstation-setup.daily-sync.plist` | runs on wake; after power-off, reported by the next run |
 | Windows | the installer prints the `schtasks` command to add it | reported by the next run |
 

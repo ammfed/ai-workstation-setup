@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { cronCommand, ensureCronLine, shellQuote } from '../../lib/cron.mjs';
 import { Skip } from '../../lib/context.mjs';
+import { windowsPathOf } from '../../lib/wsl.mjs';
 import { addSessionStartHook, setClaudeEnv } from '../../lib/claude.mjs';
 import { versionCheck } from '../agent-clis/tools.mjs';
 
@@ -87,7 +89,10 @@ async function scheduleVaultJob(ctx, vault, name, script, env = {}) {
   if (ctx.platform.simulated) return ctx.info(`would run ${path.basename(script)} every ${hours} hours as the systemd user timer ${unit}.timer`);
   if (ctx.capture('systemctl --user show-environment') === null) {
     const hint = ctx.os === 'wsl' ? ' (in WSL, turn on systemd in /etc/wsl.conf)' : '';
-    throw new Skip(`no systemd user session found${hint}; schedule \`node "${script}"\` yourself`);
+    if (!ctx.has('crontab')) throw new Skip(`no systemd user session and no crontab found${hint}; schedule \`node "${script}"\` yourself`);
+    const command = `cd ${shellQuote(vault)} && ${cronCommand(script, [], { VAULT_PATH: vault, ...env })}`;
+    ensureCronLine(ctx, `17 */${hours} * * *`, command, `${TIMER_TAG} ${name}`);
+    return ctx.info(`${unit}: ${about} every ${hours} hours from cron, as no systemd user session runs${hint}`);
   }
   const dir = path.join(ctx.home, '.config', 'systemd', 'user');
   const service = [
@@ -297,10 +302,12 @@ export default {
           if (ctx.capture('flatpak info md.obsidian.Obsidian') !== null) return ctx.ok('Obsidian (flatpak) already installed');
           return ctx.run('flatpak install -y flathub md.obsidian.Obsidian');
         }
-        const where = ctx.os === 'wsl' ? 'on the Windows side ' : '';
-        ctx.todo(`install Obsidian ${where}from https://obsidian.md/download`);
+        if (ctx.os === 'wsl') return ctx.todo('install Obsidian on the Windows side: .\\install.ps1 --modules wsl offers it, or https://obsidian.md/download');
+        ctx.todo('install Obsidian from https://obsidian.md/download');
       });
     }
-    ctx.info(`open ${vault} in Obsidian with "Open folder as vault"; people start at ${path.join(vault, 'START-HERE.md')}, agents at ${path.join(vault, 'AGENTS.md')}`);
+    // Obsidian on Windows reaches a vault inside WSL through its \\wsl.localhost path.
+    const shown = ctx.os === 'wsl' ? windowsPathOf(vault, process.env.WSL_DISTRO_NAME || 'Ubuntu') : vault;
+    ctx.info(`open ${shown} in Obsidian with "Open folder as vault"; people start at ${path.join(vault, 'START-HERE.md')}, agents at ${path.join(vault, 'AGENTS.md')}`);
   },
 };

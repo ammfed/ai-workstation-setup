@@ -37,7 +37,7 @@ function makeTemplate() {
   const base = path.join(tmp, `t${++n}`);
   const work = path.join(base, 'work');
   fs.mkdirSync(path.join(work, 'lib'), { recursive: true });
-  for (const f of ['lib/update.mjs', 'lib/context.mjs', '.gitignore']) fs.copyFileSync(path.join(repoRoot, f), path.join(work, f));
+  for (const f of ['lib/update.mjs', 'lib/context.mjs', 'lib/wsl.mjs', '.gitignore']) fs.copyFileSync(path.join(repoRoot, f), path.join(work, f));
   fs.writeFileSync(path.join(work, 'README.md'), 'v1\n');
   git(work, 'init', '-q', '-b', 'main');
   git(work, 'add', '-A');
