@@ -1,6 +1,7 @@
 import { Skip } from '../../lib/context.mjs';
 import path from 'node:path';
-import { claudeDir, readSettings, setHook, settingsPath } from '../../lib/claude.mjs';
+import fs from 'node:fs';
+import { claudeDir, readSettings, removeHook, setHook, settingsPath } from '../../lib/claude.mjs';
 import { versionCheck } from '../agent-clis/tools.mjs';
 
 const PLUGINS = [
@@ -213,6 +214,12 @@ export default {
       default: true,
       when: (ctx) => ctx.get('CLAUDE_CONTEXT_REMINDER'),
     },
+    {
+      key: 'CLAUDE_UPDATE_REMINDER',
+      type: 'confirm',
+      message: 'At the start of a session, at most once a day, say when this template has a newer version?',
+      default: true,
+    },
   ],
 
   async install(ctx) {
@@ -383,5 +390,15 @@ export default {
         if (ctx.get('CLAUDE_COMPACT_REMINDER')) setHook(ctx, 'SessionStart', 'context-reminder.mjs', `node "${script}" ${tokens}`);
       });
     }
+
+    // Fetches the template at most once a day and prints one line when this clone is behind;
+    // see templates/claude-code/bin/update-check.mjs. Answering no removes the hook.
+    await ctx.step('update reminder hook', async () => {
+      if (!ctx.get('CLAUDE_UPDATE_REMINDER')) return removeHook(ctx, 'SessionStart', 'update-check.mjs');
+      if (!fs.existsSync(path.join(ctx.repoRoot, '.git'))) throw new Skip('this copy of the template is not a git clone, so there is no newer version to look for');
+      const script = path.join(claudeDir(ctx), 'hooks', 'update-check.mjs');
+      await ctx.writeFile(script, ctx.template('claude-code/bin/update-check.mjs'), { onConflict: 'ask' });
+      setHook(ctx, 'SessionStart', 'update-check.mjs', `node "${script}" "${ctx.repoRoot}"`);
+    });
   },
 };

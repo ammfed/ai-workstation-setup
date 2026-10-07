@@ -111,12 +111,19 @@ touches your answers or other gitignored files. If your clone has local changes 
 diverged, it stops, explains, and changes nothing. See
 [how to get updates without losing your setup](docs/updating.md).
 
+You do not have to remember to look: at the start of a Claude Code session, at most once a
+day, a hook checks the template and shows one line such as
+`ai-workstation-setup: 4 updates available. Run ./update.sh, then ./install.sh (in ~/ai-workstation-setup).`
+It shows nothing when you are up to date or offline. Turn it off with
+`CLAUDE_UPDATE_REMINDER=no` in `answers.env` (then re-run the installer), or silence it with
+the environment variable `AI_WORKSTATION_SETUP_NO_UPDATE_CHECK=1`.
+
 ## Modules
 
 | Module | What it sets up | Linux | macOS | WSL | Windows |
 | --- | --- | :-: | :-: | :-: | :-: |
 | `core` | git, Node.js check, GitHub CLI (and sign-in), jq | ✓ | ✓ | ✓ | ✓ |
-| `claude-code` | Claude Code (and the Claude desktop app on Windows); model (including the 1M-context Opus), effort (also per model), permission mode, theme, thinking summaries, Remote Control, view, auto-compact, push notifications, feedback drafts, session persistence, spinner tips, the bypass-permissions confirmation, an opt-in rule letting agents merge pull requests; ccstatusline or usage-gauges status line; diagram-design and optional compact-adviser plugins; context and after-compaction reminders | ✓ | ✓ | ✓ | ✓ |
+| `claude-code` | Claude Code (and the Claude desktop app on Windows); model (including the 1M-context Opus), effort (also per model), permission mode, theme, thinking summaries, Remote Control, view, auto-compact, push notifications, feedback drafts, session persistence, spinner tips, the bypass-permissions confirmation, an opt-in rule letting agents merge pull requests; ccstatusline or usage-gauges status line; diagram-design and optional compact-adviser plugins; context and after-compaction reminders; a once-a-day reminder when the template has updates | ✓ | ✓ | ✓ | ✓ |
 | `agent-clis` | gh-axi, chrome-devtools-axi, lavish-axi, tasks-axi, quota-axi, ctx7, no-mistakes, treehouse; optional notion-axi, ntn, gws-axi, herdr, Codex, Pi, Antigravity, claude-swap (optional `cswap auto` service), notebooklm-mcp-cli, CLI for Microsoft 365, Vercel CLI, Composio (not native Windows), mermaid-ascii, pixel-agents (view settings; optional office names), gnhf; session hooks; `research-browser` launcher and optional lavish-axi no-open wrapper (not native Windows) | ✓ | ✓ | ✓ | ✓ |
 | `mcp-servers` | Optional context7, chrome-devtools and TickTick MCP servers for Claude Code | ✓ | ✓ | ✓ | ✓ |
 | `skills` | Claude Code skills: kun, grilling, teach, tdd, codebase-design, find-docs; optional grill-me, grill-with-docs, to-spec, to-tickets, to-questionnaire, wayfinder, no-mistakes, composio-cli; updates installed ones | ✓ | ✓ | ✓ | ✓ |
