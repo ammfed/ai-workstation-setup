@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { Skip } from '../../lib/context.mjs';
 import { claudeDir } from '../../lib/claude.mjs';
-import { renderPreferences } from './render.mjs';
+import { renderBriefInclude, renderPreferences } from './render.mjs';
 
 // Writes how you want your agents to work (status format, tone, decisions, review
 // pages, building, ideas, away mode, merges, research, quota) as a plain rules file your agents load.
@@ -17,6 +17,13 @@ function grillDefault(ctx) {
   const old = ctx.answers.get('PREFS_GRILL_ON_GAPS');
   if (old === undefined) return 'every';
   return /^(y|yes|true|1)$/i.test(String(old)) ? 'gaps' : 'off';
+}
+
+// Every question after the first two takes its recommended answer (its default, or a saved
+// answer) unless the person chose to go through them one by one.
+const GATE = ['PREFS_TARGETS', 'PREFS_REVIEW_EACH'];
+function withRecommended(questions) {
+  return questions.map((q) => (GATE.includes(q.key) ? q : { ...q, useDefault: (ctx) => !ctx.get('PREFS_REVIEW_EACH') }));
 }
 
 function cardsPath(ctx) {
@@ -43,13 +50,19 @@ export default {
   order: 65,
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   default: true,
-  questions: [
+  questions: withRecommended([
     {
       key: 'PREFS_TARGETS',
       type: 'multi',
       message: 'Where to write your working preferences',
       default: (ctx) => ['claude', ...((ctx.values.MODULES || []).includes('firstmate') ? ['firstmate'] : [])],
       choices: Object.entries(TARGETS).map(([value, t]) => ({ value, label: t.label })),
+    },
+    {
+      key: 'PREFS_REVIEW_EACH',
+      type: 'confirm',
+      message: 'Go through each working preference now (about 60 short questions)? No writes the recommended set, which you can edit any time',
+      default: false,
     },
 
     // Language and tone
@@ -240,7 +253,7 @@ export default {
     yes('PREFS_BLOCKED_COMMANDS', 'Safety: when a permission check blocks an install, schedule, service or push, never work around it; give you the exact command to run?'),
     yes('PREFS_PRIVATE_STAYS_LOCAL', 'Safety: private chats and anything captured from your own sessions never go to an outside model?'),
     yes('PREFS_PUBLIC_REPOS', 'Safety: in public repositories, a no-reply commit identity, no email trailers, pull request text naming nothing private, and a privacy scan before each push?'),
-  ],
+  ]),
 
   async install(ctx) {
     const targets = ctx.get('PREFS_TARGETS');
@@ -260,6 +273,13 @@ export default {
         if (reason) throw new Skip(reason);
         return ctx.writeFile(target.file(ctx), text, { onConflict: 'ask' });
       });
+    }
+    // Firstmate's config/brief-include.md (its docs/configuration.md "Home brief include") is
+    // appended to every worker brief, so workers write to firstmate in the same house style.
+    const brief = renderBriefInclude((key) => ctx.get(key));
+    if (brief && targets.includes('firstmate') && !ctx.forOs(TARGETS.firstmate.unsupported)) {
+      const home = ctx.path(ctx.get('FIRSTMATE_HOME') || ctx.get('FIRSTMATE_DIR') || '~/firstmate');
+      await ctx.step('firstmate worker briefs', () => ctx.writeFile(path.join(home, 'config', 'brief-include.md'), brief, { onConflict: 'ask' }));
     }
     ctx.info('edit the written file any time; re-running asks before replacing your edits (and keeps a backup)');
   },

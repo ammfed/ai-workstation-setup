@@ -135,6 +135,13 @@ export default {
       when: (ctx) => ctx.get('AGENT_CLIS').includes('herdr'),
     },
     {
+      key: 'HERDR_SETTINGS',
+      type: 'confirm',
+      message: 'Write starter herdr settings (Tokyo Night theme, agents grouped by space with state symbols and names on pane borders, desktop notifications)? An existing herdr config is kept',
+      default: true,
+      when: (ctx) => ctx.get('AGENT_CLIS').includes('herdr'),
+    },
+    {
       key: 'LAVISH_NO_OPEN',
       type: 'confirm',
       message: 'Stop lavish-axi opening a browser tab on every page open (sets LAVISH_AXI_NO_OPEN=1; links are shared in chat)?',
@@ -232,6 +239,18 @@ export default {
       await ctx.step('herdr integration', () => ctx.run('herdr integration install claude'));
     }
 
+    if (chosen.includes('herdr') && ctx.get('HERDR_SETTINGS')) {
+      // herdr reads ~/.config/herdr/config.toml (Windows: %APPDATA%\herdr\config.toml), per its configuration docs.
+      await ctx.step('herdr settings', async () => {
+        const dir = ctx.os === 'windows' ? path.join(process.env.APPDATA || path.join(ctx.home, 'AppData', 'Roaming'), 'herdr') : path.join(ctx.home, '.config', 'herdr');
+        const file = path.join(dir, 'config.toml');
+        if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') !== ctx.template('herdr/config.toml')) {
+          return ctx.ok(`${file} exists; your herdr settings are kept (the starter values are in templates/herdr/config.toml)`);
+        }
+        if ((await ctx.writeFile(file, ctx.template('herdr/config.toml'))) && ctx.has('herdr')) ctx.run('herdr config check');
+      });
+    }
+
     if (chosen.includes('lavish-axi') && ctx.get('LAVISH_NO_OPEN')) {
       await ctx.step('LAVISH_AXI_NO_OPEN', () => ctx.setUserEnv('LAVISH_AXI_NO_OPEN', '1'));
       if (ctx.os !== 'windows' && ctx.get('LAVISH_NO_OPEN_WRAPPER')) {
@@ -272,8 +291,7 @@ export default {
         const target = ctx.path('~/.local/bin/research-browser');
         const port = researchBrowserPort(ctx.get('RESEARCH_BROWSER_PORT'));
         const written = await ctx.writeFile(target, ctx.template('research-browser/research-browser.sh', { PORT: port }), { onConflict: 'ask', mode: 0o755 });
-        const onPath = (process.env.PATH || '').split(path.delimiter).includes(path.dirname(target));
-        if (!onPath && !ctx.platform.simulated) ctx.warn(`${path.dirname(target)} is not on PATH; add it to use research-browser`);
+        await ctx.addUserPath(path.dirname(target));
         if (written) ctx.todo('research-browser   (opens its window; sign in there to the sites your agents research)');
       });
     }

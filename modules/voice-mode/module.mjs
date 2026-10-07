@@ -18,6 +18,30 @@ const DESKTOP_FILE = 'voice-mode-toggle.desktop';
 const dir = (ctx) => path.join(ctx.home, '.config', 'ai-workstation-setup', 'voice');
 const list = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boolean);
 
+// The "type" action runs `ydotool type`, which needs the ydotoold daemon and write access to
+// /dev/uinput. Debian, Ubuntu and Arch ship ydotoold as the systemd user unit ydotool.service.
+const UINPUT_RULE = 'KERNEL=="uinput", GROUP="input", MODE="0660", TAG+="uaccess"';
+async function typing(ctx) {
+  await ctx.ensureTool({ name: 'ydotool', install: { linux: { pkg: { apt: 'ydotool', dnf: 'ydotool', pacman: 'ydotool', zypper: 'ydotool' } } } });
+  if (ctx.platform.simulated) return ctx.info('would start the ydotool.service user unit (ydotoold) when `systemctl --user` works');
+  let writable = true;
+  try {
+    fs.accessSync('/dev/uinput', fs.constants.W_OK);
+  } catch {
+    writable = false;
+    ctx.todo(
+      `let your user reach /dev/uinput, which ydotoold needs, then log out and in: echo '${UINPUT_RULE}' | sudo tee /etc/udev/rules.d/70-uinput.rules && sudo usermod -aG input "$USER"`,
+    );
+  }
+  if (ctx.capture('systemctl --user show-environment') === null) return ctx.todo('keep `ydotoold` running in the background (no systemd user session found)');
+  if (ctx.capture('systemctl --user cat ydotool.service') === null) {
+    return ctx.todo('keep `ydotoold` running in the background (your ydotool package ships no ydotool.service user unit)');
+  }
+  if (ctx.capture('systemctl --user is-active ydotool.service') === 'active') return ctx.ok('ydotool.service (ydotoold) is running');
+  if (!writable) return ctx.run('systemctl --user enable ydotool.service');
+  ctx.run('systemctl --user enable --now ydotool.service');
+}
+
 /** Split a command line into words, honouring quotes; leading NAME=value words become env. */
 export function parseCommand(line) {
   const words = [];
@@ -222,6 +246,13 @@ export default {
     },
     { key: 'VOICE_PERSONA_FILE', type: 'text', path: true, message: 'A text file with your own persona for the voice (empty: a neutral default)', default: '' },
     { key: 'VOICE_HOTKEY', type: 'text', message: 'Global hotkey that starts a conversation and ends it (KDE Plasma sets it for you; elsewhere you are told the command to bind)', default: 'Ctrl+2' },
+    {
+      key: 'VOICE_TYPING',
+      type: 'confirm',
+      message: 'Let voice mode type your words into the window in front (Linux: installs ydotool and starts its ydotoold user service)?',
+      default: true,
+      when: (ctx) => ctx.os === 'linux',
+    },
     { key: 'VOICE_ORB', type: 'confirm', message: 'Show a floating orb that moves with the conversation while it runs (Linux, Qt 6)?', default: true, when: (ctx) => ctx.os === 'linux' },
   ],
 
@@ -243,9 +274,7 @@ export default {
       for (const f of SCRIPTS) await ctx.writeFile(path.join(binDir, f), ctx.template(`voice-mode/bin/${f}`), { onConflict: 'ask', mode: f === 'voice-mode.mjs' ? 0o755 : undefined });
       const launcher = path.join(ctx.home, '.local', 'bin', 'voice-mode');
       await ctx.writeFile(launcher, `#!/bin/sh\nexec "${node}" "${script}" "$@"\n`, { onConflict: 'ask', mode: 0o755 });
-      if (!ctx.platform.simulated && !(process.env.PATH || '').split(path.delimiter).includes(path.dirname(launcher))) {
-        ctx.todo(`add ${path.dirname(launcher)} to PATH, or run ${launcher} directly`);
-      }
+      await ctx.addUserPath(path.dirname(launcher));
     });
 
     await ctx.step('config', async () => {
@@ -278,6 +307,8 @@ export default {
         ctx.pkgInstall(ORB_PKGS);
       });
     }
+
+    if (ctx.os === 'linux' && ctx.get('VOICE_TYPING')) await ctx.step('typing (ydotool)', () => typing(ctx));
 
     await ctx.step('hotkey', () => hotkey(ctx, node, script));
 

@@ -14,6 +14,13 @@ Where it writes (`PREFS_TARGETS`):
 The file is yours: edit it freely. Re-running the installer asks before replacing a
 changed file and keeps a timestamped backup.
 
+After the targets, one question decides how many follow: `PREFS_REVIEW_EACH` (default no)
+writes the recommended set below without asking each one. Answer yes to go through them one
+by one. An answers file still sets any key it names either way.
+
+With `PREFS_WRITING_STYLE=ste` and the `firstmate` target, the same house style also goes to
+Firstmate's `config/brief-include.md`, so every worker writes its status lines and reports in it.
+
 ## Questions and the rules they write
 
 ### Language and tone

@@ -93,7 +93,7 @@ export default {
       type: 'choice',
       message: 'Default effort level',
       default: 'keep',
-      choices: [keep, { value: 'low' }, { value: 'medium' }, { value: 'high' }],
+      choices: [keep, ...EFFORTS.map((value) => ({ value }))],
     },
     {
       key: 'CLAUDE_THEME',
@@ -113,10 +113,10 @@ export default {
       key: 'CLAUDE_STATUSLINE',
       type: 'choice',
       message: 'Status line',
-      default: 'ccstatusline',
+      default: 'gauges',
       choices: [
+        { value: 'gauges', label: 'gauges - model, cost, branch, then bars for context, the 5-hour and the weekly limit with reset times (no extra install)' },
         { value: 'ccstatusline', label: 'ccstatusline - model, git branch, context and usage gauges (customizable)' },
-        { value: 'gauges', label: 'gauges - model, cost, branch, then bars for context, the 5-hour and the weekly limit with reset times' },
         { value: 'none', label: 'none - leave the status line alone' },
       ],
     },

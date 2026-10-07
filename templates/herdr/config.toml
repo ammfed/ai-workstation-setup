@@ -1,0 +1,18 @@
+# herdr settings written by ai-workstation-setup (agent-clis module).
+# Every key is documented in herdr's config reference; `herdr --default-config` prints them all.
+# Edit freely; a re-run of the setup keeps your edits. Reload a running herdr with:
+#   herdr server reload-config
+
+[theme]
+name = "tokyo-night"
+auto_switch = false
+
+[ui]
+# Group the agent panel by space, mark agent state with symbols, and name agents on pane borders.
+agent_panel_sort = "spaces"
+status_indicators = "symbols"
+show_agent_labels_on_pane_borders = true
+
+[ui.toast]
+# Notifications through your desktop's notification service.
+delivery = "system"

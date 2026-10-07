@@ -19,6 +19,8 @@ import { PATCH_MARKER, mergePixelSettings, patchPixelCli } from '../modules/agen
 import { PR_MERGE_RULES } from '../modules/claude-code/module.mjs';
 import { findOpenWhisprAppImage, openGuardSeconds } from '../modules/extras/module.mjs';
 import { dispatchProfiles, stowTokens } from '../modules/firstmate/module.mjs';
+import preferences from '../modules/preferences/module.mjs';
+import { renderBriefInclude } from '../modules/preferences/render.mjs';
 import skills from '../modules/skills/module.mjs';
 import { cursorBlinkMs } from '../modules/terminal/module.mjs';
 import { officeNames } from '../templates/pixel-agents/bin/pixel-office-names.mjs';
@@ -266,4 +268,63 @@ test('the lavish-axi wrapper sets no-open and runs the next lavish-axi on PATH',
   assert.equal(r.stdout.trim(), 'real no_open=1 page.html');
   const alone = spawnSync(path.join(bin, 'lavish-axi'), [], { encoding: 'utf8', env: { ...env, PATH: `${bin}:/usr/bin:/bin` } });
   assert.equal(alone.status, 127);
+});
+
+test('a file this run created is not backed up when the same run changes it again', async () => {
+  const home = tempHome();
+  const file = path.join(home, 'settings.json');
+  const ctx = context(home);
+  ctx.updateJson(file, (s) => (s.a = 1));
+  ctx.updateJson(file, (s) => (s.b = 2));
+  await ctx.writeFile(path.join(home, 'note.txt'), 'one');
+  await ctx.writeFile(path.join(home, 'note.txt'), 'two', { onConflict: 'replace' });
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), { a: 1, b: 2 });
+  assert.deepEqual(fs.readdirSync(home).filter((f) => f.includes('.bak-')), []);
+  // A file that was there before the run is still backed up, once.
+  const next = context(home);
+  next.updateJson(file, (s) => (s.c = 3));
+  assert.equal(fs.readdirSync(home).filter((f) => f.startsWith('settings.json.bak-')).length, 1);
+});
+
+test('addUserPath adds a folder to PATH in the shell profile once, and skips one already on PATH', { skip: !unix }, async () => {
+  const home = tempHome();
+  const ctx = new Context({ platform: { ...detectPlatform(), os: 'linux', shell: 'bash', home }, dryRun: false, interactive: false, answers: new Map(), prompter: null, repoRoot });
+  ctx.beginModule('test');
+  await ctx.addUserPath(path.join(home, '.local', 'bin'));
+  await ctx.addUserPath(path.join(home, '.local', 'bin'));
+  const rc = fs.readFileSync(path.join(home, '.bashrc'), 'utf8');
+  assert.equal(rc.split('\n').filter((l) => l.includes('.local/bin')).length, 1);
+  assert.match(rc, /case ":\$PATH:" in \*":\$HOME\/\.local\/bin:"\*\) ;; \*\) export PATH="\$HOME\/\.local\/bin:\$PATH" ;; esac/);
+  const first = process.env.PATH.split(path.delimiter)[0];
+  await ctx.addUserPath(first);
+  assert.doesNotMatch(fs.readFileSync(path.join(home, '.bashrc'), 'utf8'), new RegExp(first.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('a question with useDefault takes its default without asking', async () => {
+  const asked = [];
+  const prompter = { ask: async (q) => (asked.push(q.key), 'typed') };
+  const ctx = new Context({ platform: { ...detectPlatform(), home: tempHome() }, dryRun: true, interactive: true, answers: new Map([['SAVED', 'kept']]), prompter, repoRoot });
+  assert.equal(await ctx.ask({ key: 'QUIET', type: 'text', default: 'recommended', useDefault: () => true }), 'recommended');
+  assert.equal(await ctx.ask({ key: 'SAVED', type: 'text', default: 'recommended', useDefault: () => true }), 'kept');
+  assert.equal(await ctx.ask({ key: 'LOUD', type: 'text', default: 'recommended', useDefault: () => false }), 'typed');
+  assert.deepEqual(asked, ['LOUD']);
+});
+
+test('preferences ask where to write and whether to go through each one; the rest take the recommended answer unless you do', () => {
+  const qs = preferences.questions;
+  assert.deepEqual(qs.slice(0, 2).map((q) => q.key), ['PREFS_TARGETS', 'PREFS_REVIEW_EACH']);
+  assert.equal(qs[1].default, false);
+  const ctx = { get: (k) => ({ PREFS_REVIEW_EACH: false })[k] };
+  for (const q of qs.slice(2)) assert.equal(q.useDefault?.(ctx), true, q.key);
+  const each = { get: (k) => ({ PREFS_REVIEW_EACH: true })[k] };
+  for (const q of qs.slice(2)) assert.equal(q.useDefault(each), false, q.key);
+});
+
+test('the Firstmate brief include carries the house style to workers only when it is chosen', () => {
+  assert.equal(renderBriefInclude((k) => ({ PREFS_WRITING_STYLE: 'plain' })[k]), '');
+  const text = renderBriefInclude((k) => ({ PREFS_WRITING_STYLE: 'ste' })[k]);
+  assert.match(text, /^## Writing style/);
+  assert.match(text, /status lines, reports, questions and notes for firstmate/);
+  assert.match(text, /ASD-STE100/);
+  assert.doesNotMatch(text, /Delivery contract: mode=/);
 });

@@ -271,7 +271,7 @@ export default {
     if (ctx.get('VAULT_GIT')) {
       await ctx.step('git', () => {
         if (fs.existsSync(path.join(vault, '.git'))) return ctx.ok('vault is already a git repository');
-        ctx.run(`git init "${vault}"`);
+        ctx.run(`git init -b main "${vault}"`);
       });
     }
 
