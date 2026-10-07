@@ -33,6 +33,28 @@ or resets something you already answered. To change an answer, edit that line in
 the installer lists modules you have not selected, and you add one by putting its name in
 `MODULES` in `answers.env`.
 
+## Knowing when there is an update
+
+The `claude-code` module adds a Claude Code session-start hook (on by default; the
+question is `CLAUDE_UPDATE_REMINDER`). At most once every 24 hours it fetches the
+template's default branch, from `upstream` when your clone has one (a fork) and from
+`origin` otherwise, and counts the commits your clone does not have yet. When there are
+any, the session opens with one line:
+
+```text
+ai-workstation-setup: 4 updates available. Run ./update.sh, then ./install.sh (in ~/ai-workstation-setup).
+```
+
+It only fetches; it never changes your branch or your files. When you are up to date,
+offline, or the fetch takes more than a few seconds, it shows nothing and the session
+starts as usual. The time of the last check is kept in
+`~/.config/ai-workstation-setup/update-check.json`; delete that file to check again at the
+next session.
+
+To turn it off, set `CLAUDE_UPDATE_REMINDER=no` in `answers.env` and re-run the installer,
+which removes the hook. To silence it without the installer, for example on one machine,
+set the environment variable `AI_WORKSTATION_SETUP_NO_UPDATE_CHECK=1`.
+
 ## If you forked the template
 
 A fork's `origin` is your fork, not the template. The first time you run `update` it offers
