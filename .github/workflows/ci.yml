@@ -111,7 +111,7 @@ jobs:
           case "$(command -v node)" in /mnt/*) echo "node is the Windows one"; exit 1 ;; esac
           grep -q 'platform: wsl' ~/install.log
           test -x ~/.local/bin/open-in-windows
-          grep -q 'BROWSER=' ~/.bashrc
+          grep -q 'BROWSER=' ~/.profile ~/.bashrc
           grep -q 'On the Windows side' ~/install.log
           test -f ~/second-brain/AGENTS.md
           systemctl --user list-timers 2>/dev/null | grep -E 'daily-sync|news-digest' || crontab -l | grep -E 'daily-sync|news-digest'

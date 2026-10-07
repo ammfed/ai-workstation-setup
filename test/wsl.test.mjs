@@ -26,7 +26,6 @@ import {
 } from '../lib/wsl.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const unix = process.platform !== 'win32';
 
 const WSL1 = 'Linux version 4.4.0-19041-Microsoft (gcc version 5.4.0 (GCC) ) #1237-Microsoft';
 const WSL2 = 'Linux version 6.6.87.2-microsoft-standard-WSL2 (root@host) (gcc (GCC) 11.2.0) #1 SMP PREEMPT_DYNAMIC';
@@ -82,7 +81,8 @@ test('systemd counts as on only with systemd=true under [boot]', () => {
   assert.equal(systemdOn(''), false);
 });
 
-test('the systemd script turns it on in every starting state and keeps other settings', { skip: !unix && 'runs sh' }, () => {
+// The script runs inside Ubuntu only, so it is tested where GNU sed is (not macOS's BSD sed).
+test('the systemd script turns it on in every starting state and keeps other settings', { skip: process.platform !== 'linux' && 'needs GNU sed, as in Ubuntu' }, () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsl-conf-'));
   const cases = {
     missing: null,
