@@ -7,7 +7,8 @@ what the installer does about each known WSL problem.
 The short version: run `.\install.ps1` in PowerShell, press Enter for **Linux inside
 Windows**, press Enter again to keep the recommended Windows apps, and approve the one
 administrator prompt. Restart if Windows asks; the setup carries on by itself after you sign
-in. Ubuntu asks you to choose a Linux password, and later asks for it once more (sudo).
+in. Ubuntu asks you to choose a Linux password once. An AI assistant can run all of this for
+you: [install-with-ai.md](install-with-ai.md).
 
 Facts here come from Microsoft's WSL documentation (learn.microsoft.com/windows/wsl:
 *install*, *wsl-config*, *systemd*, *filesystems*, *networking*, *tutorials/gui-apps*,
@@ -63,11 +64,18 @@ The `wsl` module, in order. Each step that cannot go on prints its reason and wh
 5. **WSL update.** The older WSL built into Windows has no `wsl --version` and no systemd;
    then `wsl --update` runs (administrator).
 6. **Ubuntu** with `wsl --install -d Ubuntu --no-launch`, then **your Linux user** (named
-   after your Windows user; you choose its password) as the default user.
+   after your Windows user) as the default user. At a terminal you choose its password
+   there; when an AI assistant runs the setup (no terminal), the user starts without one and
+   a to-do says how to set it: `wsl.exe -u root passwd <user>`.
 7. **systemd** on in `/etc/wsl.conf` (`[boot]` `systemd=true`), then the distribution
    restarts (`wsl --terminate`). Ubuntu from `wsl --install` already has it on.
 8. **git and curl** in Ubuntu, **this template cloned to `~/ai-workstation-setup`** inside
    Linux, and **`./install.sh --yes`** there (the default modules, Firstmate included).
+   While it runs, sudo needs no password: a rule in
+   `/etc/sudoers.d/ai-workstation-setup-install` allows it and is removed when the run ends
+   (`wsl.exe -u root` already gives your Windows user root, so it adds no access). If a run
+   was killed midway, the next run removes it, or delete it with
+   `wsl.exe -u root rm /etc/sudoers.d/ai-workstation-setup-install`.
 9. **WezTerm config** in `%UserProfile%\.wezterm.lua`: new tabs open Ubuntu (WezTerm's WSL
    domain; Docker Desktop's own distributions are never picked).
 

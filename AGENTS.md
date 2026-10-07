@@ -8,6 +8,7 @@ A public, cross-platform installer template. `install.sh` (Linux, macOS, WSL) an
 
 - Never run it interactively without a terminal: use `--yes --answers <file>`
   (start from `answers.example.env`). Unknown keys are reported.
+- Installing for a person (not developing this repo): follow `docs/install-with-ai.md`.
 - Always `--dry-run` first. `--platform linux|macos|wsl|windows` simulates another
   OS, only with `--dry-run`; that is how every platform's plan is tested on one machine.
 - Secrets come only from environment variables (`CLICKUP_TOKEN`, `CONTEXT7_API_KEY`, `OPENROUTER_API_KEY`)

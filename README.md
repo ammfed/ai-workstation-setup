@@ -9,6 +9,22 @@ preferences (how agents report, ask, merge and research) as a rules file.
 It is a template: it installs tools and writes starter configuration, and asks you
 for everything personal (paths, preferences, tokens). It contains no one's data.
 
+## Two ways to install
+
+**Let your AI assistant do it.** Paste this to Claude (Claude Code, or the Code tab of the
+Claude desktop app) or another assistant that can run commands:
+
+> Set up this computer with https://github.com/ammfed/ai-workstation-setup. Follow
+> docs/install-with-ai.md in that repository: show me the plan before you change anything,
+> and tell me exactly when I need to click, restart, type a password or sign in.
+
+It shows you the plan, runs the install, and tells you the few moments it needs you: an
+administrator prompt and maybe a restart on Windows, your password, and signing in.
+[docs/install-with-ai.md](docs/install-with-ai.md) is its guide.
+
+**Do it yourself.** One command and a few questions: see [Quick start](#quick-start). No
+assistant yet? This way also installs Claude for you.
+
 ## What's in this setup
 
 Everything below is installed from its own official source by the module named in
@@ -162,6 +178,7 @@ Without `--answers`, a run reads and saves `answers.env` itself; `--save-answers
 also records a run's answers elsewhere. Secrets are
 never read from or written to answers files: export `CLICKUP_TOKEN`,
 `CONTEXT7_API_KEY` or `OPENROUTER_API_KEY`, or sign in afterwards. See `./install.sh --help`.
+An AI assistant installing for someone follows [docs/install-with-ai.md](docs/install-with-ai.md).
 
 ## Sharing this setup
 

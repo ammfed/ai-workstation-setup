@@ -21,6 +21,9 @@ const RUNONCE = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce';
 // "!" keeps the entry until the command has run, so a failed start is tried again.
 const RUNONCE_NAME = '!ai-workstation-setup';
 const RUNONCE_MAX = 260;
+// While the setup runs inside Linux, sudo needs no password: wsl.exe -u root already gives
+// root to this Windows user, so the rule adds no access. It is removed when the run ends.
+const SUDOERS = '/etc/sudoers.d/ai-workstation-setup-install';
 // Windows Installer's "the user cancelled", returned when nobody approves the administrator prompt.
 const CANCELLED = 1223;
 
@@ -165,8 +168,13 @@ export default {
     const ok = await ctx.step('Linux user', () => {
       const uid = ctx.capture('wsl.exe -e id -u');
       if (probing && uid && uid !== '0') return passed('your Linux user exists');
-      ctx.info(`Ubuntu asks for a password for your Linux user "${user}" (you type it twice; nothing shows while typing)`);
-      ctx.run(inLinux(`id -u ${user} >/dev/null 2>&1 || adduser --gecos ${user} ${user}; usermod -aG sudo ${user} && { grep -q '^default=' /etc/wsl.conf 2>/dev/null || printf '\\n[user]\\ndefault=${user}\\n' >> /etc/wsl.conf; }`, 'root'));
+      // At a terminal, Ubuntu asks for the password now; without one (an AI assistant runs this),
+      // the user starts with no password and the person chooses it afterwards.
+      const ask = ctx.terminal;
+      if (ask) ctx.info(`Ubuntu asks for a password for your Linux user "${user}" (you type it twice; nothing shows while typing)`);
+      const add = ask ? `adduser --gecos ${user} ${user}` : `adduser --disabled-password --gecos ${user} ${user}`;
+      ctx.run(inLinux(`id -u ${user} >/dev/null 2>&1 || ${add}; usermod -aG sudo ${user} && { grep -q '^default=' /etc/wsl.conf 2>/dev/null || printf '\\n[user]\\ndefault=${user}\\n' >> /etc/wsl.conf; }`, 'root'));
+      if (!ask) ctx.todo(`choose your Linux password: wsl.exe -u root passwd ${user}   (in PowerShell; sudo inside Ubuntu asks for it)`);
       ctx.run(`wsl.exe --terminate ${name}`); // the default user takes effect once the distribution restarts
       return passed(`Linux user ${user} is the default`);
     });
@@ -194,9 +202,14 @@ export default {
     const url = cloneUrl(ctx.capture(`git -C ${ps(ctx.repoRoot)} remote get-url origin`));
     await ctx.step('setup inside Linux', () => {
       ctx.run(inLinux(`test -d ${LINUX_CLONE} || git clone ${url} ${LINUX_CLONE}`));
-      ctx.info(`Linux asks for your Linux password once (sudo), then installs everything in ${LINUX_CLONE}`);
-      // sudo -v unlocks sudo once; the loop keeps it unlocked while the install runs, then stops.
-      ctx.run(inLinux(`cd ${LINUX_CLONE} && sudo -v && { (while sleep 50; do sudo -n -v || exit; done) & k=$!; ./install.sh --yes; s=$?; kill $k; exit $s; }`));
+      const linuxUser = ctx.capture('wsl.exe -e id -un') || user;
+      ctx.info(`installs everything in ${LINUX_CLONE} with no password asked (sudo is allowed without one until the run ends)`);
+      ctx.run(inLinux(`printf '%s ALL=(ALL) NOPASSWD:ALL\\n' ${linuxUser} > ${SUDOERS} && chmod 440 ${SUDOERS}`, 'root'));
+      try {
+        ctx.run(inLinux(`cd ${LINUX_CLONE} && ./install.sh --yes`));
+      } finally {
+        ctx.run(inLinux(`rm -f ${SUDOERS}`, 'root'));
+      }
       ctx.ok('setup finished inside Linux; open Ubuntu from the Start menu to use it');
     });
 

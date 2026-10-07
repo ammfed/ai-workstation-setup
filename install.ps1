@@ -17,6 +17,14 @@ $assumeYes = ($argv -contains '--yes') -or ($argv -contains '-y') -or ($argv -co
 # which Windows apps to add (Enter keeps the recommended set); Windows only asks nothing more.
 # Either way every dependency is then installed without asking again.
 $chosen = @('--yes', '-y', '--non-interactive', '--modules', '--answers', '--list', '--help', '-h', '--platform') | Where-Object { $argv -contains $_ }
+if (-not $chosen -and [Console]::IsInputRedirected) {
+    # No one to answer (an AI assistant's shell, a pipe): name the unattended commands instead.
+    Write-Host 'No terminal to ask on. Run one of these (see docs/install-with-ai.md):'
+    Write-Host '  .\install.ps1 --modules wsl --yes    Linux inside Windows (recommended)'
+    Write-Host '  .\install.ps1 --yes                  Windows only'
+    Write-Host 'Add --dry-run first to see the plan without changing anything.'
+    exit 2
+}
 if (-not $chosen) {
     Write-Host 'How should this machine be set up?'
     Write-Host '  1) Linux inside Windows (recommended): installs WSL and Ubuntu, then everything inside it, firstmate included'
