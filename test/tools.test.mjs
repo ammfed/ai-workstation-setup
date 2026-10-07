@@ -106,7 +106,6 @@ test('the shared version check accepts what the CLIs print', async () => {
     ['no-mistakes', 'no-mistakes version v1.72.0 (9fcc865) 2026-09-08T13:12:43Z\n'],
     ['herdr', 'herdr 0.9.1\n'],
     ['codex', 'codex-cli 0.156.0\n'],
-    ['hermes', 'Hermes Agent v0.21.0 (2026.8.31)\n'],
     ['agent-device', '0.21.22\n'],
     ['gws', 'gws 0.22.5\nThis is not an officially supported Google product.\n'],
   ];

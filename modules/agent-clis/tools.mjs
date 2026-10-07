@@ -161,20 +161,6 @@ export const TOOLS = {
     signIn: 'run `pi` and sign in to a model provider',
     check: versionCheck('pi'),
   },
-  // github.com/NousResearch/hermes-agent README "Quick Install"; the installer's own flag skips
-  // its setup wizard, which `hermes setup` runs later.
-  hermes: {
-    name: 'Hermes Agent',
-    bin: 'hermes',
-    about: "Nous Research's self-improving agent: CLI, messaging gateway and scheduled jobs (github.com/NousResearch/hermes-agent)",
-    install: {
-      unix: 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --non-interactive',
-      windows: '& ([scriptblock]::Create((irm https://hermes-agent.nousresearch.com/install.ps1))) -NonInteractive',
-    },
-    pathHints: ['~/.local/bin'],
-    signIn: 'hermes setup   (picks a model provider and signs in)',
-    check: versionCheck('hermes'),
-  },
   agy: {
     name: 'Antigravity CLI',
     bin: 'agy',
