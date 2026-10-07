@@ -35,6 +35,11 @@ fails its first steer to a worker (upstream issue
 | `FIRSTMATE_WATCH_UPDATES` | `config/watched-tools.json` | Firstmate announces new releases of itself, quota-axi and lavish-axi. |
 | `FIRSTMATE_STOW_REMINDER` | `.claude/settings.local.json` in the clone | On by default. Once the main session's context passes `FIRSTMATE_STOW_REMINDER_TOKENS` (default 350000), its next prompt carries one reminder to run `/stow` (save its state) before anything else; it fires again only after the context drops back below 90% of that. Workers and second mates start in their own folders, so they never see it. It reuses the claude-code module's context-reminder hook script. |
 
+The preferences module adds one more: with `PREFS_WRITING_STYLE=ste` and the `firstmate`
+target, it writes `config/brief-include.md`, which Firstmate appends to every worker brief
+(its docs/configuration.md, "Home brief include"), so workers write their status lines and
+reports to Firstmate in the same plain-English house style.
+
 Each file is written only when it differs, and a changed file is never replaced without asking.
 
 ## Second mates

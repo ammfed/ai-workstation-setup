@@ -16,6 +16,21 @@ const STE_RULES = [
   'The house style does not apply to anything written as the user for other people (documents, emails, decks, pull request text): those follow the rules for outward writing.',
 ];
 
+// The same house style for Firstmate's workers, as config/brief-include.md: what they write to
+// firstmate, never the deliverable itself. Empty when the style is not chosen.
+export function renderBriefInclude(get) {
+  if (get('PREFS_WRITING_STYLE') !== 'ste') return '';
+  return [
+    '## Writing style: Simplified Technical English (house style)',
+    '',
+    'Write your status lines, reports, questions and notes for firstmate in this style (based on ASD-STE100, adapted):',
+    ...STE_RULES.slice(1, 8).map((rule, i) => `${i + 1}. ${rule}`),
+    '',
+    'This style does not apply to the deliverable itself when it is written for other people (product copy, user-facing text, documents written as the user, code, commit messages, pull request descriptions): follow the project\'s and the brief\'s own rules there.',
+    '',
+  ].join('\n');
+}
+
 export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
   const sections = [];
   const section = (title, lines) => {

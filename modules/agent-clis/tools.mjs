@@ -93,6 +93,22 @@ export const TOOLS = {
   ctx7: { name: 'ctx7', install: npm('ctx7'), about: 'Context7 CLI: current library docs for agents', check: versionCheck('ctx7') },
   'notion-axi': { name: 'notion-axi', install: npm('notion-axi'), about: 'Notion for agents (github.com/maximebrmd/notion-axi)', check: versionCheck('notion-axi') },
   'gws-axi': { name: 'gws-axi', install: npm('gws-axi'), about: 'Google Workspace for agents: Gmail, Calendar, Docs, Drive (github.com/JarvusInnovations/gws-axi)', check: versionCheck('gws-axi') },
+  // github.com/googleworkspace/cli README "Installation": npm, needs Node 18+ and your own Google Cloud OAuth client.
+  gws: {
+    name: 'Google Workspace CLI',
+    bin: 'gws',
+    about: "Google's Workspace CLI: every Workspace API from the terminal (github.com/googleworkspace/cli)",
+    install: npm('@googleworkspace/cli'),
+    signIn: 'gws auth setup   (once, for a Google Cloud OAuth client), then gws auth login',
+    check: versionCheck('gws'),
+  },
+  // github.com/callstack/agent-device README: npm install -g agent-device@latest.
+  'agent-device': {
+    name: 'agent-device',
+    about: 'phone, tablet, TV and desktop app automation for agents: tap, type, read the screen (github.com/callstack/agent-device)',
+    install: npm('agent-device@latest'),
+    check: versionCheck('agent-device'),
+  },
   'no-mistakes': {
     name: 'no-mistakes',
     about: 'validation pipeline: review, test, push, PR (firstmate needs it)',
@@ -144,6 +160,20 @@ export const TOOLS = {
     minNode: [22, 19],
     signIn: 'run `pi` and sign in to a model provider',
     check: versionCheck('pi'),
+  },
+  // github.com/NousResearch/hermes-agent README "Quick Install"; the installer's own flag skips
+  // its setup wizard, which `hermes setup` runs later.
+  hermes: {
+    name: 'Hermes Agent',
+    bin: 'hermes',
+    about: "Nous Research's self-improving agent: CLI, messaging gateway and scheduled jobs (github.com/NousResearch/hermes-agent)",
+    install: {
+      unix: 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --non-interactive',
+      windows: '& ([scriptblock]::Create((irm https://hermes-agent.nousresearch.com/install.ps1))) -NonInteractive',
+    },
+    pathHints: ['~/.local/bin'],
+    signIn: 'hermes setup   (picks a model provider and signs in)',
+    check: versionCheck('hermes'),
   },
   agy: {
     name: 'Antigravity CLI',

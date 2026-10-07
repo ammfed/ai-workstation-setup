@@ -42,11 +42,12 @@ Each `modules/<name>/module.mjs` default-exports `{ name, title, description, or
 platforms, unsupported?, requires?, default?, questions?, install(ctx) }`;
 `lib/installer.mjs` `loadModules` validates it. `platforms` lists supported OSes;
 `unsupported[os]` is the reason printed when skipped. Questions are asked up front
-(`type`: text, confirm, choice, multi, secret; `when(ctx)` for conditions).
+(`type`: text, confirm, choice, multi, secret; `when(ctx)` for conditions; `useDefault(ctx)`
+takes the saved answer or default without asking).
 
 `install(ctx)` must go through `lib/context.mjs` for every side effect, so dry-run,
 idempotency and backups hold: `ctx.ensureTool`, `ctx.run`, `ctx.pkgInstall`,
-`ctx.npmGlobal`, `ctx.writeFile`, `ctx.updateJson`, `ctx.setUserEnv`, and
+`ctx.npmGlobal`, `ctx.writeFile`, `ctx.updateJson`, `ctx.setUserEnv`, `ctx.addUserPath`, and
 `lib/claude.mjs` for Claude Code settings, hooks and skills. Wrap each unit in
 `ctx.step` so one failure does not stop the module; throw `Skip` for a reasoned skip;
 use `ctx.todo` for anything the user must do by hand. Where a tool can prove it works

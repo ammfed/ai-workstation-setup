@@ -97,7 +97,7 @@ Everything the decision model can pick, and how plain code does it:
 | "lock my screen" | Locks the screen, only once the sentence has ended | the lock shortcut (Plasma), else `loginctl lock-session` |
 | "make a note: buy milk tomorrow" | Writes a new note with those words and opens it | a new `.md` file in `actions.notes.folder` (default: a `Notes` folder in your documents), opened with the default app |
 | "search the web for cheap flights to Rome" | Opens a web search for those words | `actions.searchUrl` in the default browser |
-| "type hello from voice mode" | Types those words into the window in front, once the sentence has ended | `ydotool` (needs `ydotoold` running); characters follow your keyboard layout |
+| "type hello from voice mode" | Types those words into the window in front, once the sentence has ended | `ydotool` (needs `ydotoold` running); characters follow your keyboard layout. `VOICE_TYPING` (on by default on Linux) installs ydotool and starts its `ydotool.service` user unit; when your user cannot write `/dev/uinput`, the summary gives the one-time udev rule and `input` group commands |
 
 On KDE Plasma every window, media, volume, brightness, screenshot and lock action is one of
 the desktop's own global shortcuts, invoked over D-Bus exactly as if the key were pressed, so
