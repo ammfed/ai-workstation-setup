@@ -59,7 +59,9 @@ The person pastes something like this to their assistant:
      restart, a PowerShell window finishes the setup on its own. If they start you again,
      run the same command once more; it picks up where it stopped.
    - Inside Ubuntu, sudo needs no password while the setup runs (a temporary rule that the
-     run removes at its end), so nothing waits for typing.
+     run removes at its end), so nothing waits for typing. If the run is cut off, the rule
+     still goes: the next run removes it first, and so does the next start of Ubuntu (a
+     `[boot]` command in `/etc/wsl.conf`). Never add such a rule yourself.
 
 5. **Hand over.** The Linux user has no password yet. Relay the to-do lines, typically:
    - choose a Linux password: `wsl.exe -u root passwd <user>` (in PowerShell);

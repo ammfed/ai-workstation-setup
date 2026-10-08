@@ -73,9 +73,17 @@ The `wsl` module, in order. Each step that cannot go on prints its reason and wh
    Linux, and **`./install.sh --yes`** there (the default modules, Firstmate included).
    While it runs, sudo needs no password: a rule in
    `/etc/sudoers.d/ai-workstation-setup-install` allows it and is removed when the run ends
-   (`wsl.exe -u root` already gives your Windows user root, so it adds no access). If a run
-   was killed midway, the next run removes it, or delete it with
-   `wsl.exe -u root rm /etc/sudoers.d/ai-workstation-setup-install`.
+   (`wsl.exe -u root` already gives your Windows user root, so it adds no access). A run
+   cut off midway (crash, restart, closed window) cannot leave it behind for long:
+   - every later run removes a leftover rule before anything else: the Windows side first
+     thing, and `./install.sh` inside WSL before its modules (a setup run the Windows side
+     started keeps the rule it was given);
+   - the next start of Ubuntu removes it: `/etc/wsl.conf` gets
+     `command=rm -f /etc/sudoers.d/ai-workstation-setup-install` under `[boot]`, which WSL
+     runs as root through `/bin/sh -c` at every start; an existing boot command is kept and
+     the removal is added after it.
+
+   By hand: `wsl.exe -u root rm -f /etc/sudoers.d/ai-workstation-setup-install`.
 9. **WezTerm config** in `%UserProfile%\.wezterm.lua`: new tabs open Ubuntu (WezTerm's WSL
    domain; Docker Desktop's own distributions are never picked).
 

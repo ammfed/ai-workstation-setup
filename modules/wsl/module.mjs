@@ -1,5 +1,5 @@
 import { Skip } from '../../lib/context.mjs';
-import { detectWsl, systemdOnScript, virtualizationProblem } from '../../lib/wsl.mjs';
+import { TEMP_SUDOERS, TEMP_SUDO_ENV, bootCleanupScript, detectWsl, systemdOnScript, virtualizationProblem } from '../../lib/wsl.mjs';
 import { CONFIG_DEFAULTS, installFontWindows, writeConfig } from '../terminal/module.mjs';
 
 // Sets up Linux inside Windows (WSL) and runs the whole setup in it, firstmate included.
@@ -22,8 +22,9 @@ const RUNONCE = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce';
 const RUNONCE_NAME = '!ai-workstation-setup';
 const RUNONCE_MAX = 260;
 // While the setup runs inside Linux, sudo needs no password: wsl.exe -u root already gives
-// root to this Windows user, so the rule adds no access. It is removed when the run ends.
-const SUDOERS = '/etc/sudoers.d/ai-workstation-setup-install';
+// root to this Windows user, so the rule adds no access. It is removed when the run ends, by
+// the next run before anything else, and at the next start of the distribution.
+const SUDOERS = TEMP_SUDOERS;
 // Windows Installer's "the user cancelled", returned when nobody approves the administrator prompt.
 const CANCELLED = 1223;
 
@@ -109,6 +110,12 @@ export default {
       ctx.ok(msg);
       return true;
     };
+
+    // Before anything else: a rule left by a run that was cut off goes now.
+    await ctx.step('leftover sudo rule', () => {
+      if (probing && ctx.capture('wsl.exe -e true') === null) return; // no Linux yet, so no rule
+      ctx.run(inLinux(`rm -f ${SUDOERS}`, 'root'));
+    });
 
     const build = Number(ctx.capture('[Environment]::OSVersion.Version.Build'));
     if (probing && build && build < MIN_BUILD) {
@@ -204,9 +211,11 @@ export default {
       ctx.run(inLinux(`test -d ${LINUX_CLONE} || git clone ${url} ${LINUX_CLONE}`));
       const linuxUser = ctx.capture('wsl.exe -e id -un') || user;
       ctx.info(`installs everything in ${LINUX_CLONE} with no password asked (sudo is allowed without one until the run ends)`);
+      // The next start of the distribution removes the rule even if this run is cut off.
+      ctx.run(inLinux(bootCleanupScript('/etc/wsl.conf'), 'root'));
       ctx.run(inLinux(`printf '%s ALL=(ALL) NOPASSWD:ALL\\n' ${linuxUser} > ${SUDOERS} && chmod 440 ${SUDOERS}`, 'root'));
       try {
-        ctx.run(inLinux(`cd ${LINUX_CLONE} && ./install.sh --yes`));
+        ctx.run(inLinux(`cd ${LINUX_CLONE} && ${TEMP_SUDO_ENV}=1 ./install.sh --yes`));
       } finally {
         ctx.run(inLinux(`rm -f ${SUDOERS}`, 'root'));
       }

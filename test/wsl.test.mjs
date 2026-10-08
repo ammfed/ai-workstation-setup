@@ -13,6 +13,9 @@ import { test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   SIDES,
+  TEMP_SUDOERS,
+  bootCleanupScript,
+  leftoverSudoCleanup,
   WSL_SIDES,
   cloneLocationProblem,
   detectWsl,
@@ -154,4 +157,49 @@ test('docs/windows-wsl.md states the same decision for every module', () => {
     assert.ok(row.split('|')[2].trim() === label[side], `${name}: docs say "${row.split('|')[2].trim()}", the code says "${label[side]}"`);
   }
   assert.match(fs.readFileSync(path.join(repoRoot, 'README.md'), 'utf8'), /docs\/windows-wsl\.md/, 'README links the map');
+});
+
+// A run cut off (crash, restart, killed) must not leave the temporary NOPASSWD rule behind.
+test('the next Ubuntu start removes the temporary sudo rule, keeping any boot command', { skip: process.platform !== 'linux' && 'needs GNU sed, as in Ubuntu' }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsl-boot-'));
+  const rm = `rm -f ${TEMP_SUDOERS}`;
+  const cases = {
+    missing: null,
+    'systemd only': '[boot]\nsystemd=true\n',
+    'cron command': '[boot]\nsystemd=true\ncommand=service cron start\n[user]\ndefault=someone\n',
+    'no boot section': '[user]\ndefault=someone\n',
+  };
+  for (const [name, text] of Object.entries(cases)) {
+    const file = path.join(dir, `${name.replace(/ /g, '-')}.conf`);
+    if (text !== null) fs.writeFileSync(file, text);
+    const r = spawnSync('sh', ['-c', bootCleanupScript(file)], { encoding: 'utf8' });
+    assert.equal(r.status, 0, `${name}: ${r.stderr}`);
+    const after = fs.readFileSync(file, 'utf8');
+    const commands = after.split('\n').filter((l) => /^\s*command\s*=/.test(l));
+    assert.equal(commands.length, 1, `${name}: one boot command:\n${after}`);
+    assert.ok(commands[0].includes(rm), `${name}: the boot command removes the rule:\n${after}`);
+    assert.match(after, /\[boot\][^[]*command=/, `${name}: under [boot]`);
+    if (text?.includes('service cron start')) assert.match(commands[0], /^command=service cron start; rm -f /, `${name}: the existing command is kept`);
+    if (text?.includes('systemd=true')) assert.match(after, /systemd=true/, name);
+    if (text?.includes('default=someone')) assert.match(after, /\[user\]\ndefault=someone/, name);
+    spawnSync('sh', ['-c', bootCleanupScript(file)]);
+    assert.equal(fs.readFileSync(file, 'utf8'), after, `${name}: idempotent`);
+    // The boot command really removes the file: run it as WSL would, through sh.
+    const fake = path.join(dir, 'rule');
+    fs.writeFileSync(fake, 'x');
+    // An earlier boot command that fails must not stop the removal ("service cron start" -> false).
+    spawnSync('sh', ['-c', commands[0].replace(/^\s*command\s*=/, '').replace('service cron start', 'false').split(TEMP_SUDOERS).join(fake)]);
+    assert.equal(fs.existsSync(fake), false, `${name}: the command removes the file`);
+  }
+  assert.doesNotMatch(bootCleanupScript('/etc/wsl.conf'), /"/, 'no double quotes, so Windows PowerShell 5.1 hands it to wsl.exe intact');
+});
+
+test('a run inside WSL removes a leftover rule first, but not the one its own setup run holds', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wsl-sudoers-'));
+  const file = path.join(dir, 'ai-workstation-setup-install');
+  assert.equal(leftoverSudoCleanup({ file, env: {} }), null, 'nothing to remove');
+  fs.writeFileSync(file, 'someone ALL=(ALL) NOPASSWD:ALL\n');
+  assert.equal(leftoverSudoCleanup({ file, env: {} }), `sudo -n rm -f ${file}`);
+  assert.equal(leftoverSudoCleanup({ file, env: { AI_WORKSTATION_SETUP_TEMP_SUDO: '1' } }), null, 'the Windows-driven run holds it on purpose');
+  assert.equal(TEMP_SUDOERS, '/etc/sudoers.d/ai-workstation-setup-install');
 });
