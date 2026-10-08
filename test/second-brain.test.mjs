@@ -1,5 +1,5 @@
 // Tests for the optional vault tools in templates/second-brain/bin: search ranking, capture,
-// the bookmark converter, and the garden pass with a stand-in agent. Everything runs in a
+// the bookmark converter, and the garden pass and ingest with stand-in agents. Everything runs in a
 // throwaway vault of invented notes.
 // Run: node --test test/second-brain.test.mjs
 
@@ -153,4 +153,55 @@ test('garden: a pass that breaks the contract is discarded; a slice with your ed
   assert.match(fs.readFileSync(path.join(root, 'people', 'Sam Example.md'), 'utf8'), /my edit in progress/);
   removeVault(root);
   fs.rmSync(removed, { recursive: true, force: true });
+});
+
+// A stand-in ingest agent: it hangs on a file whose name has "stuck" in it and finishes any other.
+function ingestAgent(root) {
+  const file = path.join(root, '..', `ingest-agent-${path.basename(root)}.mjs`);
+  fs.writeFileSync(file, `
+import fs from 'node:fs';
+if (/stuck/.test(fs.readFileSync(0, 'utf8'))) setTimeout(() => {}, 60000);
+`);
+  return { AGENT_CLI: process.execPath, AGENT_CLI_ARGS: file };
+}
+
+function rawFiles(...names) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'raw-'));
+  for (const name of names) fs.writeFileSync(path.join(dir, name), `${name}\n`);
+  return dir;
+}
+
+const ledgerRows = (root) => {
+  const file = path.join(root, '.ingest', 'ledger.tsv');
+  return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim().split('\n').map((l) => l.split('\t')).map((c) => `${c[4]} ${c[3]}`) : [];
+};
+
+test('ingest: a stuck file is stopped, ledgered as failed in one line, and the run goes on', () => {
+  const root = vault();
+  fs.writeFileSync(path.join(root, 'prompts', 'ingest.md'), 'Ingest {{FILENAME}}\n');
+  const raw = rawFiles('a.md', 'b-stuck.md', 'c.md');
+  const r = node(root, 'ingest.mjs', ['--timeout', '0.02'], { ...ingestAgent(root), RAW_DIR: raw });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stderr, /^agent failed on: b-stuck\.md \(stopped after 0\.02 min\)$/m);
+  assert.deepEqual(ledgerRows(root), ['a.md ingested', 'b-stuck.md failed', 'c.md ingested']);
+  removeVault(root);
+  fs.rmSync(raw, { recursive: true, force: true });
+});
+
+test('ingest: a past deadline starts no file, and a file cut off by the deadline is taken again next run', () => {
+  const root = vault();
+  fs.writeFileSync(path.join(root, 'prompts', 'ingest.md'), 'Ingest {{FILENAME}}\n');
+  const raw = rawFiles('a-stuck.md', 'b.md');
+  let r = node(root, 'ingest.mjs', [], { ...ingestAgent(root), RAW_DIR: raw, INGEST_DEADLINE: String(Math.floor(Date.now() / 1000) - 1) });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /ingest: 0 file\(s\) handled\ningest: stopped at the deadline; the rest wait for the next run/);
+  assert.deepEqual(ledgerRows(root), []);
+
+  r = node(root, 'ingest.mjs', ['--deadline', String(Math.floor(Date.now() / 1000) + 2)], { ...ingestAgent(root), RAW_DIR: raw });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stderr, /ingest: a-stuck\.md was cut off at the deadline; the next run takes it again/);
+  assert.match(r.stdout, /stopped at the deadline/);
+  assert.deepEqual(ledgerRows(root), [], 'the cut-off file is not ledgered');
+  removeVault(root);
+  fs.rmSync(raw, { recursive: true, force: true });
 });

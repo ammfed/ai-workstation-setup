@@ -12,7 +12,7 @@ Every step is plain scripting, in this order:
 
 | Step | What it does | Never |
 | --- | --- | --- |
-| `pull` | Fetches each repo and fast-forwards it when it is on its default branch, clean and strictly behind. Dirty, diverged or off-branch repos are reported. | force, stash, reset, merge commit, rebase |
+| `pull` | Fetches each repo and fast-forwards it when it is on its default branch, clean and strictly behind. Dirty, diverged or off-branch repos are reported; a diverged one also says which files both sides change and whether `git merge-tree` finds a conflict, and names the merge command when it does not. | force, stash, reset, merge commit, rebase |
 | `watch` | Repos another tool updates (for example a Firstmate clone): reported when their remote has moved on, with read-only probes. | fetch, pull or any other change |
 | `vault` | Checks the raw folder exists and holds files, runs the vault's ingest in dry-run mode, and when there are new raw files runs the vault's command (the ingest, or its daily script) on at most `limit` of them a day (50 by default). A missing or empty raw folder is a failure, not "nothing new". | ingest into a vault with uncommitted changes (`requireClean`) |
 | `commands` | Runs each command (such as Firstmate's tool-update check) and reports what it prints. The `sync` choice adds the ledger's task sync check (`sync.mjs check`), which fixes settled drift between linked items and prints one line ([task sync](ledger.md#the-task-sync)). | install anything |
@@ -116,7 +116,12 @@ Paths may start with `~`.
   a daily script should pass the ingest's own output through.
 - `vault.limit` is the most raw files a run processes (`DAILY_SYNC_INGEST_LIMIT`, 50 by
   default). Each file is an agent run; the rest wait for the next day. The whole run is
-  stopped after `vault.timeoutMin` minutes (120 by default).
+  stopped after `vault.timeoutMin` minutes (120 by default), and the report then says how many
+  files it got through and that the command's later steps (such as a commit or push) did not
+  run. The command gets `INGEST_DEADLINE`, a Unix time a tenth of that limit (at most 10
+  minutes) before it: the template's `bin/ingest.mjs` starts no file after it and leaves a file
+  it cuts off for the next run, and the report then counts the files still waiting. A daily
+  script that runs its own ingest should pass it on (`--deadline "$INGEST_DEADLINE"`).
 - A version source is `{ "file" | "dir" | "command", "pattern" }`; the highest version the
   pattern's first group matches on each side is compared.
 - `clickup.lists` can also point at a JSON file you already keep:

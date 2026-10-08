@@ -210,6 +210,24 @@ function divergence(p, upstream) {
   return `Local commits not upstream:\n${mine}\n\nUpstream commits not local:\n${theirs}`;
 }
 
+// How a diverged branch would merge, without touching the work tree, the index or any ref:
+// which files both sides changed, and whether `git merge-tree` (git 2.38 or later) finds a
+// conflict. A clean merge keeps every commit on both sides, so its command is named.
+function mergePreview(p, upstream) {
+  const base = git(p, ['merge-base', 'HEAD', upstream]).out.trim();
+  const changed = (to) => new Set(git(p, ['diff', '--name-only', base, to]).out.split('\n').filter(Boolean));
+  const theirs = changed(upstream);
+  const both = [...changed('HEAD')].filter((f) => theirs.has(f));
+  const t = git(p, ['merge-tree', '--write-tree', '--name-only', '--no-messages', 'HEAD', upstream]);
+  const merge = `\`git -C ${tilde(p)} merge ${upstream}\` keeps every commit on both sides`;
+  if (t.code === 1) {
+    const conflicts = t.out.split('\n').slice(1).filter(Boolean);
+    return `${both.length ? `both sides change ${sample(both)}, and ` : ''}a merge conflicts in ${sample(conflicts)}; that needs a person`;
+  }
+  if (t.code !== 0) return both.length ? `both sides change ${sample(both)}` : 'the two sides change no file in common';
+  return both.length ? `both sides change ${sample(both)} but merge without conflict: ${merge}` : `the two sides change no file in common and merge cleanly: ${merge}`;
+}
+
 // Fast-forward only: a clean default branch that is strictly behind. Anything else is
 // reported and left exactly as it is: never a force, stash, reset, merge commit or rebase.
 function pull(entry) {
@@ -233,7 +251,7 @@ function pull(entry) {
     return add('attention', `${key}:branch`, `${label}: ${upstream} has ${behind} new commit(s), but it is on ${branch || 'a detached HEAD'}, not ${def}; not pulled`);
   }
   if (ahead) {
-    return add('attention', `${key}:diverged`, `${label}: diverged from ${upstream} (${ahead} local, ${behind} upstream commit(s)); not pulled`, {
+    return add('attention', `${key}:diverged`, `${label}: diverged from ${upstream} (${ahead} local, ${behind} upstream commit(s)); not pulled; ${mergePreview(p, upstream)}`, {
       explain: true,
       evidence: divergence(p, upstream),
     });
@@ -318,12 +336,22 @@ function vault(v) {
       return add('attention', 'vault:dirty', `vault: ${pending} new raw file(s) waiting, but the vault has uncommitted changes (${sample(dirty)}); ingest runs once they are committed or discarded`);
     }
   }
-  const r = sh(String(v.run).split('{limit}').join(String(limit)), { cwd: vp, env, timeoutSec: (Number(v.timeoutMin) || 120) * 60 });
+  // The run command is stopped at timeoutMin. INGEST_DEADLINE (Unix seconds) comes earlier, by
+  // a tenth of the time or 10 minutes at most, so an ingest that honours it (the template's
+  // bin/ingest.mjs does) stops starting files in time and the command's own last steps still run.
+  const timeoutSec = (Number(v.timeoutMin) || 120) * 60;
+  const deadline = Math.floor(Date.now() / 1000 + timeoutSec - Math.min(600, timeoutSec / 10));
+  const r = sh(String(v.run).split('{limit}').join(String(limit)), { cwd: vp, env: { INGEST_DEADLINE: String(deadline), ...env }, timeoutSec });
   const out = r.out + r.err;
   const runs = (out.match(/^ingest(?:ing:| \()/gm) || []).length;
   modelCalls.ingest += runs;
+  if (r.code === 'timeout') {
+    return add('failed', 'vault:ingest', `vault: ingest was stopped at its ${timeoutSec / 60}-minute limit after ${runs} file(s), so anything the run command does after the ingest (such as a commit or push) did not run; lower vault.limit or raise vault.timeoutMin. Last line: ${clip(lastLine(out))}`);
+  }
   if (r.code !== 0) return add('failed', 'vault:ingest', `vault: ingest failed (${exitText(r)}): ${clip(lastLine(out))}`);
-  add('changed', 'vault:ingest', `vault: ingested ${runs} new raw file(s) with the vault's own agent${more}`);
+  const atDeadline = /^ingest: stopped at the deadline/m.test(out);
+  const left = atDeadline ? `; it stopped at its time limit and ${pending - runs} more wait for the next run` : more;
+  add('changed', 'vault:ingest', `vault: ingested ${runs} new raw file(s) with the vault's own agent${left}`);
   for (const m of out.matchAll(/^\S+ failed on:\s*(.+)$/gm)) {
     add('attention', `vault:ingest-failed:${m[1].trim()}`, `vault: ingest could not process ${m[1].trim()}; it is ledgered as failed (retry with --retry-failed)`);
   }
