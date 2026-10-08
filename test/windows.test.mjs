@@ -52,7 +52,7 @@ test('the wsl module plans WSL, Ubuntu, a Linux user and the full setup inside i
     /apt-get install -y git curl/,
     literal('git clone https://github.com/ammfed/ai-workstation-setup ~/ai-workstation-setup'),
     /wsl\.exe -u root -e bash -lc '.*NOPASSWD:ALL.*\/etc\/sudoers\.d\/ai-workstation-setup-install/,
-    /wsl\.exe -e bash -lc 'cd ~\/ai-workstation-setup && \.\/install\.sh --yes'/,
+    /wsl\.exe -e bash -lc 'cd ~\/ai-workstation-setup && AI_WORKSTATION_SETUP_TEMP_SUDO=1 \.\/install\.sh --yes'/,
     /wsl\.exe -u root -e bash -lc 'rm -f \/etc\/sudoers\.d\/ai-workstation-setup-install'/,
     /\.wezterm\.lua/,
   ];
@@ -73,6 +73,23 @@ test('without a terminal (an AI assistant), no step waits for a password', { ski
   assert.match(out, /adduser --disabled-password --gecos/);
   assert.match(out, /to do: choose your Linux password: wsl\.exe -u root passwd \S+/);
   assert.doesNotMatch(out, /sudo -v/);
+});
+
+test('the wsl module removes a leftover sudo rule before anything else, and on every Ubuntu start', { skip }, () => {
+  const { code, out } = install('windows', '--modules', 'wsl');
+  assert.equal(code, 0, out);
+  const runs = out.split('\n').filter((l) => l.includes('would run:'));
+  assert.match(runs[0], /wsl\.exe -u root -e bash -lc 'rm -f \/etc\/sudoers\.d\/ai-workstation-setup-install'/, `first command:\n${runs[0]}`);
+  const boot = out.search(/wsl\.exe -u root -e bash -lc '.*command=rm -f \/etc\/sudoers\.d\/ai-workstation-setup-install/);
+  const rule = out.search(/NOPASSWD:ALL/);
+  assert.ok(boot > 0 && boot < rule, 'the boot cleanup is in place before the rule is written');
+  assert.match(out, /AI_WORKSTATION_SETUP_TEMP_SUDO=1 \.\/install\.sh --yes/, 'the setup run inside Linux keeps the rule it was given');
+});
+
+test('a run inside WSL clears a leftover sudo rule before the modules', { skip }, () => {
+  const { code, out } = install('wsl', '--modules', 'skills');
+  assert.equal(code, 0, out);
+  assert.doesNotMatch(out, /sudoers/, 'no leftover rule on this machine, so nothing to say');
 });
 
 test('the wsl module installs only the Windows apps chosen, and none for "none"', { skip }, () => {
