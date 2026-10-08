@@ -37,6 +37,10 @@ fs.mkdirSync(helpers);
 fs.writeFileSync(path.join(helpers, 'notify.cjs'), "require('fs').appendFileSync(process.argv[2], require('fs').readFileSync(0, 'utf8') + '\\n=====\\n');");
 fs.writeFileSync(path.join(helpers, 'model.cjs'), "require('fs').readFileSync(0); require('fs').appendFileSync(process.argv[2], 'call\\n'); console.log('stub explanation');");
 fs.writeFileSync(path.join(helpers, 'print.cjs'), 'console.log(process.argv.slice(2).join(" "));');
+// `slow.cjs <file>` records INGEST_DEADLINE in <file>, prints one ingest line and then hangs.
+fs.writeFileSync(path.join(helpers, 'slow.cjs'), "require('fs').writeFileSync(process.argv[2], String(process.env.INGEST_DEADLINE)); console.log('ingesting: one'); setTimeout(() => {}, 60000);");
+// `say.cjs <line>...` prints each argument on its own line.
+fs.writeFileSync(path.join(helpers, 'say.cjs'), 'console.log(process.argv.slice(2).join("\\n"));');
 // `lines.cjs <text> <count>` prints the text <count> times, one per line.
 fs.writeFileSync(path.join(helpers, 'lines.cjs'), 'for (let i = 0; i < Number(process.argv[3]); i += 1) console.log(`${process.argv[2]} f${i}`);');
 // Stand-ins for clickup-axi and a TickTick CLI, printing the shapes the real ones print.
@@ -179,6 +183,22 @@ test('the vault step handles 50 raw files a day unless the config sets another l
 
 // Answers the daily-sync questions the way an unattended run does: given answers first, then
 // defaults, skipping the questions whose condition is not met; returns the config it would write.
+test('an ingest stopped at its time limit says how far it got; one that honours the deadline is a change', () => {
+  const seen = path.join(tmp, 'deadline.txt');
+  const slow = job({ vault: { ...vault(rawFolder(), 'would ingest: one'), run: node('slow.cjs', seen), timeoutMin: 0.05 } });
+  const before = Date.now() / 1000;
+  assert.equal(slow.run().code, 1);
+  const deadline = Number(fs.readFileSync(seen, 'utf8'));
+  assert.ok(deadline > before && deadline < before + 3, `INGEST_DEADLINE comes before the 3 second limit: ${deadline - before}`);
+  assert.match(slow.notified()[0], /vault: ingest was stopped at its 0\.05-minute limit after 1 file\(s\), so anything the run command does after the ingest \(such as a commit or push\) did not run/);
+
+  const pending = vault(rawFolder(), 'would ingest: a');
+  const said = ['ingest (new)  f0', 'ingest: 1 file(s) handled', 'ingest: stopped at the deadline; the rest wait for the next run'];
+  const timely = job({ vault: { ...pending, dryRun: node('say.cjs', 'would ingest: a', 'would ingest: b', 'would ingest: c'), run: node('say.cjs', ...said) } });
+  assert.equal(timely.run().code, 0);
+  assert.match(timely.notified()[0], /vault: ingested 1 new raw file\(s\) with the vault's own agent; it stopped at its time limit and 2 more wait for the next run/);
+});
+
 async function configFor(given = {}) {
   const ctx = new Context({ platform: detectPlatform(), dryRun: true, interactive: false, answers: new Map(Object.entries(given)), prompter: null, repoRoot });
   for (const q of dailySync.questions) {
@@ -279,6 +299,27 @@ test('a diverged repo is left alone, and only new drift reaches the model', () =
   assert.equal(j.modelCalls(), 1);
   j.run();
   assert.equal(j.modelCalls(), 1, 'drift already reported is not explained again');
+});
+
+test('a diverged repo names the files both sides change and whether a merge is clean', () => {
+  const apart = remoteAndClone();
+  apart.upstreamCommit('b.txt');
+  fs.writeFileSync(path.join(apart.clone, 'local.txt'), 'mine\n');
+  git(apart.clone, ['add', 'local.txt']);
+  git(apart.clone, ['commit', '-q', '-m', 'local work']);
+  const status = git(apart.clone, ['status', '--porcelain']);
+  let j = job({ pull: [apart.clone] });
+  j.run();
+  assert.match(j.notified()[0], /not pulled; the two sides change no file in common and merge cleanly: `git -C \S+ merge origin\/main` keeps every commit on both sides/);
+  assert.equal(git(apart.clone, ['status', '--porcelain']), status, 'the preview leaves the work tree alone');
+
+  const clash = remoteAndClone();
+  clash.upstreamCommit('a.txt');
+  fs.writeFileSync(path.join(clash.clone, 'a.txt'), 'mine\n');
+  git(clash.clone, ['commit', '-q', '-am', 'local edit']);
+  j = job({ pull: [clash.clone] });
+  j.run();
+  assert.match(j.notified()[0], /not pulled; both sides change a\.txt, and a merge conflicts in a\.txt; that needs a person/);
 });
 
 test('a watched repo is reported when behind and never fetched', () => {

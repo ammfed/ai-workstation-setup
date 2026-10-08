@@ -56,7 +56,11 @@ the archive and the notes still say what was in it and when.
 `prompts/ingest.md`. The ledger row is `sha256`, filename, date, status, path. A file whose
 hash is already ledgered under another name is a duplicate and costs no agent run. A file
 whose path was ledgered but now hashes differently is a revision: its existing source note
-is updated in place. The ledger is created by the first run. It ships absent, because it is
+is updated in place. An agent that has not finished one file after `--timeout` minutes (30 by
+default) is stopped, that file is ledgered as failed with one `agent failed on:` line, and the
+run goes on. `--deadline` (Unix seconds, or `$INGEST_DEADLINE`) stops the run in time: no file
+starts after it, and a file it cuts off is not ledgered, so the next run takes it again. The
+ledger is created by the first run. It ships absent, because it is
 operational state rather than structure.
 
 The agent is whatever `$AGENT_CLI` names, with `$AGENT_CLI_ARGS` for its flags. The vault

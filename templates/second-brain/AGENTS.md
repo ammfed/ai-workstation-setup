@@ -156,6 +156,7 @@ node bin/ingest.mjs --dry-run      # list what would be ingested
 node bin/ingest.mjs --limit 1      # ingest one file, for a quick check
 node bin/ingest.mjs                # ingest everything not yet in the ledger
 node bin/ingest.mjs --file "/path/to/one/file"
+node bin/ingest.mjs --timeout 30   # stop the agent on one file after 30 minutes (the default)
 ```
 
 Each new file gets exactly one agent run, prompted from `prompts/ingest.md`, which writes a
@@ -163,7 +164,10 @@ Each new file gets exactly one agent run, prompted from `prompts/ingest.md`, whi
 file gets a ledger row. A file whose sha256 is already in the ledger under another name is a
 duplicate and is ledgered `duplicate-of:<original>` without a second agent run. A file whose
 path was ledgered before but now hashes differently is a revision: the agent updates the
-existing `sources/` note in place and the row is ledgered `updated`.
+existing `sources/` note in place and the row is ledgered `updated`. A file the agent does not
+finish within `--timeout` is ledgered `failed` and the run goes on; `--retry-failed` takes it
+again. With `--deadline` (or `$INGEST_DEADLINE`, which the daily sync sets) no file starts after
+that time, and a file cut off by it is left for the next run.
 
 The agent is whatever CLI `$AGENT_CLI` names, with `$AGENT_CLI_ARGS` for its flags. The vault
 does not depend on any particular one, and runs no local model (see Rules).

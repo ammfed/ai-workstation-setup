@@ -16,6 +16,12 @@
 //   node bin/ingest.mjs                     ingest everything not yet ledgered
 //   node bin/ingest.mjs --file <path>       ingest one named file
 //   node bin/ingest.mjs --retry-failed      also retry files whose last row failed
+//   node bin/ingest.mjs --timeout 30        stop the agent on one file after 30 minutes (the default)
+//   node bin/ingest.mjs --deadline <epoch>  start no file after this time (Unix seconds; or $INGEST_DEADLINE)
+//
+// A file the agent does not finish within --timeout is stopped, ledgered as failed and reported
+// in one line, and the run goes on with the next file. A file cut off by the deadline is not
+// ledgered, so the next run takes it again.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -32,6 +38,8 @@ const ledgerFile = path.join(root, '.ingest', 'ledger.tsv');
 const promptFile = path.join(root, 'prompts', 'ingest.md');
 const dryRun = has('--dry-run');
 const limit = Number(valueOf('--limit', Infinity));
+const timeoutMin = Number(valueOf('--timeout', 30)) || 30;
+const deadline = Number(valueOf('--deadline', process.env.INGEST_DEADLINE)) * 1000 || Infinity;
 const today = new Date().toISOString().slice(0, 10);
 
 const agentCli = process.env.AGENT_CLI;
@@ -108,6 +116,8 @@ if (!candidates.length) { console.log(`ingest: nothing new in ${rawDir}`); proce
 // ---------------------------------------------------------------- the agent hook point
 const promptTemplate = fs.readFileSync(promptFile, 'utf8');
 
+// The result is 'ok', 'failed' (the agent failed or ran past --timeout) or 'deadline' (the
+// deadline came first, so the file is left for the next run).
 function runAgent(item) {
   const prompt = promptTemplate
     .replaceAll('{{FILE}}', path.join(rawDir, item.rel))
@@ -117,14 +127,20 @@ function runAgent(item) {
     .replaceAll('{{VAULT}}', root)
     .replaceAll('{{MODE}}', item.action === 'updated' ? 'revision' : 'new');
   if (!agentCli) die('set $AGENT_CLI to your agent CLI (and $AGENT_CLI_ARGS to its flags)');
-  const res = spawnSync(agentCli, agentArgs, { input: prompt, cwd: root, stdio: ['pipe', 'inherit', 'inherit'] });
-  if (res.status !== 0) console.error(`agent failed on: ${item.rel}`);
-  return res.status === 0;
+  const left = deadline - Date.now();
+  const timeout = Math.min(timeoutMin * 60_000, left);
+  const res = spawnSync(agentCli, agentArgs, { input: prompt, cwd: root, stdio: ['pipe', 'inherit', 'inherit'], timeout, killSignal: 'SIGKILL' });
+  if (res.status === 0) return 'ok';
+  if (res.error?.code === 'ETIMEDOUT' && timeout === left) return 'deadline';
+  console.error(`agent failed on: ${item.rel}${res.error?.code === 'ETIMEDOUT' ? ` (stopped after ${timeoutMin} min)` : ''}`);
+  return 'failed';
 }
 
 let done = 0;
+let stopped = false;
 for (const file of candidates) {
   if (done >= limit) break;
+  if (!dryRun && Date.now() >= deadline) { stopped = true; break; }
   const item = classify(file);
   if (!WANTED.includes(item.action)) continue;
   if (item.action === 'duplicate') {
@@ -134,8 +150,13 @@ for (const file of candidates) {
   }
   if (dryRun) { console.log(`would ingest (${item.action})  ${item.rel}`); done += 1; continue; }
   console.log(`ingest (${item.action})  ${item.rel}`);
-  const ok = runAgent(item);
-  appendLedger({ ...item, filename: path.basename(item.rel), date: today, status: ok ? (item.action === 'updated' ? 'updated' : 'ingested') : 'failed' });
+  const result = runAgent(item);
+  if (result === 'deadline') {
+    console.error(`ingest: ${item.rel} was cut off at the deadline; the next run takes it again`);
+    stopped = true;
+    break;
+  }
+  appendLedger({ ...item, filename: path.basename(item.rel), date: today, status: result === 'ok' ? (item.action === 'updated' ? 'updated' : 'ingested') : 'failed' });
   done += 1;
 }
 
@@ -145,3 +166,4 @@ if (!dryRun && done) {
   spawnSync(process.execPath, [path.join(root, 'bin', 'index.mjs')], { cwd: root, stdio: 'inherit' });
 }
 console.log(`ingest: ${done} file(s) handled${dryRun ? ' (dry run)' : ''}`);
+if (stopped) console.log('ingest: stopped at the deadline; the rest wait for the next run');
