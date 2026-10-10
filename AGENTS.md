@@ -72,7 +72,7 @@ run on the user's machine, not here, so keep them free of dependencies and cross
 ```sh
 shellcheck install.sh update.sh scripts/*.sh templates/*/*.sh
 for f in lib/*.mjs modules/*/*.mjs templates/*/bin/*.mjs; do node --check "$f"; done
-node --test test/update.test.mjs test/update-check.test.mjs test/answers.test.mjs test/tools.test.mjs test/privacy.test.mjs test/daily-sync.test.mjs test/voice-mode.test.mjs test/ledger.test.mjs test/sync.test.mjs test/windows.test.mjs test/news-digest.test.mjs test/refresh.test.mjs test/second-brain.test.mjs test/optional-pieces.test.mjs test/preferences.test.mjs test/wsl.test.mjs
+node --test test/update.test.mjs test/update-check.test.mjs test/answers.test.mjs test/tools.test.mjs test/privacy.test.mjs test/daily-sync.test.mjs test/voice-mode.test.mjs test/ledger.test.mjs test/sync.test.mjs test/windows.test.mjs test/news-digest.test.mjs test/refresh.test.mjs test/second-brain.test.mjs test/optional-pieces.test.mjs test/preferences.test.mjs test/models.test.mjs test/wsl.test.mjs
 for os in linux macos wsl windows; do node lib/installer.mjs --dry-run --yes --modules all --answers answers.example.env --platform "$os"; done
 scripts/privacy-scan.sh --denylist <local denylist>
 ```

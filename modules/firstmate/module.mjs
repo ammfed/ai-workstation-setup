@@ -41,17 +41,24 @@ const BACKENDS = {
 export function dispatchProfiles(kind, harness) {
   const profile = (model, effort) => ({ harness, ...(harness === 'claude' ? { model } : {}), effort });
   if (kind === 'capable') {
+    // A starting example after docs/model-map.md; change it to suit your own work. A stronger
+    // model (Fable) is left to the person to ask for by name, not to a rule.
     return {
       rules: [
         {
           when: "The task designs or builds a prototype's user-facing frontend: screens, visual look, layout, characters, or clickable user journeys.",
-          use: [profile('claude-fable-5-1', 'medium')],
-          why: 'Frontend design goes to the model strongest at visual design.',
+          use: [profile('claude-opus-5-5', 'xhigh')],
+          why: 'Frontend design gets the most capable model at extra-high effort.',
+        },
+        {
+          when: 'The task investigates or diagnoses a problem whose cause is not yet known, or writes a plan, a design or an architecture before the build.',
+          use: [profile('claude-opus-5-5', 'xhigh')],
+          why: 'Investigations, diagnosis and plans get extra-high effort; the build that follows runs at the default.',
         },
         {
           when: 'A small, well-defined task with a clear outcome and little ambiguity: a bug fix with a clear repro, a docs or copy edit, a version bump, a config tweak, or another narrow mechanical change.',
-          use: [profile('claude-sonnet-5-5', 'xhigh')],
-          why: 'Small, clear tasks go to the faster model at high effort; everything else stays on the most capable model.',
+          use: [profile('claude-sonnet-5-5', 'medium')],
+          why: 'Small, clear tasks go to the faster model at medium effort; after a failed check, retry at high effort.',
         },
       ],
       default: [profile('claude-opus-5-5', 'medium')],
@@ -189,10 +196,10 @@ export default {
       key: 'FIRSTMATE_DISPATCH',
       type: 'choice',
       message: 'Crew dispatch profiles (config/crew-dispatch.json)',
-      default: 'starter',
+      default: 'capable',
       choices: [
+        { value: 'capable', label: 'capable - Opus at medium effort, Opus at xhigh for frontend design, investigations and plans, small clear tasks on Sonnet at medium (docs/model-map.md)' },
         { value: 'starter', label: 'starter - strong model for builds, more effort for planning, light default' },
-        { value: 'capable', label: 'capable - the most capable model at medium effort, frontend design on the design model, small clear tasks on Sonnet at xhigh' },
         { value: 'none', label: 'none - every worker uses the crew harness' },
       ],
     },
