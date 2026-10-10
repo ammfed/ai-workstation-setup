@@ -202,7 +202,7 @@ export default {
       message: 'Models: effort and model routing',
       default: 'capable',
       choices: [
-        { value: 'capable', label: 'capable - the most capable model at medium effort, frontend and visual design on the model strongest at design' },
+        { value: 'capable', label: 'capable - the most capable model at medium effort, extra-high effort for frontend design, investigations and plans, a faster model for small tasks' },
         { value: 'economical', label: 'economical - low effort by default, more for planning, design and hard reasoning, the strongest model for building' },
         { value: 'balanced', label: 'balanced - medium effort by default, high for planning, design, hard reasoning and building' },
         { value: 'none', label: 'none - no rule' },
@@ -214,6 +214,13 @@ export default {
       type: 'text',
       message: 'Models: a secondary agent CLI to hand bulk reading and fetching to, such as agy (empty for none)',
       default: (ctx) => ((ctx.values.AGENT_CLIS || []).includes('agy') ? 'agy' : ''),
+    },
+    {
+      key: 'PREFS_DELEGATE_MODEL',
+      type: 'text',
+      message: 'Models: the model that CLI uses for this work (empty: its own default)',
+      default: (ctx) => (String(ctx.get('PREFS_DELEGATE_RETRIEVAL')).trim() === 'agy' ? 'gemini-3.8-flash-high' : ''),
+      when: (ctx) => Boolean(String(ctx.get('PREFS_DELEGATE_RETRIEVAL') || '').trim()),
     },
 
     // Research

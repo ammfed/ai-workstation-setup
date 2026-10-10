@@ -210,9 +210,11 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
   const routing = get('PREFS_MODEL_ROUTING');
   section('AI and model use', [
     routing === 'capable' && 'Use the most capable model at medium effort by default, for building and for everything else.',
-    routing === 'capable' && 'Give user-facing frontend and visual design work (screens, look, layout, clickable journeys) to the model strongest at design.',
     routing === 'capable' &&
-      'Give small, clear tasks (a bug with a clear repro, a docs or copy edit, a version bump, a config tweak) to a faster model at high effort.',
+      'Give user-facing frontend and visual design work (screens, look, layout, clickable journeys), investigations, diagnosis and plans to the most capable model at extra-high effort.',
+    routing === 'capable' &&
+      'Give small, clear tasks (a bug with a clear repro, a docs or copy edit, a version bump, a config tweak) to a faster model at medium effort, and raise it to high after a failed check.',
+    routing === 'capable' && 'Give reading, lookup and summary sub-tasks to the fastest model (for example the reader subagent).',
     routing === 'economical' && 'Use a balanced model at low effort for routine work and sub-tasks.',
     routing === 'economical' && 'Use medium effort for planning, design, hard reasoning and judgment calls.',
     routing === 'economical' && 'Use the most capable model at high effort for building a product, prototype or demo.',
@@ -221,7 +223,7 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     get('PREFS_QUOTA') &&
       'Treat subscription limits as scarce. Check them with `quota-axi` before heavy or parallel work, take the cheapest path that still answers, and pause heavy work near a limit and say so.',
     get('PREFS_DELEGATE_RETRIEVAL') &&
-      `Hand retrieval-heavy work (large document sweeps, broad web reading, bulk page reads) to \`${get('PREFS_DELEGATE_RETRIEVAL')}\` and reason over what it returns. Keep decisions and code changes with the main agent.`,
+      `Hand retrieval-heavy work (large document sweeps, broad web reading, bulk page reads) to \`${[get('PREFS_DELEGATE_RETRIEVAL'), get('PREFS_DELEGATE_MODEL') && `--model ${get('PREFS_DELEGATE_MODEL')}`].filter(Boolean).join(' ')}\` and reason over what it returns. Keep decisions and code changes with the main agent.`,
   ]);
 
   section('Research', [

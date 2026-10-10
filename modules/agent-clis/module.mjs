@@ -106,6 +106,60 @@ function nodeAtLeast([major, minor]) {
   return m > major || (m === major && n >= minor);
 }
 
+// The model no-mistakes reviews with when it runs Claude (docs/model-map.md). Its global
+// config takes one model per harness for every repository; it is re-read at each run.
+export const NO_MISTAKES_REVIEW = 'claude-opus-5-5 medium';
+const REVIEW_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+/** "<model> [effort]" -> { model, effort? }; empty or "keep" -> null (leave the config alone). */
+export function parseReviewModel(text) {
+  const words = String(text ?? '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length || (words.length === 1 && words[0] === 'keep')) return null;
+  if (words.length > 2 || (words[1] && !REVIEW_EFFORTS.includes(words[1]))) {
+    throw new Error(`NO_MISTAKES_REVIEW_MODEL: "${text}" should look like "<model> [effort]", with effort one of ${REVIEW_EFFORTS.join(', ')}`);
+  }
+  return words[1] ? { model: words[0], effort: words[1] } : { model: words[0] };
+}
+
+export function noMistakesConfigPath(ctx) {
+  return path.join(process.env.NM_HOME || path.join(ctx.home, '.no-mistakes'), 'config.yaml');
+}
+
+/**
+ * The no-mistakes config text with agent_config.claude set to `pin`, or null when it already
+ * has a claude entry (yours is kept) or an agent_config written inline, which this
+ * line-based edit does not rewrite. Everything else in the file stays as it was.
+ */
+export function withClaudeReviewModel(text, pin) {
+  const scalar = (v) => (/^[A-Za-z0-9._/-]+$/.test(v) ? v : JSON.stringify(v));
+  const entry = (ind) => [`${ind}claude:`, `${ind}${ind}model: ${scalar(pin.model)}`, ...(pin.effort ? [`${ind}${ind}effort: ${pin.effort}`] : [])];
+  const lines = String(text ?? '').split('\n');
+  const at = lines.findIndex((l) => /^agent_config\s*:/.test(l));
+  if (at === -1) {
+    const body = String(text ?? '').replace(/\n*$/, '');
+    return `${body}${body ? '\n\n' : ''}agent_config:\n${entry('  ').join('\n')}\n`;
+  }
+  if (lines[at].replace(/^agent_config\s*:/, '').replace(/#.*/, '').trim()) return null;
+  let ind = '';
+  for (const l of lines.slice(at + 1)) {
+    if (!l.trim() || /^\s*#/.test(l)) continue;
+    const m = l.match(/^(\s+)\S/);
+    if (!m) break;
+    ind ||= m[1];
+    if (l.startsWith(ind) && /^["']?claude["']?\s*:/.test(l.slice(ind.length))) return null;
+  }
+  lines.splice(at + 1, 0, ...entry(ind || '  '));
+  return lines.join('\n');
+}
+
+async function pinReviewModel(ctx, pin) {
+  const file = noMistakesConfigPath(ctx);
+  const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  const next = withClaudeReviewModel(current, pin);
+  if (next === null) return ctx.ok(`${file} already sets agent_config for claude (or sets agent_config inline); left untouched`);
+  await ctx.writeFile(file, next, { onConflict: 'replace' });
+}
+
 export default {
   name: 'agent-clis',
   title: 'Agent CLIs',
@@ -121,6 +175,13 @@ export default {
       message: 'CLIs to install',
       default: DEFAULTS,
       choices: Object.entries(TOOLS).map(([value, t]) => ({ value, label: `${value.padEnd(20)} ${t.about}` })),
+    },
+    {
+      key: 'NO_MISTAKES_REVIEW_MODEL',
+      type: 'text',
+      message: 'Model and effort no-mistakes reviews with when it runs Claude, in every repository (agent_config in its config; empty or "keep" leaves it alone)',
+      default: NO_MISTAKES_REVIEW,
+      when: (ctx) => ctx.get('AGENT_CLIS').includes('no-mistakes'),
     },
     {
       key: 'AXI_HOOKS',
@@ -322,6 +383,10 @@ export default {
     }
 
     if (chosen.includes('gh-axi') && !ctx.has('gh')) ctx.info('gh-axi needs the GitHub CLI signed in (core module)');
-    if (chosen.includes('no-mistakes')) ctx.info('per repository: `no-mistakes init` (also installs its /no-mistakes skill)');
+    if (chosen.includes('no-mistakes')) {
+      const pin = parseReviewModel(ctx.get('NO_MISTAKES_REVIEW_MODEL'));
+      if (pin) await ctx.step('no-mistakes review model', () => pinReviewModel(ctx, pin));
+      ctx.info('per repository: `no-mistakes init` (also installs its /no-mistakes skill)');
+    }
   },
 };

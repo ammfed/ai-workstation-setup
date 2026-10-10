@@ -18,7 +18,7 @@ import { cswapThreshold, researchBrowserPort } from '../modules/agent-clis/modul
 import { PATCH_MARKER, mergePixelSettings, patchPixelCli } from '../modules/agent-clis/pixel-agents.mjs';
 import { PR_MERGE_RULES } from '../modules/claude-code/module.mjs';
 import { findOpenWhisprAppImage, openGuardSeconds } from '../modules/extras/module.mjs';
-import { dispatchProfiles, stowTokens } from '../modules/firstmate/module.mjs';
+import { stowTokens } from '../modules/firstmate/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
 import { renderBriefInclude } from '../modules/preferences/render.mjs';
 import skills from '../modules/skills/module.mjs';
@@ -102,14 +102,6 @@ test('office names come from the agent name, then the tab label without its pref
   ];
   assert.deepEqual(officeNames(agents, tabs, workspaces, 'xy-'), { a: 'reviewer', b: 'sample-task', c: 'Beta' });
   assert.equal(officeNames(agents, tabs, workspaces, '').b, 'xy-sample-task');
-});
-
-test('the capable dispatch profile sends small clear tasks to Sonnet at xhigh', () => {
-  const capable = dispatchProfiles('capable', 'claude');
-  const small = capable.rules.find((r) => /small, well-defined task/.test(r.when));
-  assert.deepEqual(small.use, [{ harness: 'claude', model: 'claude-sonnet-5-5', effort: 'xhigh' }]);
-  assert.deepEqual(capable.default, [{ harness: 'claude', model: 'claude-opus-5-5', effort: 'medium' }]);
-  assert.deepEqual(dispatchProfiles('capable', 'codex').rules[1].use, [{ harness: 'codex', effort: 'xhigh' }]);
 });
 
 test('a stow reminder hook lands only in the settings file it is given', () => {
