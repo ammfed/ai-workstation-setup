@@ -12,13 +12,15 @@
 // speak to the agent (Claude Code discards its messages), but the session that
 // resumes after compaction can.
 //
-// Usage, as the hook command:  node context-reminder.mjs <tokens|auto> ["reminder text"]
+// Usage, as the hook command:  node context-reminder.mjs <tokens|auto> [--user] ["reminder text"]
 // "auto" puts the save point at seven eighths of the auto-compact window that applies to
 // the session (autoCompactWindow in the project's .claude/settings.local.json or
 // settings.json, else the user settings), so a 400000 window reminds at 350000 and a
 // 200000 window at 175000; with no window set it reminds at 150000.
-// Without its own text, the reminder stays quiet in a project that registers its own
-// context-reminder hook (for example a stow reminder), so a session gets one, not two.
+// The user-level hook carries --user and stays quiet in a project that registers its own
+// context-reminder hook (for example a stow reminder), whatever either one says, so a
+// session gets one, not two. A hook without --user (a project hook, or an older user hook
+// that has no custom text) keeps its earlier behaviour: it yields only when it has no text.
 // Context size is read from the session transcript: the latest main-thread
 // assistant turn's input, cache-read and cache-creation tokens.
 // Installed by ai-workstation-setup (claude-code module). No dependencies; it
@@ -29,7 +31,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 const FALLBACK = 150000;
-const custom = process.argv[3];
+const args = process.argv.slice(2);
+const userLevel = args.includes('--user');
+const [limitArg, custom] = args.filter((a) => a !== '--user');
 const reminder =
   custom ||
   'Context is past the reminder threshold. Before continuing, save what matters from this session (for example run your memory save pass), then carry on.';
@@ -111,8 +115,8 @@ try {
     }
   } else if (/^[A-Za-z0-9_-]+$/.test(sid) && input.transcript_path && fs.existsSync(input.transcript_path)) {
     const project = input.cwd ? projectSettings(input.cwd) : [];
-    if (!custom && project.some(ownReminder)) process.exit(0);
-    const limit = threshold(process.argv[2], project);
+    if ((userLevel || !custom) && project.some(ownReminder)) process.exit(0);
+    const limit = threshold(limitArg, project);
     const tokens = contextTokens(input.transcript_path);
     const dir = path.join(os.tmpdir(), 'claude-context-reminder');
     const mark = path.join(dir, sid);
