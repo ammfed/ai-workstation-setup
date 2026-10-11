@@ -171,6 +171,19 @@ test("the default reminder yields to a project's own reminder", () => {
   assert.match(runReminder(home, coordinator, 500001, ['auto', 'Run /stow now']), /Run \/stow now/);
 });
 
+test("the user-level reminder yields to a project's own reminder even with custom text", () => {
+  const home = tempHome();
+  const coordinator = path.join(home, 'coordinator');
+  const plain = path.join(home, 'plain');
+  fs.mkdirSync(plain, { recursive: true });
+  const command = 'node "context-reminder.mjs" auto "Run /stow now"';
+  writeSettings(path.join(coordinator, '.claude', 'settings.local.json'), { hooks: { UserPromptSubmit: [{ hooks: [{ type: 'command', command }] }] } });
+  const user = ['auto', '--user', 'Save your notes now'];
+  assert.equal(runReminder(home, coordinator, 500000, user), '');
+  assert.match(runReminder(home, coordinator, 500001, ['auto', 'Run /stow now']), /Run \/stow now/);
+  assert.match(runReminder(home, plain, 500002, user), /^Save your notes now/);
+});
+
 test('reminder thresholds are auto or a whole number of tokens', () => {
   assert.equal(reminderTokens('auto', 'CLAUDE_CONTEXT_REMINDER_TOKENS'), 'auto');
   assert.equal(reminderTokens(' 150000 ', 'CLAUDE_CONTEXT_REMINDER_TOKENS'), 150000);

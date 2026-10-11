@@ -420,7 +420,7 @@ export default {
         if (text.includes('"')) throw new Error('CLAUDE_CONTEXT_REMINDER_TEXT: leave out double quotes');
         const script = path.join(claudeDir(ctx), 'hooks', 'context-reminder.mjs');
         await ctx.writeFile(script, ctx.template('claude-code/bin/context-reminder.mjs'), { onConflict: 'ask' });
-        const command = `node "${script}" ${tokens}${text ? ` "${text}"` : ''}`;
+        const command = `node "${script}" ${tokens} --user${text ? ` "${text}"` : ''}`;
         setHook(ctx, 'UserPromptSubmit', 'context-reminder.mjs', command);
         if (ctx.get('CLAUDE_COMPACT_REMINDER')) setHook(ctx, 'SessionStart', 'context-reminder.mjs', command);
       });

@@ -160,6 +160,7 @@ to you, and saying plainly when something was reasoned about rather than tested.
   session (`autoCompactWindow` in the project's `.claude` settings, else yours): 350000 for a
   400000 window, 175000 for 200000, and 150000 when no window is set. So a folder with a
   smaller window of its own gets an earlier reminder without another hook.
-  `CLAUDE_CONTEXT_REMINDER_TEXT` changes what it asks for, such as running a save skill. In a
-  project that registers its own reminder (Firstmate's stow reminder), the default one stays
-  quiet, so a session gets one reminder, not two.
+  `CLAUDE_CONTEXT_REMINDER_TEXT` changes what it asks for, such as running a save skill. The
+  user-level hook is registered with a `--user` marker. In a project that registers its own
+  reminder (Firstmate's stow reminder), it stays quiet whatever its text, so a session gets one
+  reminder, not two.
