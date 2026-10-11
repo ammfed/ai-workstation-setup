@@ -3,6 +3,7 @@ import path from 'node:path';
 import { Skip } from '../../lib/context.mjs';
 import { claudeDir, setHook } from '../../lib/claude.mjs';
 import { TOOLS, versionCheck } from '../agent-clis/tools.mjs';
+import { reminderTokens } from '../claude-code/module.mjs';
 
 // Firstmate is used from an upstream clone (github.com/kunchenguid/firstmate);
 // this module only clones it and writes its local, gitignored config/ files.
@@ -110,11 +111,7 @@ function watchedTools(dir, clis) {
 const STOW_TEXT = 'Context is large. Run /stow now, before anything else, then continue.';
 
 export function stowTokens(text) {
-  const tokens = Number(String(text ?? '').trim());
-  if (!Number.isInteger(tokens) || tokens < 50000 || tokens > 1000000) {
-    throw new Error(`FIRSTMATE_STOW_REMINDER_TOKENS: "${text}" should be a whole number of tokens from 50000 to 1000000`);
-  }
-  return tokens;
+  return reminderTokens(text, 'FIRSTMATE_STOW_REMINDER_TOKENS');
 }
 
 function pinHome(ctx, where, value) {
@@ -232,14 +229,14 @@ export default {
     {
       key: 'FIRSTMATE_STOW_REMINDER',
       type: 'confirm',
-      message: "Remind the main Firstmate session to run /stow (save its state) once its context gets large? Only that session, not workers or second mates",
+      message: 'Remind the main Firstmate session and each second mate to run /stow (save its state) once its context gets large, before it is compacted?',
       default: true,
     },
     {
       key: 'FIRSTMATE_STOW_REMINDER_TOKENS',
       type: 'text',
-      message: 'Remind once the context passes how many tokens (set it below your auto-compact point)',
-      default: '350000',
+      message: 'Remind once the context passes how many tokens ("auto": seven eighths of that home\'s auto-compact window, so 175000 for a 200000 window)',
+      default: 'auto',
       when: (ctx) => ctx.get('FIRSTMATE_STOW_REMINDER'),
     },
     {
@@ -286,20 +283,20 @@ export default {
       // config and projects come from $FM_HOME.
       await ctx.step('FM_HOME', () => ctx.setUserEnv('FM_HOME', home));
     }
+    // Second mates are found in the registry, so a re-run after adding one covers it too.
+    const registry = path.join(opsHome, 'data', 'secondmates.md');
+    const mates = fs.existsSync(registry) ? localSecondmateHomes(fs.readFileSync(registry, 'utf8')) : [];
+    const mateStep = (label, mate, fn) =>
+      ctx.step(`${label} ${path.basename(mate)}`, () => {
+        if (!fs.existsSync(path.join(mate, '.fm-secondmate-home'))) throw new Skip(`${mate} is not a second-mate home (no .fm-secondmate-home)`);
+        return fn();
+      });
     if (ctx.get('FIRSTMATE_PIN_HOME')) {
       // A Claude Code session started in a home does not always get FM_HOME in its tool
       // environment, and scripts such as fm-send refuse to guess (firstmate issue 5713). The
-      // pin goes in each home's gitignored .claude/settings.local.json. Second mates are found
-      // in the registry, so a re-run after adding one pins it too.
+      // pin goes in each home's gitignored .claude/settings.local.json.
       await ctx.step('FM_HOME pin', () => pinHome(ctx, dir, opsHome));
-      const registry = path.join(opsHome, 'data', 'secondmates.md');
-      const mates = fs.existsSync(registry) ? localSecondmateHomes(fs.readFileSync(registry, 'utf8')) : [];
-      for (const mate of mates) {
-        await ctx.step(`FM_HOME pin ${path.basename(mate)}`, () => {
-          if (!fs.existsSync(path.join(mate, '.fm-secondmate-home'))) throw new Skip(`${mate} is not a second-mate home (no .fm-secondmate-home)`);
-          return pinHome(ctx, mate, mate);
-        });
-      }
+      for (const mate of mates) await mateStep('FM_HOME pin', mate, () => pinHome(ctx, mate, mate));
     }
     const secondmate = ctx.get('FIRSTMATE_SECONDMATE_HARNESS').trim() || 'default';
     const head = secondmate.split(/\s+/)[0];
@@ -344,16 +341,18 @@ export default {
       });
     }
     if (ctx.get('FIRSTMATE_STOW_REMINDER')) {
-      // The claude-code module's context-reminder hook with its own text, registered only in the
-      // clone's gitignored .claude/settings.local.json: the main session starts there, while
-      // workers and second mates run from their own folders and never see it.
+      // The claude-code module's context-reminder hook with its own text, registered in the
+      // gitignored .claude/settings.local.json of the clone (where the main session starts) and
+      // of each second-mate home. Workers run from their own worktrees and never see it.
+      const tokens = stowTokens(ctx.get('FIRSTMATE_STOW_REMINDER_TOKENS'));
+      const script = path.join(claudeDir(ctx), 'hooks', 'context-reminder.mjs');
+      const command = `node "${script}" ${tokens} "${STOW_TEXT}"`;
+      const register = (where) => setHook(ctx, 'UserPromptSubmit', 'context-reminder.mjs', command, path.join(where, '.claude', 'settings.local.json'));
       await ctx.step('stow reminder', async () => {
-        const tokens = stowTokens(ctx.get('FIRSTMATE_STOW_REMINDER_TOKENS'));
-        const script = path.join(claudeDir(ctx), 'hooks', 'context-reminder.mjs');
         await ctx.writeFile(script, ctx.template('claude-code/bin/context-reminder.mjs'), { onConflict: 'ask' });
-        const command = `node "${script}" ${tokens} "${STOW_TEXT}"`;
-        setHook(ctx, 'UserPromptSubmit', 'context-reminder.mjs', command, path.join(dir, '.claude', 'settings.local.json'));
+        register(dir);
       });
+      for (const mate of mates) await mateStep('stow reminder', mate, () => register(mate));
     }
     ctx.todo(`start firstmate: cd "${dir}" && claude   (or your harness; its AGENTS.md takes over)`);
     ctx.info('second mates (one persistent home per domain): see docs/firstmate.md');

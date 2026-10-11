@@ -12,7 +12,13 @@
 // speak to the agent (Claude Code discards its messages), but the session that
 // resumes after compaction can.
 //
-// Usage, as the hook command:  node context-reminder.mjs <tokens> ["reminder text"]
+// Usage, as the hook command:  node context-reminder.mjs <tokens|auto> ["reminder text"]
+// "auto" puts the save point at seven eighths of the auto-compact window that applies to
+// the session (autoCompactWindow in the project's .claude/settings.local.json or
+// settings.json, else the user settings), so a 400000 window reminds at 350000 and a
+// 200000 window at 175000; with no window set it reminds at 150000.
+// Without its own text, the reminder stays quiet in a project that registers its own
+// context-reminder hook (for example a stow reminder), so a session gets one, not two.
 // Context size is read from the session transcript: the latest main-thread
 // assistant turn's input, cache-read and cache-creation tokens.
 // Installed by ai-workstation-setup (claude-code module). No dependencies; it
@@ -22,10 +28,46 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const threshold = Number(process.argv[2]) || 150000;
+const FALLBACK = 150000;
+const custom = process.argv[3];
 const reminder =
-  process.argv[3] ||
+  custom ||
   'Context is past the reminder threshold. Before continuing, save what matters from this session (for example run your memory save pass), then carry on.';
+
+function readJson(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+// Project settings files from the session folder up to the root, nearest first.
+function projectSettings(cwd) {
+  const files = [];
+  for (let dir = path.resolve(cwd); ; dir = path.dirname(dir)) {
+    for (const name of ['settings.local.json', 'settings.json']) {
+      const s = readJson(path.join(dir, '.claude', name));
+      if (s) files.push(s);
+    }
+    if (path.dirname(dir) === dir) return files;
+  }
+}
+
+function userSettings() {
+  return readJson(path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'settings.json')) || {};
+}
+
+function threshold(arg, project) {
+  if (arg !== 'auto') return Number(arg) || FALLBACK;
+  const window = [...project, userSettings()].map((s) => s.autoCompactWindow).find((w) => Number.isInteger(w) && w > 0);
+  return window ? Math.round((window * 7) / 8) : FALLBACK;
+}
+
+const ownReminder = (s) =>
+  Object.values(s.hooks || {})
+    .flat()
+    .some((group) => (group?.hooks || []).some((h) => String(h?.command || '').includes('context-reminder.mjs')));
 
 function contextTokens(transcript) {
   const size = fs.statSync(transcript).size;
@@ -68,12 +110,15 @@ try {
       );
     }
   } else if (/^[A-Za-z0-9_-]+$/.test(sid) && input.transcript_path && fs.existsSync(input.transcript_path)) {
+    const project = input.cwd ? projectSettings(input.cwd) : [];
+    if (!custom && project.some(ownReminder)) process.exit(0);
+    const limit = threshold(process.argv[2], project);
     const tokens = contextTokens(input.transcript_path);
     const dir = path.join(os.tmpdir(), 'claude-context-reminder');
     const mark = path.join(dir, sid);
-    if (tokens !== null && tokens < threshold * 0.9) {
+    if (tokens !== null && tokens < limit * 0.9) {
       fs.rmSync(mark, { force: true });
-    } else if (tokens !== null && tokens >= threshold && !fs.existsSync(mark)) {
+    } else if (tokens !== null && tokens >= limit && !fs.existsSync(mark)) {
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(mark, String(tokens));
       process.stdout.write(

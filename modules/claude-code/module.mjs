@@ -47,6 +47,18 @@ export function parseModelEfforts(text) {
   return out;
 }
 
+// A context reminder threshold: "auto" (seven eighths of the auto-compact window that applies
+// to the session, worked out by the hook) or a whole number of tokens.
+export function reminderTokens(text, key) {
+  const value = String(text ?? '').trim();
+  if (value === 'auto') return value;
+  const tokens = Number(value);
+  if (!Number.isInteger(tokens) || tokens < 50000 || tokens > 1000000) {
+    throw new Error(`${key}: "${text}" should be auto or a whole number of tokens from 50000 to 1000000`);
+  }
+  return tokens;
+}
+
 // A read-only helper on Haiku for reading, lookup and summaries (docs/model-map.md). A reader
 // the person wrote is never replaced; a version this setup shipped is refreshed.
 export function installReaderAgent(ctx) {
@@ -203,14 +215,21 @@ export default {
     {
       key: 'CLAUDE_CONTEXT_REMINDER',
       type: 'confirm',
-      message: 'Add a hook that reminds the agent to save its notes once the context gets large?',
-      default: false,
+      message: 'Add a hook that reminds the agent to save its notes once the context gets large, before it is compacted?',
+      default: true,
     },
     {
       key: 'CLAUDE_CONTEXT_REMINDER_TOKENS',
       type: 'text',
-      message: 'Remind once the context passes how many tokens (set it well below your model\'s window)',
-      default: '150000',
+      message: 'Remind once the context passes how many tokens ("auto": seven eighths of the auto-compact window, so 350000 for a 400000 window)',
+      default: 'auto',
+      when: (ctx) => ctx.get('CLAUDE_CONTEXT_REMINDER'),
+    },
+    {
+      key: 'CLAUDE_CONTEXT_REMINDER_TEXT',
+      type: 'text',
+      message: 'What the reminder tells the agent to do, such as "Run /stow now, then continue." (empty: save what matters, then carry on)',
+      default: '',
       when: (ctx) => ctx.get('CLAUDE_CONTEXT_REMINDER'),
     },
     {
@@ -396,12 +415,14 @@ export default {
 
     if (ctx.get('CLAUDE_CONTEXT_REMINDER')) {
       await ctx.step('context reminder hook', async () => {
-        const tokens = Number(ctx.get('CLAUDE_CONTEXT_REMINDER_TOKENS'));
-        if (!Number.isInteger(tokens) || tokens <= 0) throw new Error('CLAUDE_CONTEXT_REMINDER_TOKENS must be a whole number of tokens');
+        const tokens = reminderTokens(ctx.get('CLAUDE_CONTEXT_REMINDER_TOKENS'), 'CLAUDE_CONTEXT_REMINDER_TOKENS');
+        const text = String(ctx.get('CLAUDE_CONTEXT_REMINDER_TEXT') || '').trim();
+        if (text.includes('"')) throw new Error('CLAUDE_CONTEXT_REMINDER_TEXT: leave out double quotes');
         const script = path.join(claudeDir(ctx), 'hooks', 'context-reminder.mjs');
         await ctx.writeFile(script, ctx.template('claude-code/bin/context-reminder.mjs'), { onConflict: 'ask' });
-        setHook(ctx, 'UserPromptSubmit', 'context-reminder.mjs', `node "${script}" ${tokens}`);
-        if (ctx.get('CLAUDE_COMPACT_REMINDER')) setHook(ctx, 'SessionStart', 'context-reminder.mjs', `node "${script}" ${tokens}`);
+        const command = `node "${script}" ${tokens}${text ? ` "${text}"` : ''}`;
+        setHook(ctx, 'UserPromptSubmit', 'context-reminder.mjs', command);
+        if (ctx.get('CLAUDE_COMPACT_REMINDER')) setHook(ctx, 'SessionStart', 'context-reminder.mjs', command);
       });
     }
 
