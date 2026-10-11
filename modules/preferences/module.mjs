@@ -173,6 +173,7 @@ export default {
     yes('PREFS_PAGE_SIDE_BY_SIDE', 'Review pages: decision card on one side and a canvas of the current decision on the other, never stacked?', { when: cardsOn }),
     yes('PREFS_PAGE_FLIP_PREVIEWS', "Review pages: let you flip between every option's preview, not only the recommended one?", { when: cardsOn }),
     yes('PREFS_PAGE_MINIMAL_TEXT', 'Review pages: minimal text, no fluff or helper text, visuals carry the meaning?'),
+    yes('PREFS_PAGE_PHONE', 'Review pages: also read well on a phone (390 px wide), checked by a phone-size screenshot before the link is sent?'),
     yes('PREFS_PAGE_WIDE_HEADER', 'Review pages: a large title and intro spread across the full page width?'),
     yes('PREFS_PAGE_CHECK_BEFORE_SEND', 'Review pages: check the page by screenshot before its link is sent, and always send the link?'),
     yes('PREFS_PAGE_FIRST', 'Review pages: when a decision waits on a page, build and check the page first, send the link, then stand by until you answer?'),
@@ -236,6 +237,7 @@ export default {
     },
     yes('PREFS_SOURCE_QUALITY', 'Research: name each source\'s type and skip low-quality sources?'),
     yes('PREFS_VERIFY_USER_CLAIMS', 'Research: check tools and facts you mention before relying on them, and compare options before large installs?'),
+    yes('PREFS_LIVE_FACTS', 'Research: examples of current products and buying advice come from sources checked that day, each claim marked checked or not?'),
     yes('PREFS_FINDINGS_TO_CHANGE', 'Research: findings must end in a visible change or a decision, not just a report?'),
 
     // Safety

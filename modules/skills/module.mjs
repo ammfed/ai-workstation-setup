@@ -4,6 +4,7 @@ import { installSkill, skillInstalled } from '../../lib/claude.mjs';
 // Installed user-wide for Claude Code with the skills CLI (github.com/vercel-labs/skills).
 const SKILLS = [
   { value: 'kun', repo: 'kunchenguid/kun', label: 'kun - how Kun thinks, builds and solves problems' },
+  { value: 'vision', repo: 'kunchenguid/vision', label: 'vision - draft and stress-test a VISION.md for a repository, then refine it with you on a review board' },
   { value: 'grill-me', repo: 'mattpocock/skills', label: 'grill-me - a relentless interview to sharpen a plan' },
   { value: 'grilling', repo: 'mattpocock/skills', label: 'grilling - stress-test a plan, decision or idea' },
   { value: 'teach', repo: 'mattpocock/skills', label: 'teach - learn a new skill or concept in your workspace' },
@@ -46,7 +47,7 @@ const chosenSkills = (ctx) => SKILLS.filter((s) => ctx.get('SKILLS').includes(s.
 export default {
   name: 'skills',
   title: 'Agent skills',
-  description: 'Claude Code skills: kun, grilling, teach, tdd, codebase-design, find-docs; grill-me, grill-with-docs, to-spec, to-tickets, to-questionnaire, wayfinder, no-mistakes, composio-cli',
+  description: 'Claude Code skills: kun, grilling, teach, tdd, codebase-design, find-docs; vision, grill-me, grill-with-docs, to-spec, to-tickets, to-questionnaire, wayfinder, no-mistakes, composio-cli',
   order: 50,
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],

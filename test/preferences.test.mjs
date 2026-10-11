@@ -108,6 +108,42 @@ test('the route and its build rules are off by default and each writes its own B
   assert.doesNotMatch(sectionOf(await render({ PREFS_TEST_FIRST: 'yes' }), 'Building'), /six steps|GLOSSARY|phone width/);
 });
 
+test('facts about current products come from a live, dated source, and the rule can be turned off', async () => {
+  const research = sectionOf(await render(), 'Research');
+  assert.match(research, /the current leading models, tools or products come from a live source checked that day, with its date/);
+  assert.match(research, /fetch each product's own pricing page and docs that day/);
+  assert.match(research, /checked on the vendor's page, from a third party only, or not checked/);
+  assert.doesNotMatch(await render({ PREFS_LIVE_FACTS: 'no' }), /live source checked that day/);
+});
+
+test('review pages also read well on a phone, a page in a skill\'s own look is re-themed, and both can be turned off', async () => {
+  const text = await render();
+  const pages = sectionOf(text, 'Review pages');
+  assert.match(pages, /reads well on a phone \(390 px wide\): the card and its picture stack/);
+  assert.match(pages, /a wide diagram gets a phone version/);
+  assert.match(pages, /and the look of boards that a skill brings with it/);
+  assert.doesNotMatch(await render({ PREFS_PAGE_PHONE: 'no' }), /reads well on a phone/);
+});
+
+test('planning effort is checked, and the agent decides process questions from the primary source', async () => {
+  const text = await render();
+  assert.match(sectionOf(text, 'AI and model use'), /check the effort level the agent doing it actually runs at\. An agent on a lower effort hands that work to an extra-high worker/);
+  assert.doesNotMatch(await render({ PREFS_MODEL_ROUTING: 'economical' }), /hands that work to an extra-high worker/);
+  assert.match(sectionOf(text, 'Decisions'), /For a process or tooling question the user cannot answer, read the primary source/);
+  assert.doesNotMatch(await render({ PREFS_AUTONOMY: 'ask' }), /read the primary source/);
+});
+
+test('a fleet checks live state, keeps work moving, and names windows by their labels; a deadline never skips a check', async () => {
+  const text = await render();
+  const fleet = sectionOf(text, 'Working with a fleet');
+  assert.match(fleet, /check its live state first/);
+  assert.match(fleet, /start the next step at once/);
+  assert.match(fleet, /Raise any wait longer than 30 minutes/);
+  assert.match(fleet, /name the window by the labels the user sees on screen/);
+  assert.match(sectionOf(text, 'Safety'), /keep every normal check and work in dependency order/);
+  assert.doesNotMatch(await render({ PREFS_HABITS: 'no' }), /dependency order/);
+});
+
 test('the Simplified Technical English style is a choice that adds its rules and keeps outward writing out', async () => {
   const ctx = await answer();
   assert.equal(ctx.get('PREFS_WRITING_STYLE'), 'plain');
@@ -151,7 +187,7 @@ test('a saved PREFS_GRILL_ON_GAPS answer is saved back as PREFS_GRILL', () => {
 test('the stow reminder is on by default when Firstmate is picked', () => {
   const q = firstmate.questions.find((x) => x.key === 'FIRSTMATE_STOW_REMINDER');
   assert.equal(q.default, true);
-  assert.equal(firstmate.questions.find((x) => x.key === 'FIRSTMATE_STOW_REMINDER_TOKENS').default, '350000');
+  assert.equal(firstmate.questions.find((x) => x.key === 'FIRSTMATE_STOW_REMINDER_TOKENS').default, 'auto');
 });
 
 test('the card template ships its fonts, colours, waiting strip and phone layout', () => {

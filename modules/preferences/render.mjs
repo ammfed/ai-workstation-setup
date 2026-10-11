@@ -117,6 +117,8 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
       'For ordinary judgment calls within a direction the user already set (a library, a helper tool, an implementation detail), decide and report the outcome instead of asking first. When unsure whether a call is the user\'s, act and flag it.',
     get('PREFS_AUTONOMY') === 'act' &&
       'Always ask first for a decision only the user can make, a credential or access only they hold, or anything destructive, irreversible or security-sensitive.',
+    get('PREFS_AUTONOMY') === 'act' &&
+      'For a process or tooling question the user cannot answer, read the primary source (the official docs or the upstream repository), decide, and tell the user in one line what was chosen and why. Product and stakeholder decisions stay with the user.',
     get('PREFS_AUTONOMY') === 'ask' && 'Ask before acting on judgment calls, including small implementation choices.',
     decisionsPath &&
       `Keep the user's decisions in \`${decisionsPath}\`: record each ruling the moment it is made, with its date. If it is not in the file, it is not decided, and the newest ruling wins.`,
@@ -135,7 +137,7 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
   section('Review pages', [
     allCards &&
       `Every Lavish page starts from the card template at \`${cardsPath}\`: decisions, reports, plans, explainers and lessons alike. One card at a time, a visual beside it, minimal text. A card with nothing to choose has a Next button instead of options.`,
-    allCards && "This overrides lavish-axi's own design default. Use another look only when the user names one.",
+    allCards && "This overrides lavish-axi's own design default and the look of boards that a skill brings with it. Use another look only when the user names one.",
     allCards && 'For a diagram on a page, use the diagram-design skill.',
     cards && get('PREFS_PAGE_SIDE_BY_SIDE') &&
       'Lay a decision page out horizontally: the decision card on one side and a canvas showing the current decision visually on the other. Never stack them vertically.',
@@ -143,6 +145,8 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
       "For any visual choice, give every option its own preview and let the user flip between all of them (buttons or a dropdown). The canvas follows the option they select. Never show only the recommended option's visual.",
     get('PREFS_PAGE_MINIMAL_TEXT') &&
       'Keep page text to the minimum: a title, the question, short option labels. No fluff, no small helper text, no explaining the obvious. Let visuals carry the meaning, and use a visual only where it shows the point better than a sentence, preferring real screenshots and worked examples over drawn mock-ups.',
+    get('PREFS_PAGE_PHONE') &&
+      'Every review page also reads well on a phone (390 px wide): the card and its picture stack with no empty filler, body text is at least 14 px, and a wide diagram gets a phone version (for example a vertical list of steps) instead of shrinking to tiny labels. Check a 390 by 844 screenshot before sending the link. The laptop layout stays as it is.',
     get('PREFS_PAGE_WIDE_HEADER') &&
       'Give review pages a generous header: a large title and intro text spread across the full page width, not squeezed into a narrow column.',
   ]);
@@ -160,6 +164,8 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
   section('Working with a fleet', get('PREFS_FLEET_WORKFLOW') ? [
     'Dispatch: give each worker a brief that names the goal, the branch, where it reports and what done means. Work that can run in parallel goes to separate workers in separate worktrees.',
     'Supervise: workers report a status line only at phase changes and when finished, blocked or in need of a decision. Read the live state (status files, session lists) before reporting on it, and never guess.',
+    'Before calling any work in progress, in final checks or finished, check its live state first. After each merge, check the queue. When a step of a multi-step plan lands, start the next step at once. Raise any wait longer than 30 minutes to the user within the hour.',
+    "When the user must type in an agent's window, name the window by the labels the user sees on screen (for example the workspace and tab names), never by internal ids, and give the exact words to type.",
     'Land: each worker opens a pull request and watches its checks until they are green. Merging follows the safety rule below.',
     'A review page is for a genuine decision, a look-and-feel change, or a plan the user should judge from the artifact. Status, yes-or-no questions and routine implementation choices do not get one.',
     'Decisions go to the user only at genuine forks. Act on work that nothing blocks. A permission prompt, a refused tool call or a command that needs running by hand is never escalated as a decision: state the blocker once in one line and stop.',
@@ -215,6 +221,8 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     routing === 'capable' &&
       'Give small, clear tasks (a bug with a clear repro, a docs or copy edit, a version bump, a config tweak) to a faster model at medium effort, and raise it to high after a failed check.',
     routing === 'capable' && 'Give reading, lookup and summary sub-tasks to the fastest model (for example the reader subagent).',
+    routing === 'capable' &&
+      'Before planning, investigation, research or design work starts, check the effort level the agent doing it actually runs at. An agent on a lower effort hands that work to an extra-high worker and only reviews and relays the result.',
     routing === 'economical' && 'Use a balanced model at low effort for routine work and sub-tasks.',
     routing === 'economical' && 'Use medium effort for planning, design, hard reasoning and judgment calls.',
     routing === 'economical' && 'Use the most capable model at high effort for building a product, prototype or demo.',
@@ -237,6 +245,10 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
       'Treat tools, names and facts the user mentions in passing as leads to verify with independent research, not as settled truth.',
     get('PREFS_VERIFY_USER_CLAIMS') &&
       'When asked to set something up, compare the options and confirm the pick before large downloads or config changes.',
+    get('PREFS_LIVE_FACTS') &&
+      'Examples of the current leading models, tools or products come from a live source checked that day, with its date shown, never from memory.',
+    get('PREFS_LIVE_FACTS') &&
+      "Before advising what to buy or which tool to pick, fetch each product's own pricing page and docs that day. Mark every claim (price, limits, how it connects, such as an API or an MCP server) as checked on the vendor's page, from a third party only, or not checked, and flag sources that disagree.",
     get('PREFS_FINDINGS_TO_CHANGE') &&
       'Research is not finished as a report. It ends in a change the user can see, or a decision they can make that leads to one. If nothing changes because of it, say so plainly.',
   ]);
@@ -262,6 +274,8 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
       `When the user says "${get('PREFS_PAUSE_WORD')}", stop every running agent in place, confirm each one stopped, and hold until the user says to resume. A new full task request right after a pause counts as the resume.`,
     get('PREFS_HABITS') && 'A statement is a claim until something shows it. Show the case that can fail, not only the passing one.',
     get('PREFS_HABITS') && 'When the user says a record is outdated, check it against reality before defending it.',
+    get('PREFS_HABITS') &&
+      'When asked to have something ready by a time, keep every normal check and work in dependency order. Never skip a check, a review or an approval to go faster.',
     'Say plainly when something was reasoned about rather than tested.',
   ]);
 

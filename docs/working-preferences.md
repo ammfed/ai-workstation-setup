@@ -36,7 +36,7 @@ Firstmate's `config/brief-include.md`, so every worker writes its status lines a
 | `PREFS_WRITING_STYLE` | `plain` | `ste` adds a plain-English house style for everything written to you, based on Simplified Technical English (ASD-STE100): one instruction per sentence with the condition first, active voice, short sentences and paragraphs, simple tenses, one word for one thing, verbs instead of noun phrases, no semicolons or em dashes, and warnings that state the risk first. Greetings, the reason behind a recommendation and short acknowledgements may relax it. Writing done as you for other people follows the outward rules instead. `plain` writes no extra rule. |
 | `PREFS_ONE_DESIGN_SYSTEM` | no | With several design systems, the one matching the artifact type is used, never two mixed. |
 | `PREFS_COPY_SECOND_OPINION` | no | Copywriting and translations get a refinement pass from a second AI model; only the text being refined is sent. |
-| `PREFS_HABITS` | yes | Eight everyday habits: replies end with the next actions, yours first; "I'm lost" or "too long" gets the shortest plain answer; an opinion is a real one with its reason; status and questions stay on your current topic; "check X" is a question, not a go-ahead to widen the work; no menu of what to run next; a claim is unproven until something shows it, including the case that can fail; a record you call outdated is checked against reality before it is defended. The lines land in Language and tone, Ideas and priorities, and Safety. |
+| `PREFS_HABITS` | yes | Nine everyday habits: replies end with the next actions, yours first; "I'm lost" or "too long" gets the shortest plain answer; an opinion is a real one with its reason; status and questions stay on your current topic; "check X" is a question, not a go-ahead to widen the work; no menu of what to run next; a claim is unproven until something shows it, including the case that can fail; a record you call outdated is checked against reality before it is defended; a deadline never skips a check, a review or an approval, and work runs in dependency order. The lines land in Language and tone, Ideas and priorities, and Safety. |
 | `PREFS_CALM_WORD` | `calm` | Saying this word switches the agent to a calm mode: batched tool calls, no in-between updates, only the answer. Empty for none. |
 
 ### Reporting and status
@@ -58,7 +58,7 @@ Firstmate's `config/brief-include.md`, so every worker writes its status lines a
 | `PREFS_PREVIEW_BEFORE_BUILD` | yes | A change to how something looks or feels is shown on a review page before it is built. |
 | `PREFS_CHECK_ANSWERS_FIRST` | yes | The agent checks for your answer before calling a page or question open. |
 | `PREFS_ASK_BEFORE_CLOSING` | yes | The agent asks before closing finished agents, sessions and review pages. Research tabs follow the research rule. |
-| `PREFS_AUTONOMY` | `act` | Everyday judgment calls inside a direction you set are decided and reported; credentials, anything destructive and choices only you can make are always asked. `ask` asks about every one. |
+| `PREFS_AUTONOMY` | `act` | Everyday judgment calls inside a direction you set are decided and reported; credentials, anything destructive and choices only you can make are always asked. A process or tooling question you cannot answer is settled from the primary source (official docs or the upstream repository), with one line on what was chosen and why. `ask` asks about every one. |
 | `PREFS_DECISIONS_LOG` | empty | A file where the agent records each ruling with its date (newest wins, not in the file means not decided), what you ruled out (never offered again), and each "not yet" with the condition that brings it back. |
 | `PREFS_GRILL` | `every` | Every round of questions runs the grilling method: map the open decisions, ask only those that can be answered now, each with a recommendation, look facts up instead of asking, and ask the next round only after the answers. Kept balanced: when the intent and the request are clear enough, the agent goes ahead without asking. A gap only someone else can fill becomes a short questionnaire for that person. `gaps` questions you hard only when a plan has a real gap; `off` writes no rule. An earlier `PREFS_GRILL_ON_GAPS` answer carries over (yes becomes `gaps`, no becomes `off`). |
 
@@ -68,10 +68,11 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 
 | Key | Default | Rule |
 | --- | --- | --- |
-| `PREFS_PAGES_ALL_CARDS` | yes | Every Lavish page (decisions, reports, plans, explainers, lessons) starts from the card template: one card at a time, a visual beside it, minimal text, and a Next button on a card with nothing to choose. This overrides lavish-axi's own design default unless you name another look; diagrams use the diagram-design skill. |
+| `PREFS_PAGES_ALL_CARDS` | yes | Every Lavish page (decisions, reports, plans, explainers, lessons) starts from the card template: one card at a time, a visual beside it, minimal text, and a Next button on a card with nothing to choose. This overrides lavish-axi's own design default, and the look of boards a skill brings with it, unless you name another look; diagrams use the diagram-design skill. |
 | `PREFS_PAGE_SIDE_BY_SIDE` | yes | The decision card sits on one side and a canvas showing the current decision on the other, horizontally, never stacked. |
 | `PREFS_PAGE_FLIP_PREVIEWS` | yes | Every option of a visual choice has a preview, and you can flip between all of them; never only the recommended one. |
 | `PREFS_PAGE_MINIMAL_TEXT` | yes | A title, the question and short option labels: no fluff, no helper text, no explaining the obvious. Visuals carry the meaning. |
+| `PREFS_PAGE_PHONE` | yes | Every review page also reads well on a phone (390 px wide): the card and its picture stack, body text is at least 14 px, and a wide diagram gets a phone version instead of tiny labels. A 390 by 844 screenshot is checked before the link is sent. |
 | `PREFS_PAGE_WIDE_HEADER` | yes | A large title and intro spread across the full page width. |
 
 ### Review page delivery and workflow
@@ -81,7 +82,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | `PREFS_PAGE_CHECK_BEFORE_SEND` | yes | A page is opened in the agent's own browser and checked by screenshot before its link is sent, and the link is always sent. |
 | `PREFS_PAGE_FIRST` | yes | When a decision waits on a page, the page is built and checked first, the link is sent, and the agent stands by until you answer. |
 | `PREFS_PAGES_TOGETHER` | yes | While several review pages are in progress, links are held until all open work is done; the pages are checked against each other (each question once, dependencies in order, no clashing recommendations, one set of names) and sent together in the order to take them, with brief status meanwhile. |
-| `PREFS_FLEET_WORKFLOW` | yes | Supervising agents brief workers with a goal, branch and definition of done; workers report only at phase changes and land through a pull request with green checks; review pages are for real decisions and look-and-feel changes, never status or routine choices; permission prompts and command mechanics are never escalated. |
+| `PREFS_FLEET_WORKFLOW` | yes | Supervising agents brief workers with a goal, branch and definition of done; workers report only at phase changes and land through a pull request with green checks; review pages are for real decisions and look-and-feel changes, never status or routine choices; permission prompts and command mechanics are never escalated. Live state is checked before work is called in progress or finished, the next step of a plan starts as soon as one lands, and a wait over 30 minutes is raised within the hour. When you must type in an agent's window, it is named by the labels you see on screen, never internal ids. |
 
 ### Building
 
@@ -107,7 +108,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 
 | Key | Default | Rule |
 | --- | --- | --- |
-| `PREFS_MODEL_ROUTING` | `capable` | The most capable model at medium effort for most work, extra-high effort for user-facing frontend and visual design, investigations, diagnosis and plans, small, clear tasks on a faster model at medium effort (high after a failed check), and reading, lookup and summaries on the fastest model ([model-map.md](model-map.md)). `economical`: low effort by default, medium for planning, design and hard reasoning, the most capable model for building. `balanced` raises each step. |
+| `PREFS_MODEL_ROUTING` | `capable` | The most capable model at medium effort for most work, extra-high effort for user-facing frontend and visual design, investigations, diagnosis and plans, small, clear tasks on a faster model at medium effort (high after a failed check), and reading, lookup and summaries on the fastest model ([model-map.md](model-map.md)). Before planning, investigation, research or design starts, the agent checks the effort it actually runs at; one on a lower effort hands that work to an extra-high worker and only reviews it. `economical`: low effort by default, medium for planning, design and hard reasoning, the most capable model for building. `balanced` raises each step. |
 | `PREFS_QUOTA` | yes | Check subscription limits with `quota-axi` before heavy work and take the cheapest path. |
 | `PREFS_DELEGATE_RETRIEVAL` | `agy` if chosen in agent-clis | Bulk reading and fetching go to this secondary agent CLI; decisions and code changes stay with the main agent. Empty for none. |
 | `PREFS_DELEGATE_MODEL` | `gemini-3.8-flash-high` for agy | The model that CLI is told to use for it (`--model`). Empty leaves the CLI's own default. |
@@ -118,6 +119,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | --- | --- | --- |
 | `PREFS_RESEARCH_BROWSER` | `separate` | Web research happens in the agent's own visible browser, never yours; one tab per task, closed when done, and never a tab the agent did not open. |
 | `PREFS_SOURCE_QUALITY` | yes | Each source is named by type (official docs, standards body, report, vendor page, forum); low-quality sources are skipped; existing software comes before general write-ups. |
+| `PREFS_LIVE_FACTS` | yes | Examples of the current leading models, tools or products come from a live source checked that day, with its date. Before advice on what to buy or which tool to pick, each product's own pricing page and docs are fetched that day, and every claim is marked as checked on the vendor's page, from a third party only, or not checked. |
 | `PREFS_FINDINGS_TO_CHANGE` | yes | Research ends in a change you can see or a decision you can make, not only a report. |
 | `PREFS_VERIFY_USER_CLAIMS` | yes | Tools and facts you mention in passing are checked before they are relied on, and options are compared before large installs. |
 
@@ -150,7 +152,14 @@ to you, and saying plainly when something was reasoned about rather than tested.
   macOS, WSL): a visible Chrome window with its own profile. Sign in to research sites
   there once; agents drive it with `research-browser axi <command>`.
 - **Quota**: `quota-axi` (agent-clis) reads your subscription windows.
-- **Context reminder**: the claude-code module can add a hook (`CLAUDE_CONTEXT_REMINDER`)
-  that reminds the agent once, when the context passes `CLAUDE_CONTEXT_REMINDER_TOKENS`,
+- **Context reminder**: the claude-code module adds a hook (`CLAUDE_CONTEXT_REMINDER`, on by
+  default) that reminds the agent once, when the context passes `CLAUDE_CONTEXT_REMINDER_TOKENS`,
   to save its notes before the context is compacted, and (`CLAUDE_COMPACT_REMINDER`) once more
-  right after a compaction, pointing at the full transcript so nothing is lost.
+  right after a compaction, pointing at the full transcript so nothing is lost. The default
+  `auto` puts the save point at seven eighths of the auto-compact window that applies to the
+  session (`autoCompactWindow` in the project's `.claude` settings, else yours): 350000 for a
+  400000 window, 175000 for 200000, and 150000 when no window is set. So a folder with a
+  smaller window of its own gets an earlier reminder without another hook.
+  `CLAUDE_CONTEXT_REMINDER_TEXT` changes what it asks for, such as running a save skill. In a
+  project that registers its own reminder (Firstmate's stow reminder), the default one stays
+  quiet, so a session gets one reminder, not two.

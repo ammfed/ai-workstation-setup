@@ -16,7 +16,7 @@ import { Context, Skip, detectPlatform } from '../lib/context.mjs';
 import { installSkill, setHook, settingsPath } from '../lib/claude.mjs';
 import { cswapThreshold, researchBrowserPort } from '../modules/agent-clis/module.mjs';
 import { PATCH_MARKER, mergePixelSettings, patchPixelCli } from '../modules/agent-clis/pixel-agents.mjs';
-import { PR_MERGE_RULES } from '../modules/claude-code/module.mjs';
+import { PR_MERGE_RULES, reminderTokens } from '../modules/claude-code/module.mjs';
 import { findOpenWhisprAppImage, openGuardSeconds } from '../modules/extras/module.mjs';
 import { stowTokens } from '../modules/firstmate/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
@@ -123,6 +123,61 @@ test('a stow reminder hook lands only in the settings file it is given', () => {
   }
 });
 
+// Runs the shipped context-reminder hook once, as Claude Code would, for a session whose
+// latest turn used `tokens` of context and that started in `project`.
+function runReminder(home, project, tokens, args) {
+  const transcript = path.join(home, `${tokens}.jsonl`);
+  const turn = { type: 'assistant', message: { usage: { input_tokens: tokens, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } };
+  fs.writeFileSync(transcript, `${JSON.stringify(turn)}\n`);
+  const input = { hook_event_name: 'UserPromptSubmit', session_id: `s${tokens}`, transcript_path: transcript, cwd: project };
+  const script = path.join(repoRoot, 'templates', 'claude-code', 'bin', 'context-reminder.mjs');
+  const env = { ...process.env, HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), TMPDIR: home, TMP: home, TEMP: home };
+  const r = spawnSync(process.execPath, [script, ...args], { input: JSON.stringify(input), encoding: 'utf8', env });
+  assert.equal(r.status, 0, r.stderr);
+  return r.stdout ? JSON.parse(r.stdout).hookSpecificOutput.additionalContext : '';
+}
+
+function writeSettings(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(value));
+}
+
+test('an auto save point sits at seven eighths of the auto-compact window that applies', () => {
+  const home = tempHome();
+  writeSettings(path.join(home, '.claude', 'settings.json'), { autoCompactWindow: 400000 });
+  const plain = path.join(home, 'work');
+  const coordinator = path.join(home, 'coordinator');
+  fs.mkdirSync(path.join(plain, 'sub'), { recursive: true });
+  writeSettings(path.join(coordinator, '.claude', 'settings.local.json'), { autoCompactWindow: 200000 });
+
+  assert.equal(runReminder(home, plain, 340000, ['auto']), '');
+  assert.match(runReminder(home, path.join(plain, 'sub'), 360000, ['auto']), /save what matters/);
+  assert.equal(runReminder(home, coordinator, 170000, ['auto', 'Run /stow now']), '');
+  assert.match(runReminder(home, coordinator, 180000, ['auto', 'Run /stow now']), /^Run \/stow now/);
+});
+
+test('an auto save point without any auto-compact window falls back to 150000 tokens', () => {
+  const home = tempHome();
+  assert.equal(runReminder(home, home, 140000, ['auto']), '');
+  assert.match(runReminder(home, home, 160000, ['auto']), /save what matters/);
+});
+
+test("the default reminder yields to a project's own reminder", () => {
+  const home = tempHome();
+  const coordinator = path.join(home, 'coordinator');
+  const command = 'node "context-reminder.mjs" auto "Run /stow now"';
+  writeSettings(path.join(coordinator, '.claude', 'settings.local.json'), { hooks: { UserPromptSubmit: [{ hooks: [{ type: 'command', command }] }] } });
+  assert.equal(runReminder(home, coordinator, 500000, ['auto']), '');
+  assert.match(runReminder(home, coordinator, 500001, ['auto', 'Run /stow now']), /Run \/stow now/);
+});
+
+test('reminder thresholds are auto or a whole number of tokens', () => {
+  assert.equal(reminderTokens('auto', 'CLAUDE_CONTEXT_REMINDER_TOKENS'), 'auto');
+  assert.equal(reminderTokens(' 150000 ', 'CLAUDE_CONTEXT_REMINDER_TOKENS'), 150000);
+  assert.throws(() => reminderTokens('35%', 'CLAUDE_CONTEXT_REMINDER_TOKENS'), /CLAUDE_CONTEXT_REMINDER_TOKENS/);
+  assert.throws(() => reminderTokens('1000', 'CLAUDE_CONTEXT_REMINDER_TOKENS'), /50000/);
+});
+
 test('the merge permission is a pair of gh and gh-axi allow rules', () => {
   assert.deepEqual(PR_MERGE_RULES, ['Bash(gh pr merge:*)', 'Bash(gh-axi pr merge:*)']);
 });
@@ -141,6 +196,7 @@ test('writeFile replace keeps a backup and writes without asking', async () => {
 
 test('question values are checked', () => {
   assert.equal(stowTokens('350000'), 350000);
+  assert.equal(stowTokens('auto'), 'auto');
   assert.throws(() => stowTokens('35%'), /FIRSTMATE_STOW_REMINDER_TOKENS/);
   assert.throws(() => stowTokens('1000'), /50000/);
   assert.equal(cswapThreshold(''), null);
@@ -319,4 +375,11 @@ test('the Firstmate brief include carries the house style to workers only when i
   assert.match(text, /status lines, reports, questions and notes for firstmate/);
   assert.match(text, /ASD-STE100/);
   assert.doesNotMatch(text, /Delivery contract: mode=/);
+});
+
+test('the vision skill is an optional choice from its own upstream repository', () => {
+  const q = skills.questions.find((x) => x.key === 'SKILLS');
+  const vision = q.choices.find((c) => c.value === 'vision');
+  assert.equal(vision?.repo, 'kunchenguid/vision');
+  assert.equal(q.default.includes('vision'), false);
 });
