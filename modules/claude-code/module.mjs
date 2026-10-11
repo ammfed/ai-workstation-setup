@@ -47,6 +47,12 @@ export function parseModelEfforts(text) {
   return out;
 }
 
+// A read-only helper on Haiku for reading, lookup and summaries (docs/model-map.md). A reader
+// the person wrote is never replaced; a version this setup shipped is refreshed.
+export function installReaderAgent(ctx) {
+  return ctx.writeFile(path.join(claudeDir(ctx), 'agents', 'reader.md'), ctx.template('claude-code/agents/reader.md'), { onConflict: 'ask' });
+}
+
 export default {
   name: 'claude-code',
   title: 'Claude Code',
@@ -123,8 +129,8 @@ export default {
     {
       key: 'CLAUDE_MODEL_EFFORTS',
       type: 'text',
-      message: 'Default effort per model, like "claude-opus-5-5=xhigh, claude-sonnet-5-5=low" (levels: low, medium, high, xhigh; empty to keep)',
-      default: '',
+      message: 'Default effort per model, like "claude-opus-5-5=medium, claude-sonnet-5-5=low" (levels: low, medium, high, xhigh; empty to keep)',
+      default: 'claude-opus-5-5=medium',
     },
     {
       key: 'CLAUDE_REMOTE_CONTROL',
@@ -213,6 +219,12 @@ export default {
       message: 'Also remind the agent right after a compaction to recover and save anything that mattered?',
       default: true,
       when: (ctx) => ctx.get('CLAUDE_CONTEXT_REMINDER'),
+    },
+    {
+      key: 'CLAUDE_READER_AGENT',
+      type: 'confirm',
+      message: 'Add a read-only "reader" subagent on Haiku for reading, lookup and summaries (keeps your own reader if you have one)?',
+      default: true,
     },
     {
       key: 'CLAUDE_UPDATE_REMINDER',
@@ -379,6 +391,8 @@ export default {
         );
       }
     }
+
+    if (ctx.get('CLAUDE_READER_AGENT')) await ctx.step('reader subagent', () => installReaderAgent(ctx));
 
     if (ctx.get('CLAUDE_CONTEXT_REMINDER')) {
       await ctx.step('context reminder hook', async () => {

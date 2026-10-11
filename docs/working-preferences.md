@@ -107,9 +107,10 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 
 | Key | Default | Rule |
 | --- | --- | --- |
-| `PREFS_MODEL_ROUTING` | `capable` | The most capable model at medium effort for most work, with user-facing frontend and visual design on the model strongest at design and small, clear tasks on a faster model at high effort. `economical`: low effort by default, medium for planning, design and hard reasoning, the most capable model for building. `balanced` raises each step. |
+| `PREFS_MODEL_ROUTING` | `capable` | The most capable model at medium effort for most work, extra-high effort for user-facing frontend and visual design, investigations, diagnosis and plans, small, clear tasks on a faster model at medium effort (high after a failed check), and reading, lookup and summaries on the fastest model ([model-map.md](model-map.md)). `economical`: low effort by default, medium for planning, design and hard reasoning, the most capable model for building. `balanced` raises each step. |
 | `PREFS_QUOTA` | yes | Check subscription limits with `quota-axi` before heavy work and take the cheapest path. |
 | `PREFS_DELEGATE_RETRIEVAL` | `agy` if chosen in agent-clis | Bulk reading and fetching go to this secondary agent CLI; decisions and code changes stay with the main agent. Empty for none. |
+| `PREFS_DELEGATE_MODEL` | `gemini-3.8-flash-high` for agy | The model that CLI is told to use for it (`--model`). Empty leaves the CLI's own default. |
 
 ### Research
 
