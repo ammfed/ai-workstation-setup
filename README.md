@@ -32,7 +32,7 @@ brackets; nothing is vendored. Items marked optional are off until you pick them
 
 **Agents and their settings**
 - [Claude Code](https://code.claude.com/docs) with model, effort per model (Opus 5.5 at medium by default), permission mode, theme, view, Remote Control and auto-compact settings, plus optional phone push notifications, feedback drafts, forced session persistence, spinner tips, skipping the bypass-permissions confirmation, and (off by default) letting agents merge pull requests without asking (claude-code); the Claude desktop app on Windows.
-- Models: a map of which model and effort fits each kind of work, which the defaults follow ([docs/model-map.md](docs/model-map.md)), and a read-only `reader` subagent on Haiku for reading, lookup and summaries (claude-code).
+- Models: a map of which model and effort fits each kind of work, which the defaults follow ([docs/model-map.md](docs/model-map.md)), research at high effort that hands bulk fetching, reading and drafting to cheaper helpers, and a read-only `reader` subagent on Haiku for reading, lookup and summaries (claude-code).
 - Status line: a built-in gauges line with context, 5-hour and weekly bars and their reset times (the default, nothing extra to install), or [ccstatusline](https://github.com/sirmalloc/ccstatusline) (claude-code).
 - Plugins: [diagram-design](https://github.com/cathrynlavery/diagram-design); optional [compact-adviser](https://github.com/kunchenguid/compact-adviser), which says when a session is at a safe point to compact (claude-code).
 - Hooks: session-start briefings from the agent CLIs, and reminders to save notes before and after a compaction, with the save point following the auto-compact window (claude-code, agent-clis).

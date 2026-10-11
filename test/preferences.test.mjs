@@ -133,6 +133,17 @@ test('planning effort is checked, and the agent decides process questions from t
   assert.doesNotMatch(await render({ PREFS_AUTONOMY: 'ask' }), /read the primary source/);
 });
 
+test('the capable model rules: research on high effort with helpers, small tasks on Sonnet high, then Opus medium', async () => {
+  const models = sectionOf(await render(), 'AI and model use');
+  assert.match(models, /Run research on the most capable model at high effort\. It plans and checks the work, hands bulk fetching to the bulk research CLI, reading and summaries to the reader subagent, and drafting to a faster model at high effort\./);
+  assert.match(models, /to a faster model at high effort, and re-run it on the most capable model at medium effort after a failed check\./);
+  assert.doesNotMatch(models, /raise it to high after a failed check/);
+  assert.doesNotMatch(models, /investigation, research or design work starts/);
+  assert.match(models, /Before planning, investigation or design work starts/);
+  const other = await render({ PREFS_MODEL_ROUTING: 'balanced' });
+  assert.doesNotMatch(other, /Run research on the most capable model/);
+});
+
 test('a fleet checks live state, keeps work moving, and names windows by their labels; a deadline never skips a check', async () => {
   const text = await render();
   const fleet = sectionOf(text, 'Working with a fleet');

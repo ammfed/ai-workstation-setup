@@ -57,9 +57,14 @@ export function dispatchProfiles(kind, harness) {
           why: 'Investigations, diagnosis and plans get extra-high effort; the build that follows runs at the default.',
         },
         {
+          when: 'The task researches a question: it gathers and reads sources, compares them and reports what it found.',
+          use: [profile('claude-opus-5-5', 'high')],
+          why: 'The research worker plans and checks, and hands bulk fetching to agy with gemini-3.8-flash-high (claude-sonnet-4-6 on a Gemini quota error), reading and summaries to the reader subagent, and drafting to Sonnet 5.5 at high effort.',
+        },
+        {
           when: 'A small, well-defined task with a clear outcome and little ambiguity: a bug fix with a clear repro, a docs or copy edit, a version bump, a config tweak, or another narrow mechanical change.',
-          use: [profile('claude-sonnet-5-5', 'medium')],
-          why: 'Small, clear tasks go to the faster model at medium effort; after a failed check, retry at high effort.',
+          use: [profile('claude-sonnet-5-5', 'high')],
+          why: 'Small, clear tasks go to the faster model at high effort; after a failed check, re-run on Opus 5.5 at medium effort.',
         },
       ],
       default: [profile('claude-opus-5-5', 'medium')],
@@ -195,7 +200,7 @@ export default {
       message: 'Crew dispatch profiles (config/crew-dispatch.json)',
       default: 'capable',
       choices: [
-        { value: 'capable', label: 'capable - Opus at medium effort, Opus at xhigh for frontend design, investigations and plans, small clear tasks on Sonnet at medium (docs/model-map.md)' },
+        { value: 'capable', label: 'capable - Opus at medium effort, Opus at xhigh for frontend design, investigations and plans, Opus at high for research with helpers, small clear tasks on Sonnet at high (docs/model-map.md)' },
         { value: 'starter', label: 'starter - strong model for builds, more effort for planning, light default' },
         { value: 'none', label: 'none - every worker uses the crew harness' },
       ],

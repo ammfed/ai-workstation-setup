@@ -108,10 +108,11 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 
 | Key | Default | Rule |
 | --- | --- | --- |
-| `PREFS_MODEL_ROUTING` | `capable` | The most capable model at medium effort for most work, extra-high effort for user-facing frontend and visual design, investigations, diagnosis and plans, small, clear tasks on a faster model at medium effort (high after a failed check), and reading, lookup and summaries on the fastest model ([model-map.md](model-map.md)). Before planning, investigation, research or design starts, the agent checks the effort it actually runs at; one on a lower effort hands that work to an extra-high worker and only reviews it. `economical`: low effort by default, medium for planning, design and hard reasoning, the most capable model for building. `balanced` raises each step. |
+| `PREFS_MODEL_ROUTING` | `capable` | The most capable model at medium effort for most work, extra-high effort for user-facing frontend and visual design, investigations, diagnosis and plans, research at high effort (it plans and checks, and hands bulk fetching to the bulk research CLI, reading and summaries to the reader subagent, and drafting to a faster model), small, clear tasks on a faster model at high effort (re-run on the most capable model at medium effort after a failed check), and reading, lookup and summaries on the fastest model ([model-map.md](model-map.md)). Before planning, investigation or design starts, the agent checks the effort it actually runs at; one on a lower effort hands that work to an extra-high worker and only reviews it. `economical`: low effort by default, medium for planning, design and hard reasoning, the most capable model for building. `balanced` raises each step. |
 | `PREFS_QUOTA` | yes | Check subscription limits with `quota-axi` before heavy work and take the cheapest path. |
 | `PREFS_DELEGATE_RETRIEVAL` | `agy` if chosen in agent-clis | Bulk reading and fetching go to this secondary agent CLI; decisions and code changes stay with the main agent. Empty for none. |
 | `PREFS_DELEGATE_MODEL` | `gemini-3.8-flash-high` for agy | The model that CLI is told to use for it (`--model`). Empty leaves the CLI's own default. |
+| `PREFS_DELEGATE_FALLBACK_MODEL` | `claude-sonnet-4-6` for agy | The model the rule names for the same work after a Gemini quota error. Empty for none. Asked only when `PREFS_DELEGATE_MODEL` is set. |
 
 ### Research
 
