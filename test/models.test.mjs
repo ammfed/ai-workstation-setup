@@ -109,15 +109,24 @@ test('the no-mistakes config lives in NM_HOME when set, else ~/.no-mistakes', ()
   }
 });
 
-test('the example dispatch profiles: Opus medium default, Opus xhigh for design and plans, Opus high for research, Sonnet high for small tasks, no Fable', () => {
+test('the example dispatch profiles: Opus medium default, Opus xhigh for a new look, Opus high for polish, investigations, plans and research, Sonnet high for small tasks, no Fable', () => {
   assert.equal(question(firstmate, 'FIRSTMATE_DISPATCH').default, 'capable');
   const capable = dispatchProfiles('capable', 'claude');
   assert.deepEqual(capable.default, [{ harness: 'claude', model: 'claude-opus-5-5', effort: 'medium' }]);
   const rule = (re) => capable.rules.find((r) => re.test(r.when));
-  assert.deepEqual(rule(/frontend/).use, [{ harness: 'claude', model: 'claude-opus-5-5', effort: 'xhigh' }]);
-  assert.deepEqual(rule(/investigat/).use, [{ harness: 'claude', model: 'claude-opus-5-5', effort: 'xhigh' }]);
-  assert.match(rule(/investigat/).when, /diagnos/);
-  assert.match(rule(/investigat/).when, /plan/);
+  const look = rule(/new look/);
+  assert.deepEqual(look.use, [{ harness: 'claude', model: 'claude-opus-5-5', effort: 'xhigh' }]);
+  assert.match(look.when, /not yet settled/);
+  const polish = rule(/polishes/);
+  assert.deepEqual(polish.use, [{ harness: 'claude', model: 'claude-opus-5-5', effort: 'high' }]);
+  assert.match(polish.when, /look is already settled/);
+  assert.match(polish.when, /spacing, copy, states, small layout fixes, or fixes from a usability check/);
+  const thinking = rule(/investigat/);
+  assert.deepEqual(thinking.use, [{ harness: 'claude', model: 'claude-opus-5-5', effort: 'high' }]);
+  assert.match(thinking.when, /diagnos/);
+  assert.match(thinking.when, /plan/);
+  assert.match(thinking.why, /re-run the same task at extra-high effort when the result is weak or the cause is hard to find/);
+  assert.match(thinking.why, /fix or build at medium effort once the cause is proven or the plan is settled/);
   assert.deepEqual(rule(/researches/).use, [{ harness: 'claude', model: 'claude-opus-5-5', effort: 'high' }]);
   const research = rule(/researches/).why;
   assert.match(research, /plans and checks/);
