@@ -217,12 +217,18 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
   section('AI and model use', [
     routing === 'capable' && 'Use the most capable model at medium effort by default, for building and for everything else.',
     routing === 'capable' &&
-      'Give user-facing frontend and visual design work (screens, look, layout, clickable journeys), investigations, diagnosis and plans to the most capable model at extra-high effort.',
+      'Give the design of a new frontend look that is not yet settled (screens, look, layout, clickable journeys) to the most capable model at extra-high effort.',
     routing === 'capable' &&
-      'Give small, clear tasks (a bug with a clear repro, a docs or copy edit, a version bump, a config tweak) to a faster model at medium effort, and raise it to high after a failed check.',
+      'Give polish of a prototype whose look is already settled (spacing, copy, states, small layout fixes, fixes from a usability check) to the most capable model at high effort.',
+    routing === 'capable' &&
+      'Give investigations, diagnosis and plans to the most capable model at high effort. Re-run the same task at extra-high effort when the result is weak or the cause is hard to find, and fix or build at medium effort once the cause is proven or the plan is settled.',
+    routing === 'capable' &&
+      'Give small, clear tasks (a bug with a clear repro, a docs or copy edit, a version bump, a config tweak) to a faster model at high effort, and re-run it on the most capable model at medium effort after a failed check.',
+    routing === 'capable' &&
+      'Run research on the most capable model at high effort. It plans and checks the work, hands bulk fetching to the bulk research CLI, reading and summaries to the reader subagent, and drafting to a faster model at high effort.',
     routing === 'capable' && 'Give reading, lookup and summary sub-tasks to the fastest model (for example the reader subagent).',
     routing === 'capable' &&
-      'Before planning, investigation, research or design work starts, check the effort level the agent doing it actually runs at. An agent on a lower effort hands that work to an extra-high worker and only reviews and relays the result.',
+      'Before planning, investigation or design work starts, check the effort level the agent doing it actually runs at. An agent on a lower effort than these rules pick hands that work to a worker at that effort and only reviews and relays the result.',
     routing === 'economical' && 'Use a balanced model at low effort for routine work and sub-tasks.',
     routing === 'economical' && 'Use medium effort for planning, design, hard reasoning and judgment calls.',
     routing === 'economical' && 'Use the most capable model at high effort for building a product, prototype or demo.',
@@ -231,7 +237,9 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     get('PREFS_QUOTA') &&
       'Treat subscription limits as scarce. Check them with `quota-axi` before heavy or parallel work, take the cheapest path that still answers, and pause heavy work near a limit and say so.',
     get('PREFS_DELEGATE_RETRIEVAL') &&
-      `Hand retrieval-heavy work (large document sweeps, broad web reading, bulk page reads) to \`${[get('PREFS_DELEGATE_RETRIEVAL'), get('PREFS_DELEGATE_MODEL') && `--model ${get('PREFS_DELEGATE_MODEL')}`].filter(Boolean).join(' ')}\` and reason over what it returns. Keep decisions and code changes with the main agent.`,
+      `Hand retrieval-heavy work (large document sweeps, broad web reading, bulk page reads) to \`${[get('PREFS_DELEGATE_RETRIEVAL'), get('PREFS_DELEGATE_MODEL') && `--model ${get('PREFS_DELEGATE_MODEL')}`].filter(Boolean).join(' ')}\` and reason over what it returns. Keep decisions and code changes with the main agent.${
+        get('PREFS_DELEGATE_FALLBACK_MODEL') ? ` If it reports a Gemini quota error, use \`${[get('PREFS_DELEGATE_RETRIEVAL'), `--model ${get('PREFS_DELEGATE_FALLBACK_MODEL')}`].join(' ')}\` instead.` : ''
+      }`,
   ]);
 
   section('Research', [

@@ -127,10 +127,25 @@ test('review pages also read well on a phone, a page in a skill\'s own look is r
 
 test('planning effort is checked, and the agent decides process questions from the primary source', async () => {
   const text = await render();
-  assert.match(sectionOf(text, 'AI and model use'), /check the effort level the agent doing it actually runs at\. An agent on a lower effort hands that work to an extra-high worker/);
-  assert.doesNotMatch(await render({ PREFS_MODEL_ROUTING: 'economical' }), /hands that work to an extra-high worker/);
+  assert.match(sectionOf(text, 'AI and model use'), /check the effort level the agent doing it actually runs at\. An agent on a lower effort than these rules pick hands that work to a worker at that effort/);
+  assert.doesNotMatch(await render({ PREFS_MODEL_ROUTING: 'economical' }), /hands that work to a worker at that effort/);
   assert.match(sectionOf(text, 'Decisions'), /For a process or tooling question the user cannot answer, read the primary source/);
   assert.doesNotMatch(await render({ PREFS_AUTONOMY: 'ask' }), /read the primary source/);
+});
+
+test('the capable model rules: research, polish, investigations and plans on high effort, a new look on extra-high, small tasks on Sonnet high', async () => {
+  const models = sectionOf(await render(), 'AI and model use');
+  assert.match(models, /Run research on the most capable model at high effort\. It plans and checks the work, hands bulk fetching to the bulk research CLI, reading and summaries to the reader subagent, and drafting to a faster model at high effort\./);
+  assert.match(models, /to a faster model at high effort, and re-run it on the most capable model at medium effort after a failed check\./);
+  assert.doesNotMatch(models, /raise it to high after a failed check/);
+  assert.match(models, /Give the design of a new frontend look that is not yet settled \(screens, look, layout, clickable journeys\) to the most capable model at extra-high effort\./);
+  assert.match(models, /Give polish of a prototype whose look is already settled \(spacing, copy, states, small layout fixes, fixes from a usability check\) to the most capable model at high effort\./);
+  assert.match(models, /Give investigations, diagnosis and plans to the most capable model at high effort\. Re-run the same task at extra-high effort when the result is weak or the cause is hard to find, and fix or build at medium effort once the cause is proven or the plan is settled\./);
+  assert.doesNotMatch(models, /investigations, diagnosis and plans to the most capable model at extra-high effort/);
+  assert.doesNotMatch(models, /investigation, research or design work starts/);
+  assert.match(models, /Before planning, investigation or design work starts/);
+  const other = await render({ PREFS_MODEL_ROUTING: 'balanced' });
+  assert.doesNotMatch(other, /Run research on the most capable model/);
 });
 
 test('a fleet checks live state, keeps work moving, and names windows by their labels; a deadline never skips a check', async () => {

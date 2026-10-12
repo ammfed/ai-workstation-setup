@@ -47,19 +47,29 @@ export function dispatchProfiles(kind, harness) {
     return {
       rules: [
         {
-          when: "The task designs or builds a prototype's user-facing frontend: screens, visual look, layout, characters, or clickable user journeys.",
+          when: "The task designs a new look for a prototype's user-facing frontend, one that is not yet settled: screens, visual look, layout, characters, or clickable user journeys.",
           use: [profile('claude-opus-5-5', 'xhigh')],
-          why: 'Frontend design gets the most capable model at extra-high effort.',
+          why: 'A new frontend look gets the most capable model at extra-high effort.',
+        },
+        {
+          when: 'The task polishes a prototype frontend whose look is already settled: spacing, copy, states, small layout fixes, or fixes from a usability check.',
+          use: [profile('claude-opus-5-5', 'high')],
+          why: 'Polish of a settled look gets the most capable model at high effort.',
         },
         {
           when: 'The task investigates or diagnoses a problem whose cause is not yet known, or writes a plan, a design or an architecture before the build.',
-          use: [profile('claude-opus-5-5', 'xhigh')],
-          why: 'Investigations, diagnosis and plans get extra-high effort; the build that follows runs at the default.',
+          use: [profile('claude-opus-5-5', 'high')],
+          why: 'Investigations, diagnosis and plans get high effort; re-run the same task at extra-high effort when the result is weak or the cause is hard to find, and fix or build at medium effort once the cause is proven or the plan is settled.',
+        },
+        {
+          when: 'The task researches a question: it gathers and reads sources, compares them and reports what it found.',
+          use: [profile('claude-opus-5-5', 'high')],
+          why: 'The research worker plans and checks, and hands bulk fetching to agy with gemini-3.8-flash-high (claude-sonnet-4-6 on a Gemini quota error), reading and summaries to the reader subagent, and drafting to Sonnet 5.5 at high effort.',
         },
         {
           when: 'A small, well-defined task with a clear outcome and little ambiguity: a bug fix with a clear repro, a docs or copy edit, a version bump, a config tweak, or another narrow mechanical change.',
-          use: [profile('claude-sonnet-5-5', 'medium')],
-          why: 'Small, clear tasks go to the faster model at medium effort; after a failed check, retry at high effort.',
+          use: [profile('claude-sonnet-5-5', 'high')],
+          why: 'Small, clear tasks go to the faster model at high effort; after a failed check, re-run on Opus 5.5 at medium effort.',
         },
       ],
       default: [profile('claude-opus-5-5', 'medium')],
@@ -195,7 +205,7 @@ export default {
       message: 'Crew dispatch profiles (config/crew-dispatch.json)',
       default: 'capable',
       choices: [
-        { value: 'capable', label: 'capable - Opus at medium effort, Opus at xhigh for frontend design, investigations and plans, small clear tasks on Sonnet at medium (docs/model-map.md)' },
+        { value: 'capable', label: 'capable - Opus at medium effort, Opus at xhigh for a new frontend look, Opus at high for polish, investigations, plans and research with helpers, small clear tasks on Sonnet at high (docs/model-map.md)' },
         { value: 'starter', label: 'starter - strong model for builds, more effort for planning, light default' },
         { value: 'none', label: 'none - every worker uses the crew harness' },
       ],

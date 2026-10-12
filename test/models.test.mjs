@@ -109,16 +109,34 @@ test('the no-mistakes config lives in NM_HOME when set, else ~/.no-mistakes', ()
   }
 });
 
-test('the example dispatch profiles: Opus medium default, Opus xhigh for design and plans, Sonnet medium for small tasks, no Fable', () => {
+test('the example dispatch profiles: Opus medium default, Opus xhigh for a new look, Opus high for polish, investigations, plans and research, Sonnet high for small tasks, no Fable', () => {
   assert.equal(question(firstmate, 'FIRSTMATE_DISPATCH').default, 'capable');
   const capable = dispatchProfiles('capable', 'claude');
   assert.deepEqual(capable.default, [{ harness: 'claude', model: 'claude-opus-5-5', effort: 'medium' }]);
   const rule = (re) => capable.rules.find((r) => re.test(r.when));
-  assert.deepEqual(rule(/frontend/).use, [{ harness: 'claude', model: 'claude-opus-5-5', effort: 'xhigh' }]);
-  assert.deepEqual(rule(/investigat/).use, [{ harness: 'claude', model: 'claude-opus-5-5', effort: 'xhigh' }]);
-  assert.match(rule(/investigat/).when, /diagnos/);
-  assert.match(rule(/investigat/).when, /plan/);
-  assert.deepEqual(rule(/small, well-defined task/).use, [{ harness: 'claude', model: 'claude-sonnet-5-5', effort: 'medium' }]);
+  const look = rule(/new look/);
+  assert.deepEqual(look.use, [{ harness: 'claude', model: 'claude-opus-5-5', effort: 'xhigh' }]);
+  assert.match(look.when, /not yet settled/);
+  const polish = rule(/polishes/);
+  assert.deepEqual(polish.use, [{ harness: 'claude', model: 'claude-opus-5-5', effort: 'high' }]);
+  assert.match(polish.when, /look is already settled/);
+  assert.match(polish.when, /spacing, copy, states, small layout fixes, or fixes from a usability check/);
+  const thinking = rule(/investigat/);
+  assert.deepEqual(thinking.use, [{ harness: 'claude', model: 'claude-opus-5-5', effort: 'high' }]);
+  assert.match(thinking.when, /diagnos/);
+  assert.match(thinking.when, /plan/);
+  assert.match(thinking.why, /re-run the same task at extra-high effort when the result is weak or the cause is hard to find/);
+  assert.match(thinking.why, /fix or build at medium effort once the cause is proven or the plan is settled/);
+  assert.deepEqual(rule(/researches/).use, [{ harness: 'claude', model: 'claude-opus-5-5', effort: 'high' }]);
+  const research = rule(/researches/).why;
+  assert.match(research, /plans and checks/);
+  assert.match(research, /bulk fetching to agy with gemini-3\.8-flash-high/);
+  assert.match(research, /claude-sonnet-4-6 on a Gemini quota error/);
+  assert.match(research, /reading and summaries to the reader subagent/);
+  assert.match(research, /drafting to Sonnet 5\.5 at high effort/);
+  const small = rule(/small, well-defined task/);
+  assert.deepEqual(small.use, [{ harness: 'claude', model: 'claude-sonnet-5-5', effort: 'high' }]);
+  assert.match(small.why, /re-run on Opus 5\.5 at medium effort/);
   assert.doesNotMatch(JSON.stringify(capable), /fable/i);
   assert.deepEqual(dispatchProfiles('capable', 'codex').default, [{ harness: 'codex', effort: 'medium' }]);
 });
@@ -130,8 +148,10 @@ test('agy research runs on gemini-3.8-flash-high by default', async () => {
     await ctx.ask(q);
   }
   assert.equal(ctx.get('PREFS_DELEGATE_MODEL'), 'gemini-3.8-flash-high');
+  assert.equal(ctx.get('PREFS_DELEGATE_FALLBACK_MODEL'), 'claude-sonnet-4-6');
   const text = renderPreferences((key) => ctx.get(key), { cardsPath: path.join(os.tmpdir(), 'cards.html') });
   assert.match(text, /to `agy --model gemini-3\.8-flash-high`/);
+  assert.match(text, /If it reports a Gemini quota error, use `agy --model claude-sonnet-4-6` instead\./);
 
   const other = context(os.tmpdir(), { answers: { PREFS_DELEGATE_RETRIEVAL: 'other-cli' }, dryRun: true });
   for (const q of preferences.questions) {
@@ -139,5 +159,7 @@ test('agy research runs on gemini-3.8-flash-high by default', async () => {
     await other.ask(q);
   }
   assert.equal(other.get('PREFS_DELEGATE_MODEL'), '');
+  assert.equal(other.get('PREFS_DELEGATE_FALLBACK_MODEL'), undefined);
+  assert.doesNotMatch(renderPreferences((key) => other.get(key), { cardsPath: path.join(os.tmpdir(), 'cards.html') }), /quota error/);
   assert.match(renderPreferences((key) => other.get(key), { cardsPath: path.join(os.tmpdir(), 'cards.html') }), /to `other-cli`/);
 });
