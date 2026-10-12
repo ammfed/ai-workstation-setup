@@ -59,6 +59,14 @@ export function reminderTokens(text, key) {
   return tokens;
 }
 
+/**
+ * Register the context-reminder hook on prompts and on tool calls, so a long run of tool
+ * calls is reminded before it reaches compaction, and with `compact` also on SessionStart.
+ */
+export function registerContextReminder(ctx, command, compact) {
+  for (const event of ['UserPromptSubmit', 'PostToolUse', ...(compact ? ['SessionStart'] : [])]) setHook(ctx, event, 'context-reminder.mjs', command);
+}
+
 // A read-only helper on Haiku for reading, lookup and summaries (docs/model-map.md). A reader
 // the person wrote is never replaced; a version this setup shipped is refreshed.
 export function installReaderAgent(ctx) {
@@ -421,8 +429,7 @@ export default {
         const script = path.join(claudeDir(ctx), 'hooks', 'context-reminder.mjs');
         await ctx.writeFile(script, ctx.template('claude-code/bin/context-reminder.mjs'), { onConflict: 'ask' });
         const command = `node "${script}" ${tokens} --user${text ? ` "${text}"` : ''}`;
-        setHook(ctx, 'UserPromptSubmit', 'context-reminder.mjs', command);
-        if (ctx.get('CLAUDE_COMPACT_REMINDER')) setHook(ctx, 'SessionStart', 'context-reminder.mjs', command);
+        registerContextReminder(ctx, command, ctx.get('CLAUDE_COMPACT_REMINDER'));
       });
     }
 
