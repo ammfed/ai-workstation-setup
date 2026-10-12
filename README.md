@@ -51,13 +51,13 @@ brackets; nothing is vendored. Items marked optional are off until you pick them
 - [git](https://git-scm.com), [GitHub CLI](https://github.com/cli/cli), jq, and Node.js through nvm (core).
 - [gh-axi](https://github.com/kunchenguid/gh-axi) for GitHub and [ctx7](https://github.com/upstash/context7) for current library docs (agent-clis).
 - Optional [notion-axi](https://github.com/maximebrmd/notion-axi), Notion's own [ntn](https://developers.notion.com/cli/get-started/overview), [gws-axi](https://github.com/JarvusInnovations/gws-axi), Google's [Workspace CLI](https://github.com/googleworkspace/cli), [agent-device](https://github.com/callstack/agent-device) for phone, tablet and desktop app automation, [Composio](https://github.com/ComposioHQ/composio), [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii), [claude-swap](https://github.com/realiti4/claude-swap) for several Claude accounts (optionally with `cswap auto` as a background service that switches accounts near a usage limit you set, or at cswap's own default), [notebooklm-mcp-cli](https://github.com/jacob-bd/notebooklm-mcp-cli), the [CLI for Microsoft 365](https://github.com/pnp/cli-microsoft365) and the [Vercel CLI](https://github.com/vercel/vercel) (agent-clis).
-- Optional MCP servers: Context7, [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp), and TickTick's official server (mcp-servers).
+- Optional MCP servers: Context7, [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp), TickTick's official server, and [REA](https://github.com/morluto/rea) for reverse engineering shipped apps, binaries, packages and web pages, with its skill (mcp-servers).
 
 **Browser and review**
 - [chrome-devtools-axi](https://github.com/kunchenguid/chrome-devtools-axi) and `research-browser`, a visible Chrome with its own profile and debugging port that belongs to your agents (agent-clis).
 - [lavish-axi](https://github.com/kunchenguid/lavish-axi) review pages that never open tabs on their own, and a one-decision-at-a-time card page template (agent-clis, preferences; [review pages](docs/review-pages.md)).
 - Optional [Lavish Library](https://github.com/ammfed/lavish-library), a local page to find and reopen every review page; its Open button opens a tab even while agents keep the no-open setting (extras).
-- By hand, if you want it: the [Claude in Chrome](https://code.claude.com/docs/en/chrome) extension for your own browser, and claude.ai connectors (such as Claude Docs) turned on in your claude.ai settings.
+- By hand, if you want it: the [Claude in Chrome](https://code.claude.com/docs/en/chrome) extension for your own browser, claude.ai connectors (such as Claude Docs) turned on in your claude.ai settings, and plugins from the Anthropic plugin directory (such as Refero for design references) picked with `/plugin` in Claude Code.
 
 **Notes and tasks**
 - A Markdown second brain for [Obsidian](https://obsidian.md) with templates, map, checker and ingest scripts, and [obsidian-axi](https://github.com/AndersHoffmann/obsidian-axi) for agents; optional ranked search, quick capture, a bookmark converter, a small agent tidy-up pass (garden) and timers for housekeeping and garden (second-brain; [design](docs/second-brain.md)).
@@ -130,6 +130,13 @@ answered yet.
 ./install.sh    # re-run: only new questions are asked
 ```
 
+To bring only the Claude Code part of an existing machine up to the template (hooks, status
+line, reader subagent, hook registrations, missing default tools) without a full re-run, run
+`scripts/apply-to-machine.sh --dry-run`, then `scripts/apply-to-machine.sh` (Linux, macOS,
+WSL). It keeps every other setting, asks y/N before it replaces a file you edited, changes
+your status line or installs a tool, keeps one backup set per run, and `--undo` restores the
+latest set. It is the way to update a settings file you protect from agent edits.
+
 `update` fast-forwards your clone (or fork) to the template's latest version and never
 touches your answers or other gitignored files. If your clone has local changes or has
 diverged, it stops, explains, and changes nothing. See
@@ -149,7 +156,7 @@ the environment variable `AI_WORKSTATION_SETUP_NO_UPDATE_CHECK=1`.
 | `core` | git, Node.js check, GitHub CLI (and sign-in), jq; inside WSL also the checks and bridges in [docs/windows-wsl.md](docs/windows-wsl.md) (clone location, Windows programs on PATH, systemd, line endings, links opening in Windows, DNS, memory, GPU) | ✓ | ✓ | ✓ | ✓ |
 | `claude-code` | Claude Code (and the Claude desktop app on Windows); model (including the 1M-context Opus), effort (also per model, Opus 5.5 at medium by default), a read-only `reader` subagent on Haiku, permission mode, theme, thinking summaries, Remote Control, view, auto-compact, push notifications, feedback drafts, session persistence, spinner tips, the bypass-permissions confirmation, an opt-in rule letting agents merge pull requests; usage-gauges (default) or ccstatusline status line; diagram-design and optional compact-adviser plugins; context and after-compaction reminders; a once-a-day reminder when the template has updates | ✓ | ✓ | ✓ | ✓ |
 | `agent-clis` | gh-axi, chrome-devtools-axi, lavish-axi, tasks-axi, quota-axi, ctx7, no-mistakes (with its Claude review model, Opus 5.5 at medium), treehouse; optional notion-axi, ntn, gws-axi, Google Workspace CLI, agent-device, herdr (starter settings), Codex, Pi, Antigravity, claude-swap (optional `cswap auto` service), notebooklm-mcp-cli, CLI for Microsoft 365, Vercel CLI, Composio (not native Windows), mermaid-ascii, pixel-agents (view settings; optional office names), gnhf; session hooks; `research-browser` launcher and optional lavish-axi no-open wrapper (not native Windows); inside WSL, Google Chrome for Linux for the browser tools | ✓ | ✓ | ✓ | ✓ |
-| `mcp-servers` | Optional context7, chrome-devtools and TickTick MCP servers for Claude Code | ✓ | ✓ | ✓ | ✓ |
+| `mcp-servers` | Optional context7, chrome-devtools, TickTick and REA (with its reverse-engineer-anything skill) MCP servers for Claude Code | ✓ | ✓ | ✓ | ✓ |
 | `skills` | Claude Code skills: kun, grilling, teach, tdd, codebase-design, find-docs; optional vision, grill-me, grill-with-docs, to-spec, to-tickets, to-questionnaire, wayfinder, no-mistakes, composio-cli; updates installed ones | ✓ | ✓ | ✓ | ✓ |
 | `backpass` | Opt-in [backpass](https://github.com/kunchenguid/backpass) behind a privacy gate: project allowlist, denylist check before any model call, one pinned model, never auto-applies; optional schedule (cron) | ✓ | ✓ | ✓ | ✓ |
 | `firstmate` | Upstream Firstmate clone plus its local config: an operational home apart from the code (FM_HOME, pinned per home and second mate), backend, harnesses, permission mode, backlog, example dispatch profiles ([model map](docs/model-map.md)), Herdr presentation, startup memory budget, tool update watch, optional /stow reminder for the main session; [notes](docs/firstmate.md) | ✓ | ✓ | ✓ | via `wsl` |

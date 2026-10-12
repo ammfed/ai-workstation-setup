@@ -33,6 +33,14 @@ or resets something you already answered. To change an answer, edit that line in
 the installer lists modules you have not selected, and you add one by putting its name in
 `MODULES` in `answers.env`.
 
+To update only the Claude Code part (shipped hooks, status line, reader subagent, hook
+registrations and the default agent tools), run `scripts/apply-to-machine.sh --dry-run` to
+see the plan, then `scripts/apply-to-machine.sh` yourself (Linux, macOS, WSL). It leaves your
+other settings alone, asks y/N before it replaces a file you edited, changes a status line you
+set or installs a tool, and keeps one backup set per run in
+`~/.config/ai-workstation-setup/apply-backups/`. `--undo` restores the latest set (tools it
+installed stay installed). Running it again changes nothing.
+
 ## Knowing when there is an update
 
 The `claude-code` module adds a Claude Code session-start hook (on by default; the
