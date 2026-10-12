@@ -5,7 +5,7 @@ import { addSessionStartHook, claudeDir } from '../../lib/claude.mjs';
 import { TOOLS, warnPathOrder } from './tools.mjs';
 import { mergePixelSettings, patchPixelAgents } from './pixel-agents.mjs';
 
-const DEFAULTS = ['gh-axi', 'chrome-devtools-axi', 'lavish-axi', 'tasks-axi', 'quota-axi', 'ctx7', 'no-mistakes', 'treehouse'];
+export const DEFAULTS = ['gh-axi', 'chrome-devtools-axi', 'lavish-axi', 'tasks-axi', 'quota-axi', 'ctx7', 'no-mistakes', 'treehouse'];
 
 // `cswap auto` (github.com/realiti4/claude-swap, `cswap auto --help`) is a foreground loop that
 // switches to another saved account when the active one nears its 5-hour or weekly limit.

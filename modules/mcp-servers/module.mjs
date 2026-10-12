@@ -32,12 +32,20 @@ const SERVERS = [
     command: () => ({ cmd: 'claude mcp add --scope user --transport http ticktick https://mcp.ticktick.com/' }),
     signIn: 'in Claude Code, run /mcp and sign in to ticktick',
   },
+  {
+    value: 'rea',
+    label: 'rea - reverse engineer shipped apps, binaries, packages and web pages (local; also adds its reverse-engineer-anything skill)',
+    // github.com/morluto/rea docs/installation.md: setup scoped to one client with --yes registers
+    // the MCP server and installs the matching skill, without asking.
+    command: () => ({ cmd: 'npx -y rea-agents@latest setup --client claude_code --yes' }),
+    signIn: 'rea: native binaries need Hopper, Ghidra or IDA; check with `npx -y rea-agents@latest doctor` (JavaScript and web targets need none)',
+  },
 ];
 
 export default {
   name: 'mcp-servers',
   title: 'MCP servers',
-  description: 'MCP servers for Claude Code (context7, chrome-devtools, ticktick)',
+  description: 'MCP servers for Claude Code (context7, chrome-devtools, ticktick, rea)',
   order: 40,
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['claude-code'],
