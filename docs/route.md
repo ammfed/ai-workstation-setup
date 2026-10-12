@@ -7,6 +7,10 @@ marked optional are choices you add to `SKILLS`.
 The route is for building or changing an app, a tool or a codebase. Documents, review
 pages, research and one-off tasks do not need it.
 
+For a long project of any kind (research, concepts, review pages and a build, over many
+sessions), the optional workflow-playbook skill gives the working method around it: stage
+gates, evidence first, review pages, and when to ask or act.
+
 | Step | What happens | Skill |
 | --- | --- | --- |
 | 1. Plan | Write the idea down, judge whether it fits and when, and say so in one line. For an effort too big for one session, map the open decisions instead. | wayfinder (optional) |

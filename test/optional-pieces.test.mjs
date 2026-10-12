@@ -21,7 +21,7 @@ import { findOpenWhisprAppImage, openGuardSeconds } from '../modules/extras/modu
 import { stowTokens } from '../modules/firstmate/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
 import { renderBriefInclude } from '../modules/preferences/render.mjs';
-import skills from '../modules/skills/module.mjs';
+import skills, { writeBundledSkill } from '../modules/skills/module.mjs';
 import { cursorBlinkMs } from '../modules/terminal/module.mjs';
 import { officeNames } from '../templates/pixel-agents/bin/pixel-office-names.mjs';
 
@@ -320,6 +320,30 @@ test('the skill update question is asked only when a chosen skill is installed, 
     for (const name of ['tdd', 'codebase-design']) assert.ok(choices.default.includes(name), name);
     for (const name of ['grill-with-docs', 'to-spec', 'to-tickets']) assert.ok(choices.choices.some((c) => c.value === name && c.repo === 'mattpocock/skills'), name);
     assert.equal(skills.questions.find((q) => q.key === 'SKILLS_UPDATE').default, true);
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+  }
+});
+
+test('the workflow-playbook skill is written to ~/.claude/skills with valid SKILL.md frontmatter, and a local edit is kept', async () => {
+  const home = tempHome();
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const choice = skills.questions.find((q) => q.key === 'SKILLS').choices.find((c) => c.value === 'workflow-playbook');
+    assert.ok(choice?.install, 'workflow-playbook is a skills choice installed from this repo');
+    await capture(() => choice.install(context(home)));
+    const file = path.join(home, '.claude', 'skills', 'workflow-playbook', 'SKILL.md');
+    const text = fs.readFileSync(file, 'utf8');
+    assert.equal(text, fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8'));
+    const front = text.match(/^---\n([\s\S]*?)\n---\n/);
+    assert.ok(front, 'SKILL.md opens with a frontmatter block');
+    const fields = Object.fromEntries(front[1].split('\n').map((l) => l.match(/^([a-z-]+):\s*(.*)$/)).filter(Boolean).map((m) => [m[1], m[2]]));
+    assert.equal(fields.name, 'workflow-playbook');
+    assert.ok(fields.description?.length > 20, 'it has a description');
+    assert.ok(!/\{\{[A-Z_]+\}\}/.test(text), 'no placeholder is left unfilled');
+    fs.writeFileSync(file, `${text}\nA local rule.\n`);
+    assert.match(await capture(() => writeBundledSkill(context(home), 'workflow-playbook')), /local edit/);
+    assert.match(fs.readFileSync(file, 'utf8'), /A local rule\./);
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
   }
