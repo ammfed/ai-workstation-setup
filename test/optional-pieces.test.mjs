@@ -16,7 +16,7 @@ import { Context, Skip, detectPlatform } from '../lib/context.mjs';
 import { installSkill, setHook, settingsPath } from '../lib/claude.mjs';
 import { cswapThreshold, researchBrowserPort } from '../modules/agent-clis/module.mjs';
 import { PATCH_MARKER, mergePixelSettings, patchPixelCli } from '../modules/agent-clis/pixel-agents.mjs';
-import { PR_MERGE_RULES, reminderTokens } from '../modules/claude-code/module.mjs';
+import { PR_MERGE_RULES, registerContextReminder, reminderTokens } from '../modules/claude-code/module.mjs';
 import { findOpenWhisprAppImage, openGuardSeconds } from '../modules/extras/module.mjs';
 import { stowTokens } from '../modules/firstmate/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
@@ -124,17 +124,22 @@ test('a stow reminder hook lands only in the settings file it is given', () => {
 });
 
 // Runs the shipped context-reminder hook once, as Claude Code would, for a session whose
-// latest turn used `tokens` of context and that started in `project`.
-function runReminder(home, project, tokens, args) {
+// latest turn used `tokens` of context and that started in `project`. Returns the reply's
+// hookSpecificOutput, or null when the hook stays quiet.
+function reminderReply(home, project, tokens, args, { event = 'UserPromptSubmit', session = `s${tokens}` } = {}) {
   const transcript = path.join(home, `${tokens}.jsonl`);
   const turn = { type: 'assistant', message: { usage: { input_tokens: tokens, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } };
   fs.writeFileSync(transcript, `${JSON.stringify(turn)}\n`);
-  const input = { hook_event_name: 'UserPromptSubmit', session_id: `s${tokens}`, transcript_path: transcript, cwd: project };
+  const input = { hook_event_name: event, session_id: session, transcript_path: transcript, cwd: project };
   const script = path.join(repoRoot, 'templates', 'claude-code', 'bin', 'context-reminder.mjs');
   const env = { ...process.env, HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), TMPDIR: home, TMP: home, TEMP: home };
   const r = spawnSync(process.execPath, [script, ...args], { input: JSON.stringify(input), encoding: 'utf8', env });
   assert.equal(r.status, 0, r.stderr);
-  return r.stdout ? JSON.parse(r.stdout).hookSpecificOutput.additionalContext : '';
+  return r.stdout ? JSON.parse(r.stdout).hookSpecificOutput : null;
+}
+
+function runReminder(home, project, tokens, args, opts) {
+  return reminderReply(home, project, tokens, args, opts)?.additionalContext || '';
 }
 
 function writeSettings(file, value) {
@@ -182,6 +187,100 @@ test("the user-level reminder yields to a project's own reminder even with custo
   assert.equal(runReminder(home, coordinator, 500000, user), '');
   assert.match(runReminder(home, coordinator, 500001, ['auto', 'Run /stow now']), /Run \/stow now/);
   assert.match(runReminder(home, plain, 500002, user), /^Save your notes now/);
+});
+
+test('the reminder answers for the event it was called for', () => {
+  const home = tempHome();
+  for (const event of ['UserPromptSubmit', 'PostToolUse']) {
+    const reply = reminderReply(home, home, 160000, ['150000'], { event, session: `s-${event}` });
+    assert.equal(reply.hookEventName, event);
+    assert.match(reply.additionalContext, /save what matters/);
+  }
+});
+
+test('a long run of tool calls gets one reminder per crossing', () => {
+  const home = tempHome();
+  const run = (tokens, event = 'PostToolUse') => runReminder(home, home, tokens, ['150000'], { event, session: 'long-run' });
+  assert.equal(run(140000), '');
+  assert.match(run(151000), /save what matters/);
+  for (const tokens of [152000, 160000, 170000]) assert.equal(run(tokens), '');
+  assert.equal(run(175000, 'UserPromptSubmit'), '');
+  assert.equal(run(120000), ''); // compacted: below 90% re-arms it
+  assert.match(run(155000), /save what matters/);
+});
+
+test('the context reminder is registered on prompts and on tool calls, once each', () => {
+  const home = tempHome();
+  const ctx = context(home);
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    writeSettings(settingsPath(ctx), { env: { SAMPLE: '1' } });
+    const command = 'node "context-reminder.mjs" auto --user';
+    registerContextReminder(ctx, command, true);
+    registerContextReminder(ctx, command, true);
+    const s = JSON.parse(fs.readFileSync(settingsPath(ctx), 'utf8'));
+    const entry = [{ hooks: [{ type: 'command', command }] }];
+    assert.deepEqual(s.hooks, { UserPromptSubmit: entry, PostToolUse: entry, SessionStart: entry });
+    assert.equal(s.env.SAMPLE, '1');
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+  }
+});
+
+test('the PostToolUse script updates the hook and settings with backups, and undoes them', { skip: !unix }, () => {
+  const home = tempHome();
+  const claude = path.join(home, '.claude');
+  const hook = path.join(claude, 'hooks', 'context-reminder.mjs');
+  const settings = path.join(claude, 'settings.json');
+  const command = `node "${hook}" auto --user`;
+  const other = { matcher: 'Edit', hooks: [{ type: 'command', command: 'lint-check' }] };
+  const before = { env: { SAMPLE: '1' }, hooks: { UserPromptSubmit: [{ hooks: [{ type: 'command', command }] }], PostToolUse: [other] } };
+  writeSettings(settings, before);
+  fs.mkdirSync(path.dirname(hook), { recursive: true });
+  fs.writeFileSync(hook, '// an older hook\n');
+  const oldSettings = fs.readFileSync(settings, 'utf8');
+  const env = { ...process.env, HOME: home };
+  delete env.CLAUDE_CONFIG_DIR;
+  const script = path.join(repoRoot, 'scripts', 'context-reminder-posttooluse.sh');
+  const run = (...args) => spawnSync('bash', [script, ...args], { encoding: 'utf8', env });
+  const backups = () => fs.readdirSync(claude).concat(fs.readdirSync(path.dirname(hook))).filter((f) => f.includes('.bak-'));
+
+  let r = run('--dry-run');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.readFileSync(settings, 'utf8'), oldSettings);
+  assert.equal(fs.readFileSync(hook, 'utf8'), '// an older hook\n');
+  assert.deepEqual(backups(), []);
+
+  r = run();
+  assert.equal(r.status, 0, r.stderr);
+  const after = JSON.parse(fs.readFileSync(settings, 'utf8'));
+  assert.deepEqual(after.env, before.env);
+  assert.deepEqual(after.hooks.UserPromptSubmit, before.hooks.UserPromptSubmit);
+  assert.deepEqual(after.hooks.PostToolUse, [other, { hooks: [{ type: 'command', command }] }]);
+  assert.equal(fs.readFileSync(hook, 'utf8'), fs.readFileSync(path.join(repoRoot, 'templates', 'claude-code', 'bin', 'context-reminder.mjs'), 'utf8'));
+  assert.equal(backups().length, 2);
+
+  r = run();
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /nothing to change/);
+  assert.equal(backups().length, 2);
+
+  r = run('--undo');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.readFileSync(settings, 'utf8'), oldSettings);
+  assert.equal(fs.readFileSync(hook, 'utf8'), '// an older hook\n');
+});
+
+test('the PostToolUse script refuses when the installer has not set up the reminder', { skip: !unix }, () => {
+  const home = tempHome();
+  const settings = path.join(home, '.claude', 'settings.json');
+  writeSettings(settings, { env: { SAMPLE: '1' } });
+  const env = { ...process.env, HOME: home };
+  delete env.CLAUDE_CONFIG_DIR;
+  const r = spawnSync('bash', [path.join(repoRoot, 'scripts', 'context-reminder-posttooluse.sh')], { encoding: 'utf8', env });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /installer/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(settings, 'utf8')), { env: { SAMPLE: '1' } });
 });
 
 test('reminder thresholds are auto or a whole number of tokens', () => {

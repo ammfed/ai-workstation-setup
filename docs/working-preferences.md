@@ -164,3 +164,10 @@ to you, and saying plainly when something was reasoned about rather than tested.
   user-level hook is registered with a `--user` marker. In a project that registers its own
   reminder (Firstmate's stow reminder), it stays quiet whatever its text, so a session gets one
   reminder, not two.
+  The hook runs on each prompt and after each tool call (`PostToolUse`), so a long run of tool
+  calls that passes the save point is reminded before it reaches compaction. It still reminds
+  once per crossing, whichever event sees it first. If your Claude settings file is protected
+  from agent edits, run `scripts/context-reminder-posttooluse.sh` yourself: it copies the
+  current hook into `~/.claude/hooks`, adds only the `PostToolUse` entry to
+  `~/.claude/settings.json`, and keeps a backup of each file it changes. `--dry-run` shows what
+  it would change and `--undo` restores the latest backup.

@@ -1,10 +1,13 @@
 #!/usr/bin/env node
-// context-reminder - a Claude Code UserPromptSubmit and SessionStart hook.
+// context-reminder - a Claude Code UserPromptSubmit, PostToolUse and SessionStart hook.
 //
-// UserPromptSubmit: once a session's context passes a token threshold, it adds one
-// reminder to the next prompt: save what matters (for example a memory save pass)
-// before the context gets compacted. It fires once per crossing and re-arms after the
-// context drops back below 90% of the threshold (after a compaction or /clear).
+// UserPromptSubmit and PostToolUse: once a session's context passes a token threshold,
+// it adds one reminder, to the next prompt or next to the latest tool result: save what
+// matters (for example a memory save pass) before the context gets compacted. PostToolUse
+// lets it speak during a long run of tool calls, which can pass the threshold and reach
+// compaction before the next prompt. It fires once per crossing, whichever event sees it
+// first, and re-arms after the context drops back below 90% of the threshold (after a
+// compaction or /clear).
 //
 // SessionStart with source "compact": right after a compaction, it tells the agent
 // where the full pre-compaction transcript is, so anything the summary dropped can be
@@ -126,7 +129,7 @@ try {
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(mark, String(tokens));
       process.stdout.write(
-        JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: `${reminder} (context: ${tokens} tokens)` } }),
+        JSON.stringify({ hookSpecificOutput: { hookEventName: input.hook_event_name || 'UserPromptSubmit', additionalContext: `${reminder} (context: ${tokens} tokens)` } }),
       );
     }
   }
