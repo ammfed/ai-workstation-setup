@@ -1,5 +1,14 @@
+import path from 'node:path';
 import { Skip } from '../../lib/context.mjs';
-import { installSkill, skillInstalled } from '../../lib/claude.mjs';
+import { claudeDir, installSkill, skillInstalled } from '../../lib/claude.mjs';
+
+/**
+ * Write a skill this repo ships in templates/skills/<name> to ~/.claude/skills/<name>.
+ * A copy this setup shipped earlier is refreshed; a local edit is left alone.
+ */
+export function writeBundledSkill(ctx, name) {
+  return ctx.writeFile(path.join(claudeDir(ctx), 'skills', name, 'SKILL.md'), ctx.template(`skills/${name}/SKILL.md`), { onConflict: 'ask' });
+}
 
 // Installed user-wide for Claude Code with the skills CLI (github.com/vercel-labs/skills).
 const SKILLS = [
@@ -28,6 +37,13 @@ const SKILLS = [
   { value: 'find-docs', repo: 'upstash/context7', label: 'find-docs - fetch current library docs with ctx7' },
   { value: 'no-mistakes', repo: 'kunchenguid/no-mistakes', label: 'no-mistakes - run the no-mistakes validation pipeline from chat (agent-clis installs the tool)' },
   {
+    value: 'workflow-playbook',
+    label:
+      'workflow-playbook - a working method for long projects run with AI agents: stage gates, evidence first, ' +
+      'review pages, when to ask or act, wording, briefs, memory and status (shipped with this setup)',
+    install: (ctx) => writeBundledSkill(ctx, 'workflow-playbook'),
+  },
+  {
     value: 'composio-cli',
     label: "composio-cli - Composio's own Claude Code plugin and skill, added by `composio setup` (agent-clis installs the tool)",
     install: (ctx) => {
@@ -47,7 +63,7 @@ const chosenSkills = (ctx) => SKILLS.filter((s) => ctx.get('SKILLS').includes(s.
 export default {
   name: 'skills',
   title: 'Agent skills',
-  description: 'Claude Code skills: kun, grilling, teach, tdd, codebase-design, find-docs; vision, grill-me, grill-with-docs, to-spec, to-tickets, to-questionnaire, wayfinder, no-mistakes, composio-cli',
+  description: 'Claude Code skills: kun, grilling, teach, tdd, codebase-design, find-docs; vision, grill-me, grill-with-docs, to-spec, to-tickets, to-questionnaire, wayfinder, no-mistakes, workflow-playbook, composio-cli',
   order: 50,
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],
