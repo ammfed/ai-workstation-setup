@@ -457,9 +457,105 @@ test('the Firstmate brief include carries the house style to workers only when i
   assert.doesNotMatch(text, /Delivery contract: mode=/);
 });
 
-test('the vision skill is an optional choice from its own upstream repository', () => {
+test('the vision skill comes from its own upstream repository', () => {
   const q = skills.questions.find((x) => x.key === 'SKILLS');
   const vision = q.choices.find((c) => c.value === 'vision');
   assert.equal(vision?.repo, 'kunchenguid/vision');
-  assert.equal(q.default.includes('vision'), false);
+});
+
+test('the default skill set is every skill on offer, so a fresh clone gets the full set', () => {
+  const q = skills.questions.find((x) => x.key === 'SKILLS');
+  assert.deepEqual([...q.default].sort(), q.choices.map((c) => c.value).sort());
+  const full = ['kun', 'vision', 'grill-me', 'grilling', 'teach', 'tdd', 'codebase-design', 'grill-with-docs', 'to-spec', 'to-tickets', 'to-questionnaire', 'wayfinder', 'find-docs', 'no-mistakes', 'workflow-playbook', 'composio-cli'];
+  for (const name of full) assert.ok(q.default.includes(name), name);
+  assert.deepEqual(q.choices.find((c) => c.value === 'wayfinder').helpers, ['domain-modeling', 'research', 'prototype']);
+});
+
+// Ask the skills questions the way a rerun does, from saved answers.
+async function askSkills(saved) {
+  const ctx = new Context({ platform: { ...detectPlatform(), home: tempHome() }, dryRun: true, interactive: false, answers: new Map(Object.entries(saved)), prompter: null, repoRoot });
+  ctx.beginModule('skills');
+  const out = await capture(async () => {
+    for (const q of skills.questions.filter((x) => x.key !== 'SKILLS_UPDATE')) await ctx.ask(q);
+  });
+  return { skills: ctx.values.SKILLS, offered: ctx.values.SKILLS_OFFERED, out };
+}
+
+test('a rerun adds the skills that are new since the last answer, and keeps a skill you unticked off', async () => {
+  const all = skills.questions.find((x) => x.key === 'SKILLS').choices.map((c) => c.value);
+  const { skills: chosen, offered, out } = await askSkills({ SKILLS: 'kun,tdd', SKILLS_OFFERED: all.filter((v) => v !== 'wayfinder').join(',') });
+  assert.deepEqual(chosen, ['kun', 'tdd', 'wayfinder']);
+  assert.match(out, /new skills added to your selection: wayfinder/);
+  assert.deepEqual(offered.split(','), all, 'the list on offer now is saved for the next rerun');
+  const again = await askSkills({ SKILLS: 'kun,tdd', SKILLS_OFFERED: all.join(',') });
+  assert.deepEqual(again.skills, ['kun', 'tdd'], 'nothing new, so the saved choice stands');
+  assert.doesNotMatch(again.out, /new skills added/);
+});
+
+test('a rerun of an install older than the offered list gets the full default set, but "none" stays none', async () => {
+  const all = skills.questions.find((x) => x.key === 'SKILLS').choices.map((c) => c.value);
+  const { skills: chosen } = await askSkills({ SKILLS: 'kun,grilling,teach,tdd,codebase-design,find-docs' });
+  assert.deepEqual([...chosen].sort(), [...all].sort());
+  assert.deepEqual((await askSkills({ SKILLS: 'none' })).skills, []);
+});
+
+// A dry run of the skills module alone, in an empty home. A simulated OS (not the host's) sees no tools on PATH.
+const simulatedOs = process.platform === 'linux' ? 'macos' : 'linux';
+function skillsDryRun(answers = '', modules = 'skills') {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-run-'));
+  const file = path.join(dir, 'answers.env');
+  fs.writeFileSync(file, answers);
+  const r = spawnSync(process.execPath, [path.join(repoRoot, 'lib/installer.mjs'), '--dry-run', '--yes', '--platform', simulatedOs, '--answers', file, '--modules', modules], {
+    encoding: 'utf8',
+    env: { ...process.env, NO_COLOR: '1', HOME: dir, USERPROFILE: dir, CLAUDE_CONFIG_DIR: path.join(dir, '.claude') },
+    stdin: 'ignore',
+  });
+  return { code: r.status, out: r.stdout + r.stderr };
+}
+
+test('a skill whose tool is missing is skipped with a clear line, and the run still exits 0', () => {
+  const { code, out } = skillsDryRun();
+  assert.equal(code, 0, out);
+  assert.match(out, /skipped: composio-cli: the composio CLI is not installed \(install it, then rerun with --modules skills\)/);
+  assert.match(out, /skipped: no-mistakes: the no-mistakes CLI is not installed \(install it, then rerun with --modules skills\)/);
+  assert.doesNotMatch(out, /would run: composio setup/);
+  assert.doesNotMatch(out, /--skill no-mistakes/);
+});
+
+test('a skill whose tool this run installs is not skipped', () => {
+  const { code, out } = skillsDryRun('AGENT_CLIS=no-mistakes,composio\n', 'agent-clis,skills');
+  assert.equal(code, 0, out);
+  assert.doesNotMatch(out, /skipped: (no-mistakes|composio-cli):/);
+  assert.match(out, /would run: npx -y skills add kunchenguid\/no-mistakes --skill no-mistakes/);
+});
+
+test('the end of the install lists the skills installed and skipped, then says to restart Claude Code', () => {
+  const { code, out } = skillsDryRun();
+  assert.equal(code, 0, out);
+  const tail = out.slice(out.indexOf('\nSummary'));
+  assert.match(tail, /would install: kun, vision, grill-me, grilling, teach, tdd, codebase-design, grill-with-docs, to-spec, to-tickets, to-questionnaire, wayfinder, domain-modeling \(for wayfinder\), research \(for wayfinder\), prototype \(for wayfinder\), find-docs, workflow-playbook\n/);
+  assert.match(tail, /skipped: no-mistakes: the no-mistakes CLI is not installed/);
+  assert.match(tail, /skipped: composio-cli: the composio CLI is not installed/);
+  assert.doesNotMatch(tail, /failed:/);
+  assert.match(tail, /Restart Claude Code so the new skills load\.\n?$/);
+});
+
+test('a skill whose download fails is reported as failed, and the others still install', async () => {
+  const home = tempHome();
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const ctx = context(home);
+    ctx.values.SKILLS = ['kun', 'tdd'];
+    ctx.values.SKILLS_UPDATE = false;
+    ctx.run = (cmd) => {
+      if (cmd.includes('--skill tdd')) throw new Error('command failed (exit 1)');
+    };
+    await capture(() => skills.install(ctx));
+    assert.deepEqual(ctx.record.failures, ['tdd: command failed (exit 1)']);
+    assert.ok(ctx.record.report.some((l) => /^installed: kun$/.test(l)), ctx.record.report.join('\n'));
+    assert.ok(ctx.record.report.some((l) => /^failed: tdd: command failed \(exit 1\)$/.test(l)), ctx.record.report.join('\n'));
+    assert.equal(ctx.record.report.at(-1), 'Restart Claude Code so the new skills load.');
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+  }
 });
