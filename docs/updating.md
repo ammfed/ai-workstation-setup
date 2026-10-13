@@ -28,7 +28,9 @@ rebases, never stashes and never throws anything away.
 
 Running the installer again reuses your saved answers: it asks only questions that are new
 since your last run, drops answers to questions that no longer exist, and never asks again
-or resets something you already answered. To change an answer, edit that line in
+or resets something you already answered. One answer grows: skills added to the default set
+since your last run are added to `SKILLS` (the installer keeps the list it offered in
+`SKILLS_OFFERED`), while a skill you removed stays off. To change an answer, edit that line in
 `answers.env` (or delete it to be asked again). A new module is not switched on for you;
 the installer lists modules you have not selected, and you add one by putting its name in
 `MODULES` in `answers.env`.

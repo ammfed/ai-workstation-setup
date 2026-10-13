@@ -125,10 +125,27 @@ answered yet.
 
 ## Getting updates
 
-```sh
-./update.sh     # Windows: .\update.ps1
-./install.sh    # re-run: only new questions are asked
-```
+### Update an existing install
+
+1. `./update.sh` (Windows: `.\update.ps1`). It moves your clone forward to the latest
+   template, like a `git pull` that refuses when your clone has local changes.
+2. `./install.sh --dry-run`, then `./install.sh` (Windows: `.\install.ps1`). Add `--yes` to
+   take the default for every new question.
+3. Restart Claude Code, so the new skills, hooks and settings load.
+
+What the rerun does:
+
+- It reuses your answers in `answers.env` and asks only the questions that are new.
+- It installs the skills that are new since your last run, and updates the skills you have to
+  their latest upstream version (it asks once, `--yes` updates, and an update replaces local
+  edits to those skills). A skill you removed from `SKILLS` in `answers.env` stays off.
+- It replaces a file it wrote earlier (a hook, the status line, the reader subagent, a
+  bundled skill) with the new version, and keeps the old one as `<file>.bak-<time>`. A file
+  you edited is left untouched with a note; at a terminal it asks first, and no is the default.
+- It edits only its own keys in Claude Code's `settings.json`, from your answers, and keeps
+  your other settings.
+- A new module is not switched on for you: the installer lists it, and you add it to
+  `MODULES` in `answers.env`.
 
 To bring only the Claude Code part of an existing machine up to the template (hooks, status
 line, reader subagent, hook registrations, missing default tools) without a full re-run, run

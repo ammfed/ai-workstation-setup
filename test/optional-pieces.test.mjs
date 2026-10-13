@@ -471,6 +471,34 @@ test('the default skill set is every skill on offer, so a fresh clone gets the f
   assert.deepEqual(q.choices.find((c) => c.value === 'wayfinder').helpers, ['domain-modeling', 'research', 'prototype']);
 });
 
+// Ask the skills questions the way a rerun does, from saved answers.
+async function askSkills(saved) {
+  const ctx = new Context({ platform: { ...detectPlatform(), home: tempHome() }, dryRun: true, interactive: false, answers: new Map(Object.entries(saved)), prompter: null, repoRoot });
+  ctx.beginModule('skills');
+  const out = await capture(async () => {
+    for (const q of skills.questions.filter((x) => x.key !== 'SKILLS_UPDATE')) await ctx.ask(q);
+  });
+  return { skills: ctx.values.SKILLS, offered: ctx.values.SKILLS_OFFERED, out };
+}
+
+test('a rerun adds the skills that are new since the last answer, and keeps a skill you unticked off', async () => {
+  const all = skills.questions.find((x) => x.key === 'SKILLS').choices.map((c) => c.value);
+  const { skills: chosen, offered, out } = await askSkills({ SKILLS: 'kun,tdd', SKILLS_OFFERED: all.filter((v) => v !== 'wayfinder').join(',') });
+  assert.deepEqual(chosen, ['kun', 'tdd', 'wayfinder']);
+  assert.match(out, /new skills added to your selection: wayfinder/);
+  assert.deepEqual(offered.split(','), all, 'the list on offer now is saved for the next rerun');
+  const again = await askSkills({ SKILLS: 'kun,tdd', SKILLS_OFFERED: all.join(',') });
+  assert.deepEqual(again.skills, ['kun', 'tdd'], 'nothing new, so the saved choice stands');
+  assert.doesNotMatch(again.out, /new skills added/);
+});
+
+test('a rerun of an install older than the offered list gets the full default set, but "none" stays none', async () => {
+  const all = skills.questions.find((x) => x.key === 'SKILLS').choices.map((c) => c.value);
+  const { skills: chosen } = await askSkills({ SKILLS: 'kun,grilling,teach,tdd,codebase-design,find-docs' });
+  assert.deepEqual([...chosen].sort(), [...all].sort());
+  assert.deepEqual((await askSkills({ SKILLS: 'none' })).skills, []);
+});
+
 // A dry run of the skills module alone, in an empty home. A simulated OS (not the host's) sees no tools on PATH.
 const simulatedOs = process.platform === 'linux' ? 'macos' : 'linux';
 function skillsDryRun(answers = '', modules = 'skills') {

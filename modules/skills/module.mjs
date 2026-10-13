@@ -64,6 +64,20 @@ const skillNames = (s) => (s.repo ? [s.value, ...(s.helpers ?? [])] : []);
 const chosenSkills = (ctx) => SKILLS.filter((s) => ctx.get('SKILLS').includes(s.value));
 
 /**
+ * A saved SKILLS answer plus the default skills that were not on offer when it was given
+ * (SKILLS_OFFERED), so a rerun pulls new skills but never turns back on one you unticked.
+ * An answer older than SKILLS_OFFERED gets the whole default set, unless it was "none".
+ */
+function withNewSkills(ctx, saved) {
+  const before = ctx.answers.get('SKILLS_OFFERED');
+  if (before === undefined && !saved.length) return saved;
+  const offered = String(before ?? '').split(',').map((v) => v.trim());
+  const added = DEFAULTS.filter((v) => !saved.includes(v) && !offered.includes(v));
+  if (added.length) ctx.info(`new skills added to your selection: ${added.join(', ')} (to leave one out, remove it from SKILLS in answers.env)`);
+  return [...saved, ...added];
+}
+
+/**
  * Why a skill cannot be installed yet, or null. Its tool must be on PATH; agent-clis runs
  * first, so a dry run also counts a tool that this run's agent-clis would install.
  */
@@ -98,6 +112,15 @@ export default {
       message: 'Skills to install for Claude Code',
       default: DEFAULTS,
       choices: SKILLS,
+      refresh: withNewSkills,
+    },
+    {
+      key: 'SKILLS_OFFERED',
+      type: 'text',
+      message: 'Skills on offer when SKILLS was answered (kept by the installer, so a rerun knows which skills are new)',
+      default: SKILLS.map((s) => s.value).join(','),
+      useDefault: () => true,
+      refresh: () => SKILLS.map((s) => s.value).join(','),
     },
     {
       key: 'SKILLS_UPDATE',
