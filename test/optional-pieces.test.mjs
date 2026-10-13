@@ -438,14 +438,15 @@ test('a question with useDefault takes its default without asking', async () => 
   assert.deepEqual(asked, ['LOUD']);
 });
 
-test('preferences ask where to write and whether to go through each one; the rest take the recommended answer unless you do', () => {
+test('preferences ask where to write, whether to go through each one and whether to prepare the next stage; the rest take the recommended answer unless you do', () => {
   const qs = preferences.questions;
-  assert.deepEqual(qs.slice(0, 2).map((q) => q.key), ['PREFS_TARGETS', 'PREFS_REVIEW_EACH']);
+  assert.deepEqual(qs.slice(0, 3).map((q) => q.key), ['PREFS_TARGETS', 'PREFS_REVIEW_EACH', 'PREFS_PAGE_PREPARE_NEXT']);
   assert.equal(qs[1].default, false);
+  assert.equal(qs[2].useDefault, undefined, 'preparing the next stage is always asked');
   const ctx = { get: (k) => ({ PREFS_REVIEW_EACH: false })[k] };
-  for (const q of qs.slice(2)) assert.equal(q.useDefault?.(ctx), true, q.key);
+  for (const q of qs.slice(3)) assert.equal(q.useDefault?.(ctx), true, q.key);
   const each = { get: (k) => ({ PREFS_REVIEW_EACH: true })[k] };
-  for (const q of qs.slice(2)) assert.equal(q.useDefault(each), false, q.key);
+  for (const q of qs.slice(3)) assert.equal(q.useDefault(each), false, q.key);
 });
 
 test('the Firstmate brief include carries the house style to workers only when it is chosen', () => {

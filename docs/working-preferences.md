@@ -16,7 +16,9 @@ changed file and keeps a timestamped backup.
 
 After the targets, one question decides how many follow: `PREFS_REVIEW_EACH` (default no)
 writes the recommended set below without asking each one. Answer yes to go through them one
-by one. An answers file still sets any key it names either way.
+by one. One question is always asked: `PREFS_PAGE_PREPARE_NEXT`, which controls whether
+the agent prepares the next stage while a review page waits for your decision. An answers
+file still sets any key it names either way.
 
 With `PREFS_WRITING_STYLE=ste` and the `firstmate` target, the same house style also goes to
 Firstmate's `config/brief-include.md`, so every worker writes its status lines and reports in it.
@@ -81,6 +83,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | --- | --- | --- |
 | `PREFS_PAGE_CHECK_BEFORE_SEND` | yes | A page is opened in the agent's own browser and checked by screenshot before its link is sent, and the link is always sent. |
 | `PREFS_PAGE_FIRST` | yes | When a decision waits on a page, the page is built and checked first, the link is sent, and the agent stands by until you answer. |
+| `PREFS_PAGE_PREPARE_NEXT` | no | Always asked, even when you skip the others. With `PREFS_PAGE_FIRST`: while a review page waits for your decision, the agent prepares the next stage but does not start it until you approve. |
 | `PREFS_PAGES_TOGETHER` | yes | While several review pages are in progress, links are held until all open work is done; the pages are checked against each other (each question once, dependencies in order, no clashing recommendations, one set of names) and sent together in the order to take them, with brief status meanwhile. |
 | `PREFS_FLEET_WORKFLOW` | yes | Supervising agents brief workers with a goal, branch and definition of done; workers report only at phase changes and land through a pull request with green checks; review pages are for real decisions and look-and-feel changes, never status or routine choices; permission prompts and command mechanics are never escalated. Live state is checked before work is called in progress or finished, the next step of a plan starts as soon as one lands, and a wait over 30 minutes is raised within the hour. When you must type in an agent's window, it is named by the labels you see on screen, never internal ids. |
 
@@ -101,7 +104,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | --- | --- | --- |
 | `PREFS_CAPTURE_IDEAS` | yes | Every idea you share is captured, folded into current work or parked with a trigger, and you get one line on where it landed. |
 | `PREFS_RESEQUENCE` | yes | The agent reorders queued work by what blocks what without asking, then tells you the new order and why. |
-| `PREFS_ORIENT` | yes | When work piles up or you seem unsure what is next, two lines: the current phase and the next deliverable, with where to find it. |
+| `PREFS_ORIENT` | yes | Every project reply ends with one line that says where the work is on the map, the next step, who takes it and when. No step counters. |
 | `PREFS_FINISH_FIRST` | yes | Once something works, the agent stops instead of proposing the next improvement, suggests cutting scope at most once, and raises a risk once. |
 
 ### AI and model use

@@ -8,12 +8,13 @@ The route is for building or changing an app, a tool or a codebase. Documents, r
 pages, research and one-off tasks do not need it.
 
 For a long project of any kind (research, concepts, review pages and a build, over many
-sessions), the workflow-playbook skill gives the working method around it: stage
-gates, evidence first, review pages, and when to ask or act.
+sessions), the workflow-playbook skill provides the working method. It covers stage
+gates, a map that always shows the next step, evidence first, review pages, and when to
+ask or act.
 
 | Step | What happens | Skill |
 | --- | --- | --- |
-| 1. Plan | Write the idea down, judge whether it fits and when, and say so in one line. For an effort too big for one session, map the open decisions instead. | wayfinder |
+| 1. Plan | Write the idea down, judge whether it fits and when, and say so in one line. If the effort takes more than one session, the agent starts a map at once and shows the goal, the stages, where the work is and the next step. | wayfinder |
 | 2. Decide | Ask the questions that settle the open decisions, one round at a time, each with a recommendation. Record the answers, the new terms and any hard-to-reverse decision. | grilling, or grill-with-docs to write `GLOSSARY.md` and `docs/adr/` as you go |
 | 3. Prototype | Write a short spec that names the seams the tests will hold. When the look or the flow needs judging, build a throwaway prototype. Nothing is built for real before the spec is approved. | to-spec, prototype (with wayfinder) |
 | 4. Breakdown | Cut a spec too big for one change into tickets, each with what blocks it. Skip this when one change can hold the spec. | to-tickets |
@@ -24,8 +25,9 @@ gates, evidence first, review pages, and when to ask or act.
 
 - **A small, clear change**: Plan, Build, Ship.
 - **A bug**: Plan, find the cause, then Build with the reproduction as the regression test, then Ship.
-- **A foggy effort over several sessions**: start wayfinder at Plan. Its map replaces Decide
-  until the way is clear.
+- **A foggy effort over several sessions**: at Plan, the agent starts the map without being
+  asked and shows it. Type /wayfinder to track the map as tickets. The map replaces Decide
+  until the way forward is clear.
 
 ## Build rules that go with it
 
