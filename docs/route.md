@@ -1,24 +1,24 @@
 # A route for software projects
 
 Six steps take a software idea from a first mention to a merged change. Each step has a
-skill that does most of the work. The skills come from the `skills` module; the ones
-marked optional are choices you add to `SKILLS`.
+skill that does most of the work. The skills come from the `skills` module, which
+installs all of them by default.
 
 The route is for building or changing an app, a tool or a codebase. Documents, review
 pages, research and one-off tasks do not need it.
 
 For a long project of any kind (research, concepts, review pages and a build, over many
-sessions), the optional workflow-playbook skill gives the working method around it: stage
+sessions), the workflow-playbook skill gives the working method around it: stage
 gates, evidence first, review pages, and when to ask or act.
 
 | Step | What happens | Skill |
 | --- | --- | --- |
-| 1. Plan | Write the idea down, judge whether it fits and when, and say so in one line. For an effort too big for one session, map the open decisions instead. | wayfinder (optional) |
-| 2. Decide | Ask the questions that settle the open decisions, one round at a time, each with a recommendation. Record the answers, the new terms and any hard-to-reverse decision. | grilling, or grill-with-docs (optional) to write `GLOSSARY.md` and `docs/adr/` as you go |
-| 3. Prototype | Write a short spec that names the seams the tests will hold. When the look or the flow needs judging, build a throwaway prototype. Nothing is built for real before the spec is approved. | to-spec (optional), prototype (with wayfinder) |
-| 4. Breakdown | Cut a spec too big for one change into tickets, each with what blocks it. Skip this when one change can hold the spec. | to-tickets (optional) |
+| 1. Plan | Write the idea down, judge whether it fits and when, and say so in one line. For an effort too big for one session, map the open decisions instead. | wayfinder |
+| 2. Decide | Ask the questions that settle the open decisions, one round at a time, each with a recommendation. Record the answers, the new terms and any hard-to-reverse decision. | grilling, or grill-with-docs to write `GLOSSARY.md` and `docs/adr/` as you go |
+| 3. Prototype | Write a short spec that names the seams the tests will hold. When the look or the flow needs judging, build a throwaway prototype. Nothing is built for real before the spec is approved. | to-spec, prototype (with wayfinder) |
+| 4. Breakdown | Cut a spec too big for one change into tickets, each with what blocks it. Skip this when one change can hold the spec. | to-tickets |
 | 5. Build | One builder takes the whole spec and builds it test-first at the seams the spec names. | tdd, codebase-design |
-| 6. Ship | Validate the change, open a pull request, and merge it once you approve. | no-mistakes (optional) |
+| 6. Ship | Validate the change, open a pull request, and merge it once you approve. | no-mistakes |
 
 ## Short paths
 

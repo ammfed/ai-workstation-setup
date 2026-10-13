@@ -35,7 +35,12 @@ const SKILLS = [
     helpers: ['domain-modeling', 'research', 'prototype'],
   },
   { value: 'find-docs', repo: 'upstash/context7', label: 'find-docs - fetch current library docs with ctx7' },
-  { value: 'no-mistakes', repo: 'kunchenguid/no-mistakes', label: 'no-mistakes - run the no-mistakes validation pipeline from chat (agent-clis installs the tool)' },
+  {
+    value: 'no-mistakes',
+    repo: 'kunchenguid/no-mistakes',
+    label: 'no-mistakes - run the no-mistakes validation pipeline from chat (agent-clis installs the tool; skipped without it)',
+    needs: { bin: 'no-mistakes', what: 'the no-mistakes CLI' },
+  },
   {
     value: 'workflow-playbook',
     label:
@@ -45,25 +50,43 @@ const SKILLS = [
   },
   {
     value: 'composio-cli',
-    label: "composio-cli - Composio's own Claude Code plugin and skill, added by `composio setup` (agent-clis installs the tool)",
-    install: (ctx) => {
-      if (!ctx.dryRun && !ctx.has('composio')) throw new Skip('`composio` is not installed; pick it in agent-clis first');
-      ctx.run('composio setup --target claude --yes');
-    },
+    label: "composio-cli - Composio's own Claude Code plugin and skill, added by `composio setup` (agent-clis installs the tool; skipped without it)",
+    needs: { bin: 'composio', what: 'the composio CLI' },
+    install: (ctx) => ctx.run('composio setup --target claude --yes'),
   },
 ];
-// The default set is the one in daily use; the rest stay available as options.
-// docs/route.md shows where each skill fits in a software project.
-const DEFAULTS = ['kun', 'grilling', 'teach', 'tdd', 'codebase-design', 'find-docs'];
+// The default is the full set, so a fresh clone works like the setup it came from; untick
+// what you do not want. docs/route.md shows where each skill fits in a software project.
+const DEFAULTS = SKILLS.map((s) => s.value);
 
 // Every skill a choice installs, helpers included.
 const skillNames = (s) => (s.repo ? [s.value, ...(s.helpers ?? [])] : []);
 const chosenSkills = (ctx) => SKILLS.filter((s) => ctx.get('SKILLS').includes(s.value));
 
+/**
+ * Why a skill cannot be installed yet, or null. Its tool must be on PATH; agent-clis runs
+ * first, so a dry run also counts a tool that this run's agent-clis would install.
+ */
+function missingTool(ctx, s) {
+  if (!s.needs || ctx.has(s.needs.bin)) return null;
+  if (ctx.dryRun && (ctx.get('AGENT_CLIS') ?? []).includes(s.needs.bin)) return null;
+  return `${s.needs.what} is not installed (install it, then rerun with --modules skills)`;
+}
+
+/** Run one skill's step and note how it ended, for the recap at the end of the install. */
+async function tallied(ctx, tally, label, fn) {
+  const { skips, failures } = ctx.record;
+  const before = [skips.length, failures.length];
+  await ctx.step(label, fn);
+  if (failures.length > before[1]) tally.failed.push(failures.at(-1));
+  else if (skips.length > before[0]) tally.skipped.push(skips.at(-1));
+  else tally.installed.push(label);
+}
+
 export default {
   name: 'skills',
   title: 'Agent skills',
-  description: 'Claude Code skills: kun, grilling, teach, tdd, codebase-design, find-docs; vision, grill-me, grill-with-docs, to-spec, to-tickets, to-questionnaire, wayfinder, no-mistakes, workflow-playbook, composio-cli',
+  description: 'Claude Code skills, downloaded from their upstreams: kun, vision, grill-me, grilling, teach, tdd, codebase-design, grill-with-docs, to-spec, to-tickets, to-questionnaire, wayfinder, find-docs, no-mistakes, workflow-playbook, composio-cli',
   order: 50,
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],
@@ -89,10 +112,21 @@ export default {
     const chosen = chosenSkills(ctx);
     if (!chosen.length) ctx.ok('no skills selected');
     const opts = { update: Boolean(ctx.get('SKILLS_UPDATE')) };
+    const tally = { installed: [], skipped: [], failed: [] };
     for (const s of chosen) {
-      await ctx.step(s.value, () => (s.install ? s.install(ctx) : installSkill(ctx, s.repo, s.value, opts)));
-      for (const h of s.helpers ?? []) await ctx.step(`${h} (for ${s.value})`, () => installSkill(ctx, s.repo, h, opts));
+      const missing = missingTool(ctx, s);
+      await tallied(ctx, tally, s.value, () => {
+        if (missing) throw new Skip(missing);
+        return s.install ? s.install(ctx) : installSkill(ctx, s.repo, s.value, opts);
+      });
+      if (missing) continue;
+      for (const h of s.helpers ?? []) await tallied(ctx, tally, `${h} (for ${s.value})`, () => installSkill(ctx, s.repo, h, opts));
     }
     ctx.info('the clickup module installs its own skill');
+    if (!chosen.length) return;
+    if (tally.installed.length) ctx.report(`${ctx.dryRun ? 'would install' : 'installed'}: ${tally.installed.join(', ')}`);
+    for (const line of tally.skipped) ctx.report(`skipped: ${line}`);
+    for (const line of tally.failed) ctx.report(`failed: ${line}`);
+    ctx.report('Restart Claude Code so the new skills load.');
   },
 };
