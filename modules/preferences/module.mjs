@@ -19,9 +19,10 @@ function grillDefault(ctx) {
   return /^(y|yes|true|1)$/i.test(String(old)) ? 'gaps' : 'off';
 }
 
-// Every question after the first two takes its recommended answer (its default, or a saved
-// answer) unless the person chose to go through them one by one.
-const GATE = ['PREFS_TARGETS', 'PREFS_REVIEW_EACH'];
+// Every question after the first three takes its recommended answer (its default, or a saved
+// answer) unless the person chose to go through them one by one. PREFS_PAGE_PREPARE_NEXT has
+// no recommended answer, so it is always asked.
+const GATE = ['PREFS_TARGETS', 'PREFS_REVIEW_EACH', 'PREFS_PAGE_PREPARE_NEXT'];
 function withRecommended(questions) {
   return questions.map((q) => (GATE.includes(q.key) ? q : { ...q, useDefault: (ctx) => !ctx.get('PREFS_REVIEW_EACH') }));
 }
@@ -64,6 +65,7 @@ export default {
       message: 'Go through each working preference now (about 60 short questions)? No writes the recommended set, which you can edit any time',
       default: false,
     },
+    yes('PREFS_PAGE_PREPARE_NEXT', 'Review pages: while a review page waits for your decision, should the agent prepare the next stage without starting it?', { default: false }),
 
     // Language and tone
     yes('PREFS_PLAIN_LANGUAGE', 'Tone: plain, natural, friendly language with no jargon?'),
@@ -193,7 +195,7 @@ export default {
     // Ideas and priorities
     yes('PREFS_CAPTURE_IDEAS', 'Ideas: capture every idea you share, fold it in or park it, and say in one line where it landed?'),
     yes('PREFS_RESEQUENCE', 'Ideas: let the agent reorder queued work by what blocks what, then tell you the new order?'),
-    yes('PREFS_ORIENT', 'Ideas: when you seem lost, a two-line "where we are": the current phase, the next deliverable, where to find it?'),
+    yes('PREFS_ORIENT', 'Ideas: end every project reply with one line on where the work is, the next step, who takes it and when?'),
     yes('PREFS_FINISH_FIRST', 'Ideas: once something works, stop instead of proposing the next improvement, and raise a risk once, not repeatedly?'),
 
     // AI and model use

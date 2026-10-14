@@ -157,6 +157,8 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     get('PREFS_PAGE_CHECK_BEFORE_SEND') && 'Always give the user the page link in chat, as a full URL.',
     get('PREFS_PAGE_FIRST') &&
       'When a decision waits on a page, build and check the page first, send the link, then stand by quietly until the user answers. Do not ask the question anywhere else before the page is in front of them.',
+    get('PREFS_PAGE_FIRST') && get('PREFS_PAGE_PREPARE_NEXT') &&
+      'While waiting, prepare the next stage, but do not start it before approval.',
     get('PREFS_PAGES_TOGETHER') &&
       'When several review pages are in progress, hold the links until all open work is done. Check the pages against each other (each question asked once, dependencies in order, no clashing recommendations, one set of names), then send them together in the order to take them. Keep giving brief status meanwhile.',
   ]);
@@ -179,7 +181,7 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     get('PREFS_BUILD_WHOLE_GOAL') && 'Run the full validation pipeline once the first complete pass exists, not on every step.',
     get('PREFS_ROUTE') &&
       'Take a software project (building or changing an app, a tool or a codebase) through six steps, each with its skill when installed: ' +
-        '1 Plan: write the idea down, judge fit and timing, and say so in one line (wayfinder maps an effort too big for one session). ' +
+        '1 Plan: write the idea down, judge fit and timing, and say so in one line. If the effort takes more than one session, start a map at once without being asked and show it. When the user types /wayfinder, wayfinder tracks the map as tickets. ' +
         '2 Decide: settle the open decisions in rounds of questions and record the answers (grilling, or grill-with-docs). ' +
         '3 Prototype: write a spec that names the test seams, with a throwaway prototype when the look or flow needs judging, and get it approved before building (to-spec, prototype). ' +
         '4 Breakdown: cut a spec too big for one change into tickets with their blocking edges (to-tickets). ' +
@@ -206,7 +208,7 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     get('PREFS_RESEQUENCE') &&
       'Reorder queued work by what blocks what and what unblocks the nearest deadline, without asking first. Then tell the user the new order and why. Still ask about anything only they can decide.',
     get('PREFS_ORIENT') &&
-      'When work piles up or the user seems unsure what comes next, orient them in two short lines: the current phase and the next concrete deliverable, with where to find it.',
+      'End every project reply with one plain line that says where the work is on the map, the next step, who takes it and when. Name the step in words, never as a count such as "step 3 of 6". Say when as an event or a day, not a clock time.',
     get('PREFS_FINISH_FIRST') &&
       'Prefer finishing over expanding. Once something works, stop instead of proposing the next improvement, and suggest cutting scope at most once.',
     get('PREFS_FINISH_FIRST') &&

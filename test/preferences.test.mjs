@@ -159,6 +159,39 @@ test('a fleet checks live state, keeps work moving, and names windows by their l
   assert.doesNotMatch(await render({ PREFS_HABITS: 'no' }), /dependency order/);
 });
 
+test('every project reply ends with where the work is, and it closes the reply together with the next actions', async () => {
+  const text = await render();
+  const habit = sectionOf(text, 'Language and tone');
+  const closing = sectionOf(text, 'Ideas and priorities');
+  assert.match(habit, /End every reply with the next actions, the user's first\./);
+  assert.match(closing, /End every project reply with one plain line that says where the work is on the map, the next step, who takes it and when\./);
+  assert.match(closing, /Name the step in words, never as a count such as "step 3 of 6"\. Say when as an event or a day, not a clock time\./);
+  assert.doesNotMatch(text, /orient them in two short lines/);
+  // Both rules close a reply, so neither may push the other away from the end.
+  assert.doesNotMatch(text, /(begin|start|open) (every|each) (project )?reply with/i);
+  assert.equal(text.match(/^- End every (project )?reply with/gm).length, 2);
+  assert.doesNotMatch(await render({ PREFS_ORIENT: 'no' }), /where the work is on the map/);
+  assert.match(await render({ PREFS_ORIENT: 'no' }), /End every reply with the next actions/);
+});
+
+test('the route starts a map at once for an effort over several sessions, and wayfinder tracks it on request', async () => {
+  const building = sectionOf(await render({ PREFS_ROUTE: 'yes' }), 'Building');
+  assert.match(building, /If the effort takes more than one session, start a map at once without being asked and show it\./);
+  assert.match(building, /When the user types \/wayfinder, wayfinder tracks the map as tickets\./);
+});
+
+test('preparing the next stage while a review page waits is the user\'s choice, off by default', async () => {
+  const line = 'While waiting, prepare the next stage, but do not start it before approval.';
+  const off = sectionOf(await render(), 'Review page delivery');
+  assert.match(off, /then stand by quietly until the user answers\./);
+  assert.ok(!off.includes(line));
+  const on = sectionOf(await render({ PREFS_PAGE_PREPARE_NEXT: 'yes' }), 'Review page delivery');
+  assert.match(on, /then stand by quietly until the user answers\./);
+  assert.ok(on.includes(line));
+  assert.ok(on.indexOf(line) > on.indexOf('stand by quietly'), 'the line follows the page-first rule');
+  assert.ok(!(await render({ PREFS_PAGE_PREPARE_NEXT: 'yes', PREFS_PAGE_FIRST: 'no' })).includes(line));
+});
+
 test('the Simplified Technical English style is a choice that adds its rules and keeps outward writing out', async () => {
   const ctx = await answer();
   assert.equal(ctx.get('PREFS_WRITING_STYLE'), 'plain');

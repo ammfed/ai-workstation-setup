@@ -27,8 +27,9 @@ const SKILLS = [
     value: 'wayfinder',
     repo: 'mattpocock/skills',
     label:
-      'wayfinder - plans work too big for one session as a map of open decisions; starts only when you type /wayfinder; ' +
-      'its tracker is local Markdown by default, with no setup skill to install. ' +
+      'wayfinder - tracks open decisions for work that takes more than one session as tickets on a map. Only you can start it, by typing /wayfinder. ' +
+      'With workflow-playbook, the agent first draws a simple map on its own. ' +
+      'Its tracker is local Markdown by default, with no setup skill to install. ' +
       'Also installs its helpers domain-modeling, research and prototype, which can start on their own in any session: ' +
       'research and prototype answer general research and UI-exploration requests, ' +
       'domain-modeling writes GLOSSARY.md and docs/adr into the repo it runs in',
@@ -44,8 +45,9 @@ const SKILLS = [
   {
     value: 'workflow-playbook',
     label:
-      'workflow-playbook - a working method for long projects run with AI agents: stage gates, evidence first, ' +
-      'review pages, when to ask or act, wording, briefs, memory and status (shipped with this setup)',
+      'workflow-playbook - a working method for long projects run with AI agents. Covers stage gates, ' +
+      'a map that always shows the next step, evidence first, review pages, when to ask or act, wording, briefs, ' +
+      'memory and status. Included with this setup.',
     install: (ctx) => writeBundledSkill(ctx, 'workflow-playbook'),
   },
   {
