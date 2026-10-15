@@ -9,8 +9,8 @@ pages, research and one-off tasks do not need it.
 
 For a long project of any kind (research, concepts, review pages and a build, over many
 sessions), the workflow-playbook skill provides the working method. It covers stage
-gates, a map that always shows the next step, evidence first, review pages, and when to
-ask or act.
+gates, a map that always shows the next step, evidence first, review pages, when to ask
+or act, and the steps for taking a weak prototype to a liked wireframe direction.
 
 | Step | What happens | Skill |
 | --- | --- | --- |

@@ -1,6 +1,6 @@
 ---
 name: workflow-playbook
-description: A working method for long projects run by one owner with AI agents. Use when a new goal takes more than one session, when planning or running multi-stage work (research, concepts, wireframes, build), when briefing a worker or helper, when building a review page for the owner, or when deciding whether to ask the owner or act.
+description: A working method for long projects run by one owner with AI agents. Use when a new goal takes more than one session, when planning or running multi-stage work (research, concepts, layout options, wireframes, build), when reworking a weak prototype into a liked direction, when briefing a worker or helper, when building a review page for the owner, or when deciding whether to ask the owner or act.
 ---
 
 # Workflow playbook
@@ -9,12 +9,14 @@ These rules come from a long project that was restarted several times. Every res
 
 ## 1. Stage gates
 
-1. **Work in gates, one at a time.** Findings, then the owner's agreement. Concepts, then the owner's approval. Wireframes, then the build. Never start a stage whose input the owner has not approved.
+1. **Work in gates, one at a time.** Findings, then the owner's agreement. Concepts, then the owner's approval. Layout options, then the owner's pick. Wireframes, then the build. Never start a stage whose input the owner has not approved.
    Why: a stage built on unapproved input is thrown away when that input changes.
 2. **Comments are not agreement.** When the owner comments, rework those points and show them again. Move on only when the owner says they agree.
    Why: treating a comment as a yes builds the next stage on a guess.
 3. **Each stage builds on the last.** A stage output opens with what it takes from the stage before and what it hands to the next. Replaced work stays on record, but it never feeds a new stage.
    Why: stages that do not name their inputs drift apart, and old work leaks back in.
+4. **Pick the layout before the wireframes.** After the owner approves the concepts, study the full interfaces the owner liked. Study whole screens, not single parts. Then offer 3 layout options using the same few key screens for every option. Each option defines a page frame and page patterns. The page frame sets what stays the same across screens, including the header, navigation and main areas. Page patterns define the screen types that repeat, such as a list with details, a dashboard or a step-by-step form. Start the wireframes only after the owner picks an option. Draw all wireframes using the chosen page frame and page patterns.
+   Why: wireframes drawn straight from concepts come out scattered, with each concept pushed into its own page.
 
 ## 2. Lead the way
 
@@ -22,7 +24,7 @@ These rules come from a long project that was restarted several times. Every res
    Why: without a clear view of the whole project, the owner faces a blank page at every step and cannot see where the work is going.
 2. **Never leave the next step empty.** While the owner reviews a stage, prepare the next one. Gather its inputs, draft its plan and list its open questions. Keep the stage gates: prepare a stage that needs approval, but never start it before approval. If the owner changes an input, update the preparation first.
    Why: an empty next step stalls the work, and a stage started before approval may have to be done again.
-3. **End every reply with where the work is.** End each project reply with one plain line that says where the work is on the map, the next step, who takes it and when. For example: "Concepts are on the review page. Next: you answer the cards, then I draft the wireframe plan." Name the step in words, not as a count such as "step 3 of 6". Say when as an event or a day, not a clock time.
+3. **End every reply with where the work is.** End each project reply with one plain line that says where the work is on the map, the next step, who takes it and when. For example: "Concepts are on the review page. Next: you answer the cards, then I offer the layout options." Name the step in words, not as a count such as "step 3 of 6". Say when as an event or a day, not a clock time.
    Why: the owner always knows what comes next without asking, and a step count gives a number but does not say what to do.
 
 ## 3. Evidence first
@@ -79,3 +81,31 @@ These rules come from a long project that was restarted several times. Every res
 
 1. **Record each method lesson when it happens.** When the owner corrects the way of working, write the lesson down in one line with what triggered it. At each stage end, fold the lessons into this playbook. Show every change to the playbook on a review page before it ships.
    Why: a method that is not written down has to be taught again on the next project.
+
+## 10. From a weak prototype to a liked wireframe direction
+
+Checkpoint 1. These steps took a scattered prototype to a wireframe direction the owner liked. Add the next checkpoint only when the owner says the next stage is good. Most steps end with a reusable prompt. Fill in the words in brackets.
+Why: writing down the steps and prompts makes a direction that took many rounds to find faster to reach next time.
+
+1. **Walk it as the people who use it.** Give each role a name and walk through its full journey in the prototype. Click only what that person would click. Sort the findings by type (gap, distraction, inconsistency), count them, and save a screenshot of each.
+   Prompt: "Walk through the prototype as each role, from start to end. List every finding by type, with counts and screenshots. Change nothing yet."
+2. **Find the causes.** Group the findings into a few root causes and rank them by harm. Common causes include links that lose track of who the person is, tasks that stop at the decision with no after state, journeys with no first or last step, to-do lists that disagree, one thing in two places, and items that open the wrong record. Confirm each symptom in the prototype before naming its cause.
+   Prompt: "From the walk, identify the root causes and rank them by harm. Confirm each symptom before naming its cause."
+3. **Let the owner pick the approach.** Offer approaches and recommend one (rule 5.1). For example, start with the journey: create one flow per role, then make a clickable walk-through.
+   Prompt: "Fix it [journey first]: one flow per role, then a clickable walk-through."
+4. **Gather the references.** Put all references in one folder. Include competitor screens, screens the owner liked in the old tool, fresh captures of the current tool, and other screens the owner liked. Note what the owner liked about each one.
+   Prompt: "My references are in [folder]. Use them for the polish pass."
+5. **Make smooth measurable.** Turn smooth into five checks, each with a target of 0: dead ends, links to another person's page, main actions with no after state, journeys with no reachable first or last step, and to-do lists that disagree. Automatically re-walk every role in every mode at laptop and phone widths. Then test with real clicks. Repeat until every check is 0.
+   Prompt: "Define smooth as checks you can count, with a target of 0. Re-walk every role in every mode, at laptop and phone widths, until all checks are 0."
+6. **Give the builder room.** Hand over the full goal in one brief (rule 7.2). Inside the stage, drop the approval stops between rounds, but keep the measured bar. The owner can then make selective edits.
+   Prompt: "Do the [journey-first] fix and iterate. Then we do the selective editing. I give you room to come back with the smoothest journey."
+7. **Polish from the references.** Stay in the wireframe stage. Borrow layout, order, interaction and wording, but not colour or visual design. Log each idea with its source screen and the reason it makes a screen clearer, faster or more engaging (rule 3.3). Re-walk to keep every check at 0.
+   Prompt: "Polish from my references. Log each idea with its source screen and its reason. Nothing goes in without a reason."
+8. **Check the copy.** Send every line a person will read to a second model (rule 6.1). Then re-walk.
+9. **Show one complete review page.** Put every open decision on one page (section 4). Do not ask for some of the decisions early while a follow-up pass is still running.
+10. **Save the liked state.** Before any rework, save a read-only copy and an archive with a checksum. This lets you restore the liked state.
+    Prompt: "Save this version as a checkpoint before you change anything."
+11. **Start the next pass right.** After the owner's feedback, restate what you understood and ask about the gaps first. Sort the references to match the wireframe pages one to one. Create a numbered folder for each page, put that page's wireframe first, and include an index. Place each image using a vision check and an independent second check. The target is 0 misplaced images. When the owner is unsure, build options the owner can see and try, as in rule 1.4, instead of asking abstract questions.
+    Prompt: "Tell me what you understood and ask about the gaps. When I am unsure, show me options I can click through."
+12. **Spot-check real content.** Before calling anything done, open real screens and read their content. Do not rely on counts alone.
+    Prompt: "Before you say it is done, open [a few] real screens and check what they say."
