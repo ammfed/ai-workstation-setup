@@ -1,6 +1,6 @@
 ---
 name: workflow-playbook
-description: A working method for long projects run by one owner with AI agents. Use when a new goal takes more than one session, when planning or running multi-stage work (research, concepts, layout options, wireframes, build), when reworking a weak prototype into a liked direction, when briefing a worker or helper, when building a review page for the owner, or when deciding whether to ask the owner or act.
+description: A working method for long projects run by one owner with AI agents. Use when a new goal takes more than one session, when planning or running multi-stage work (research, concepts, layout options, wireframes, build), when reworking a weak prototype into a liked direction and an approved journey map, when briefing a worker or helper, when building a review page for the owner or a page for stakeholders, or when deciding whether to ask the owner or act.
 ---
 
 # Workflow playbook
@@ -17,6 +17,8 @@ These rules come from a long project that was restarted several times. Every res
    Why: stages that do not name their inputs drift apart, and old work leaks back in.
 4. **Pick the layout before the wireframes.** After the owner approves the concepts, study the full interfaces the owner liked. Study whole screens, not single parts. Then offer 3 layout options using the same few key screens for every option. Each option defines a page frame and page patterns. The page frame sets what stays the same across screens, including the header, navigation and main areas. Page patterns define the screen types that repeat, such as a list with details, a dashboard or a step-by-step form. Start the wireframes only after the owner picks an option. Draw all wireframes using the chosen page frame and page patterns.
    Why: wireframes drawn straight from concepts come out scattered, with each concept pushed into its own page.
+5. **Build work for other audiences last.** Build a deck, demo or report for others just before its date. Use the latest approved stage. Include a journey showcase with the hours spent, the rounds and old screens beside the new ones.
+   Why: work built early may show a stage that has since changed. The showcase shows the effort behind the result.
 
 ## 2. Lead the way
 
@@ -24,7 +26,7 @@ These rules come from a long project that was restarted several times. Every res
    Why: without a clear view of the whole project, the owner faces a blank page at every step and cannot see where the work is going.
 2. **Never leave the next step empty.** While the owner reviews a stage, prepare the next one. Gather its inputs, draft its plan and list its open questions. Keep the stage gates: prepare a stage that needs approval, but never start it before approval. If the owner changes an input, update the preparation first.
    Why: an empty next step stalls the work, and a stage started before approval may have to be done again.
-3. **End every reply with where the work is.** End each project reply with one plain line that says where the work is on the map, the next step, who takes it and when. For example: "Concepts are on the review page. Next: you answer the cards, then I offer the layout options." Name the step in words, not as a count such as "step 3 of 6". Say when as an event or a day, not a clock time.
+3. **End every reply with where the work is.** End each project reply with one plain line that says where the work is on the map, the next step, who takes it and when. For example: "Where we are: concepts are on the review page. Next: you answer the cards, then I offer the layout options." Name the step in words, not as a count such as "step 3 of 6". Say when as an event or a day, not a clock time. When the owner takes the next step, say exactly what they need to do and link to it.
    Why: the owner always knows what comes next without asking, and a step count gives a number but does not say what to do.
 
 ## 3. Evidence first
@@ -48,6 +50,8 @@ These rules come from a long project that was restarted several times. Every res
    Why: long pages overwhelm, and a page that is only linked is often never seen.
 3. **Every element has a reason.** Each element on a page or screen helps someone decide or act. Remove filler text, captions and decoration.
    Why: anything without a reason makes the owner read instead of see.
+4. **Present stakeholder pages live.** When the owner needs to align other people, build a page they can present live in the meeting. Give each item one card with Approve, Change or Discard and a note. End with a summary the owner can copy.
+   Why: answers given in the room are recorded at once, and the summary goes straight into the meeting notes.
 
 ## 5. Asking and acting
 
@@ -82,10 +86,12 @@ These rules come from a long project that was restarted several times. Every res
 1. **Record each method lesson when it happens.** When the owner corrects the way of working, write the lesson down in one line with what triggered it. At each stage end, fold the lessons into this playbook. Show every change to the playbook on a review page before it ships.
    Why: a method that is not written down has to be taught again on the next project.
 
-## 10. From a weak prototype to a liked wireframe direction
+## 10. From a weak prototype to an approved journey map
 
-Checkpoint 1. These steps took a scattered prototype to a wireframe direction the owner liked. Add the next checkpoint only when the owner says the next stage is good. Most steps end with a reusable prompt. Fill in the words in brackets.
+These steps took a scattered prototype to a wireframe direction the owner liked (checkpoint 1), then to an understanding page and a journey map the owner approved (checkpoint 2). Add the next checkpoint only when the owner says the next stage is good. Most steps end with a reusable prompt. Fill in the words in brackets.
 Why: writing down the steps and prompts makes a direction that took many rounds to find faster to reach next time.
+
+### Checkpoint 1: a liked wireframe direction
 
 1. **Walk it as the people who use it.** Give each role a name and walk through its full journey in the prototype. Click only what that person would click. Sort the findings by type (gap, distraction, inconsistency), count them, and save a screenshot of each.
    Prompt: "Walk through the prototype as each role, from start to end. List every finding by type, with counts and screenshots. Change nothing yet."
@@ -107,5 +113,24 @@ Why: writing down the steps and prompts makes a direction that took many rounds 
     Prompt: "Save this version as a checkpoint before you change anything."
 11. **Start the next pass right.** After the owner's feedback, restate what you understood and ask about the gaps first. Sort the references to match the wireframe pages one to one. Create a numbered folder for each page, put that page's wireframe first, and include an index. Place each image using a vision check and an independent second check. The target is 0 misplaced images. When the owner is unsure, build options the owner can see and try, as in rule 1.4, instead of asking abstract questions.
     Prompt: "Tell me what you understood and ask about the gaps. When I am unsure, show me options I can click through."
-12. **Spot-check real content.** Before calling anything done, open real screens and read their content. Do not rely on counts alone.
-    Prompt: "Before you say it is done, open [a few] real screens and check what they say."
+12. **Spot-check real content.** Before calling anything done, open real items, such as screens, records or pages, and read their content. Do not rely on counts alone.
+    Prompt: "Before you say it is done, open [a few] real [screens] and check what they say."
+
+### Checkpoint 2: an approved understanding page and journey map
+
+Start here when the owner likes the direction, has walked through it and has shared comments.
+
+13. **Settle the comments before the next design round.** Do not change anything yet. Build one understanding page (section 4) in this order: the read-back, the journey and screen map, the open patterns, the gaps, the questions, the target screen and a Settled card. Start the next round only after the owner agrees to the Settled card (rule 1.2).
+    Prompt: "Before you change anything, show me on one page what you understood from my comments."
+14. **Read back every comment.** Restate each feedback point in your own words. Show the screens it affects side by side. The owner marks each point Right, Partly or Wrong. Then read back the owner's free notes in the order they wrote them.
+    Prompt: "Read back each of my points with the screens side by side, so I can mark it Right, Partly or Wrong. Then read back my notes in order."
+15. **Map the journeys and screens for each role.** Start with the roles and their journeys. Then list the sections, views and side views. For each role, name the first screen, what matters most, what stays out of sight and where work passes to another role.
+    Prompt: "Map the roles and journeys first, then the sections, views and side views. For each role, show the first screen, what matters, what stays out of sight and the hand-offs."
+16. **Research open patterns.** For each open pattern question, study how modern products solve it. Show the examples and pick one (rule 3.4).
+    Prompt: "For [the open pattern], show me how modern products do it and pick one."
+17. **List the gaps, then ask the few questions.** List the gaps the owner did not mention, each with a pick. Then ask only the questions that research cannot answer. Give a recommendation for each question (rule 5.1).
+    Prompt: "List the gaps I did not mention, each with your pick. Ask me only what research cannot answer."
+18. **Settle the target screen.** Ask for the owner's actual screen size and the usable browser area inside it. Design for that size first. Then check larger and smaller widths, including a phone, in every re-walk (step 5).
+    Prompt: "My screen is [size] and the browser area is [size]. Design at that size, then check larger and smaller widths."
+19. **Close with a Settled card.** End the page with one card that lists everything settled. Check the page against the real screens before sending it (step 12). Once the owner agrees, start the next design round from the Settled card only (rule 1.3).
+    Prompt: "End the page with a Settled card. Build nothing until I agree to it."

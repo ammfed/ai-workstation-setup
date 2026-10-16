@@ -189,7 +189,7 @@ export default {
     yes('PREFS_ROUTE', 'Building: take software projects through six steps (plan, decide, prototype, breakdown, build, ship), each with its skill (docs/route.md)?', { default: false }),
     yes('PREFS_TEST_FIRST', 'Building: build product code test-first at the seams the spec names (not prototypes, docs or config)?', { default: false }),
     yes('PREFS_GLOSSARY_ADR', 'Building: read GLOSSARY.md and docs/adr before building, and add new terms and decision records with the change?', { default: false }),
-    yes('PREFS_PROTOTYPE_CHECK', 'Building: check every prototype at laptop and phone width and fix broken layout, unclear labels and dead ends before you see it?', { default: false }),
+    yes('PREFS_PROTOTYPE_CHECK', 'Building: check every prototype at your target screen size, then at laptop and phone width, and fix broken layout, unclear labels and dead ends before you see it?', { default: false }),
     yes('PREFS_MODEL_GUIDE', 'Models: when a model is named for a task, read its vendor\'s prompting guide first?'),
 
     // Ideas and priorities
