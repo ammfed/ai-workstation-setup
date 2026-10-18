@@ -148,8 +148,8 @@ to you, and saying plainly when something was reasoned about rather than tested.
   `~/.config/ai-workstation-setup/decision-cards.html`. It needs `lavish-axi` (agent-clis).
   Agents copy it, replace the example cards, and open it with `lavish-axi --no-open`. It shows
   the review-page rules: a full-width header, the card beside a canvas, and buttons to flip
-  between every option's preview. [Review pages](review-pages.md) describes the loop and the
-  card fields.
+  between every option's preview. It is light by default, with a small switch to go dark.
+  [Review pages](review-pages.md) describes the loop and the card fields.
 - **No surprise tabs**: agent-clis sets `LAVISH_AXI_NO_OPEN=1` (`LAVISH_NO_OPEN`), so review
   pages never open browser tabs on their own; links are shared in chat.
 - **Research browser**: agent-clis installs `research-browser` (`RESEARCH_BROWSER`, Linux,

@@ -250,3 +250,18 @@ test('the card template ships its fonts, colours, waiting strip and phone layout
   assert.match(html, /previewsTall/);
   assert.match(html, /showModal\(\)/, 'a picture opens full size on tap');
 });
+
+test('the card template is light by default with a guarded dark switch', () => {
+  const html = fs.readFileSync(path.join(repoRoot, 'templates/preferences/decision-cards.html'), 'utf8');
+  assert.doesNotMatch(html, /prefers-color-scheme\s*:\s*dark/, 'the browser dark setting is not followed');
+  assert.match(html, /:root\[data-theme="dark"\]/);
+  assert.match(html, /<button[^>]*id="theme"[^>]*aria-pressed="false"[^>]*aria-label="Dark mode"/);
+  assert.match(html, /setAttribute\('aria-pressed'/);
+  // Every storage call sits inside a try block, and the theme is set before the stylesheet paints.
+  const calls = html.match(/localStorage\.(getItem|setItem)/g) || [];
+  assert.ok(calls.length >= 2, 'the choice is read and written');
+  for (const m of html.matchAll(/localStorage\.(?:getItem|setItem)/g)) {
+    assert.match(html.slice(Math.max(0, m.index - 80), m.index), /try\s*\{[^}]*$/, 'storage access is wrapped in try/catch');
+  }
+  assert.ok(html.indexOf('localStorage.getItem') < html.indexOf('<style>'), 'theme is applied before first paint');
+});
