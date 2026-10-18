@@ -1,6 +1,6 @@
 ---
 name: workflow-playbook
-description: A working method for long projects run by one owner with AI agents. Use when a new goal takes more than one session, when planning or running multi-stage work (research, concepts, layout options, wireframes, build), when reworking a weak prototype into a liked direction and an approved journey map, when briefing a worker or helper, when building a review page for the owner or a page for stakeholders, or when deciding whether to ask the owner or act.
+description: A working method for long projects run by one owner with AI agents. Use when a new goal takes more than one session, when planning or running multi-stage work (research, concepts, layout options, wireframes, build), when reworking a weak prototype into a liked direction, an approved journey map and an aligned rules list, when any stage needs research, when briefing a worker or helper, when building a review page for the owner or a page for stakeholders, or when deciding whether to ask the owner or act.
 ---
 
 # Workflow playbook
@@ -17,8 +17,8 @@ These rules come from a long project that was restarted several times. Every res
    Why: stages that do not name their inputs drift apart, and old work leaks back in.
 4. **Pick the layout before the wireframes.** After the owner approves the concepts, study the full interfaces the owner liked. Study whole screens, not single parts. Then offer 3 layout options using the same few key screens for every option. Each option defines a page frame and page patterns. The page frame sets what stays the same across screens, including the header, navigation and main areas. Page patterns define the screen types that repeat, such as a list with details, a dashboard or a step-by-step form. Start the wireframes only after the owner picks an option. Draw all wireframes using the chosen page frame and page patterns.
    Why: wireframes drawn straight from concepts come out scattered, with each concept pushed into its own page.
-5. **Build work for other audiences last.** Build a deck, demo or report for others just before its date. Use the latest approved stage. Include a journey showcase with the hours spent, the rounds and old screens beside the new ones.
-   Why: work built early may show a stage that has since changed. The showcase shows the effort behind the result.
+5. **Build work for other audiences last.** Build a deck, demo or report for others just before its date. Use the latest approved stage. Include a journey showcase with the hours spent, the rounds and old screens beside the new ones. Track time from the session logs. Count active time by adding the gaps between events that are under 5 minutes apart. Count calendar time from the first event to the last. State which measure you use.
+   Why: work built early may show a stage that has since changed. The showcase shows the effort behind the result. Calendar time includes nights and waiting periods, so it makes the work look longer than it was.
 
 ## 2. Lead the way
 
@@ -29,33 +29,53 @@ These rules come from a long project that was restarted several times. Every res
 3. **End every reply with where the work is.** End each project reply with one plain line that says where the work is on the map, the next step, who takes it and when. For example: "Where we are: concepts are on the review page. Next: you answer the cards, then I offer the layout options." Name the step in words, not as a count such as "step 3 of 6". Say when as an event or a day, not a clock time. When the owner takes the next step, say exactly what they need to do and link to it.
    Why: the owner always knows what comes next without asking, and a step count gives a number but does not say what to do.
 
-## 3. Evidence first
+## 3. Evidence and research
 
 1. **Requirements are the backbone.** Organize all work by the requirements. Research shows how others meet each requirement. An idea that serves no requirement goes on a parked list with a reason.
    Why: research that goes straight into the product adds features nobody asked for.
 2. **Grill for the requirements when the goal is vague.** When work starts from a vague goal, project or problem, build the requirements first by grilling the stakeholders or clients. Do this before any research or building.
    Why: research and building that start before the requirements are clear serve a guess, not a need.
-3. **All research counts.** Fold in every study, trial and lesson. Name the source of each item. List what was not used and why. When two sources disagree, show how they fit together instead of dropping one.
+3. **All research counts.** Fold in every study, trial and lesson. Name the source of each item. List what was not used and why. When two sources disagree, show how they fit together in a conflicts table instead of dropping one.
    Why: research that is left out silently is research the owner paid for and lost.
 4. **Show the evidence, not a summary.** A findings page shows the real material (screens, documents) and says how deeply each source was read. When there is a lot, give the owner a gallery to mark.
    Why: the owner judges coverage by what they can see.
 5. **Start from what people already use.** Begin with the tool and process the users know today. Build the smallest thing that proves one idea.
    Why: a demo that tries to prove everything proves nothing, and an unfamiliar concept loses its audience.
+6. **Research at every stage, without being asked.** Start research for each stage. Do not wait for the owner to ask.
+   - A new goal: list the requirements, then research how established products meet each one (rules 3.1 and 3.2).
+   - Findings: show an evidence gallery that states how much of each source was read (rule 3.4).
+   - Before any visual work: study design references from a library of styles, screens and flows.
+   - Feedback or a direction from the owner: check it online (rule 3.8). If the owner points to a product, study it (rule 3.9).
+   - The end of a stage: include all research so far (rule 3.3).
+   - A tool to install or buy: check it live (rule 3.10).
+
+   Name the research used in each stage output. Check this before passing it on (rule 4.5).
+   Why: research that waits to be requested comes too late, and a stage that does not name its research rests on a guess.
+7. **Use trusted sources.** Use usability research groups, design systems, standards bodies such as the W3C, and official documentation. Name the type of each source. Skip blogs and content farms.
+   Why: a weak source makes a strong claim look settled.
+8. **Check the owner's direction online.** When the owner gives feedback or a direction, check it against trusted sources without being asked. Show what the sources support and where they suggest a different path, with numbers. When a source disagrees with the owner, show both options and recommend one (rule 5.1). Name the types of sources in each card's "Based on" line (rule 4.2).
+   Why: the owner decides faster and with more confidence when the evidence sits next to their own words.
+9. **Study patterns the owner points to.** Name the pattern. Find out how and why the product uses it, and where it does not. Compare our own screens with the pattern and explain where they fall short. Then adapt the pattern to the requirements. Do not copy the product.
+   Why: a pattern copied without its reasons brings the other product's problems with it.
+10. **Check tools before recommending them.** Research a tool before installing it. Before giving advice about a tool or purchase, check the vendor's pages again that day. Give only current examples from a live ranking checked that day, and include the date.
+    Why: tools, prices and rankings change every month, and memory goes out of date.
 
 ## 4. Review pages
 
 1. **The owner decides from a page, never from a description.** Put every decision, and every change to look or experience, on a review page before it is built.
    Why: people judge what they can see, and a question asked before the page exists is noise.
-2. **One card at a time.** Each card holds one decision or rule, a picture beside it where the picture makes the point clearer, little text, and clear choices (for example Agree, Change it, Reject). Check it on a laptop and on a phone. At every stage end, send a short results page: what was found, what was decided and by whom, and what is still open. Open the page for the owner. Do not only link it.
+2. **One card at a time.** Each card holds one decision or rule, a picture beside it where the picture makes the point clearer, little text, and clear choices (for example Agree, Change it, Reject). End each card with a short "Based on" line that names the types of sources behind it, such as the owner's notes, a design system or a usability study. Check the page before sharing it (rule 4.5). At every stage end, send a short results page: what was found, what was decided and by whom, and what is still open. Open the page for the owner. Do not only link it.
    Why: long pages overwhelm, and a page that is only linked is often never seen.
 3. **Every element has a reason.** Each element on a page or screen helps someone decide or act. Remove filler text, captions and decoration.
    Why: anything without a reason makes the owner read instead of see.
 4. **Present stakeholder pages live.** When the owner needs to align other people, build a page they can present live in the meeting. Give each item one card with Approve, Change or Discard and a note. End with a summary the owner can copy.
    Why: answers given in the room are recorded at once, and the summary goes straight into the meeting notes.
+5. **Check the page before sharing it.** Open it at the owner's target screen size first (step 18), then at laptop width and phone width. Check that font sizes and column positions stay the same on every card and tab. Use plain names, not internal codes such as Q1 or K1. Then open the hosted page itself. Check that it loads, has no answers yet and includes every source it cites. Only then tell the owner it is ready.
+   Why: the owner notices changes in font size or column position before the content, codes force them to look things up, and a page marked ready that is broken or already answered wastes a round.
 
 ## 5. Asking and acting
 
-1. **Check before you ask.** Search the owner's earlier rulings and the stated goal first. If the answer is there, act and tell the owner in one line. Ask only about taste, intent, risk, money or people, and always give a recommendation.
+1. **Check before you ask.** Search the owner's earlier rulings and the stated goal first. If the answer is there, act and tell the owner in one line. Ask only about taste, intent, risk, money or people, and always give a recommendation. When asking in chat, use a structured question. Ask one clear question at a time, show a small sketch of each option and put the recommended option first.
    Why: most questions are already answered, and each extra question costs the owner attention.
 2. **Keep work moving.** Act on anything the owner is not blocking. Keep a pass to what the owner named, and ask before widening it. Merge low-risk paperwork (notes, records, prototypes) once checks pass, if the owner has granted that. Product code, sign-in, real data and anything risky wait for the owner's word.
    Why: asking for approval on things the owner cannot judge wastes their time, and widening a pass changes things they did not choose.
@@ -66,10 +86,12 @@ These rules come from a long project that was restarted several times. Every res
    Why: the agent that wrote the text cannot hear how it sounds, and a bare list of strings gets a shallow answer.
 2. **Plain words.** Short sentences, everyday words, one word for one thing. Anything others will read is written as the owner, with no agent or crew wording, internal codes or citations.
    Why: jargon stalls decisions, and outsiders do not know or care about the agents.
+3. **Check names from speech.** The owner often dictates, and speech to text can change names and terms. Match each name or term to the correct spelling in the records and use that spelling. State your choice in one line so the owner can correct it. Quote the owner's words as spoken.
+   Why: a misheard name that reaches a page or a rule spreads to every later stage.
 
 ## 7. Models and briefs
 
-1. **Match the model to the job.** Use the strongest model at high effort for research, investigations and plans. Raise the effort to the highest setting only for a new visual design or when the result is weak. Use the strong model at medium effort for building. Use a smaller model for small, clear tasks, and cheap helpers for bulk reading, one closed task each, checked by the caller. A coordinator running at low or medium effort never writes the plan itself. It hands planning to a worker at the right effort and checks the effort that actually started.
+1. **Match the model to the job.** Use the strongest model at high effort for research, investigations and plans. Raise the effort to the highest setting only for a new visual design or when the result is weak. Use the strong model at medium effort for building. Use a smaller model for small, clear tasks, and cheap helpers for bulk work: use a fetcher to find information and a reader to summarize it. Give each helper one task, and check its work yourself. A coordinator running at low or medium effort never writes the plan itself. It hands planning to a worker at the right effort and checks the effort that actually started.
    Why: quota is limited, and planning at the wrong effort quietly lowers the quality of everything built on it.
 2. **One complete brief.** Each worker gets one brief: the owner's exact words, the whole goal, every earlier report and version (not a chosen subset), the current rulings, the tools ruled out, and the finish line. Never drip steps.
    Why: step-by-step prompts make a builder loop on details and miss the main idea, and a partial inventory hides earlier work.
@@ -86,9 +108,9 @@ These rules come from a long project that was restarted several times. Every res
 1. **Record each method lesson when it happens.** When the owner corrects the way of working, write the lesson down in one line with what triggered it. At each stage end, fold the lessons into this playbook. Show every change to the playbook on a review page before it ships.
    Why: a method that is not written down has to be taught again on the next project.
 
-## 10. From a weak prototype to an approved journey map
+## 10. From a weak prototype to an aligned rules list
 
-These steps took a scattered prototype to a wireframe direction the owner liked (checkpoint 1), then to an understanding page and a journey map the owner approved (checkpoint 2). Add the next checkpoint only when the owner says the next stage is good. Most steps end with a reusable prompt. Fill in the words in brackets.
+These steps took a scattered prototype to a wireframe direction the owner liked (checkpoint 1), then to an understanding page and a journey map the owner approved (checkpoint 2), then to one rules list and an alignment page the owner liked (checkpoint 3). Add the next checkpoint only when the owner says the next stage is good. Most steps end with a reusable prompt. Fill in the words in brackets.
 Why: writing down the steps and prompts makes a direction that took many rounds to find faster to reach next time.
 
 ### Checkpoint 1: a liked wireframe direction
@@ -134,3 +156,20 @@ Start here when the owner likes the direction, has walked through it and has sha
     Prompt: "My screen is [size] and the browser area is [size]. Design at that size, then check larger and smaller widths."
 19. **Close with a Settled card.** End the page with one card that lists everything settled. Check the page against the real screens before sending it (step 12). Once the owner agrees, start the next design round from the Settled card only (rule 1.3).
     Prompt: "End the page with a Settled card. Build nothing until I agree to it."
+
+### Checkpoint 3: align on one rules list
+
+Start here when the owner has approved a walk-through but each new note changes the plan. Stop reworking and agree on the rules first.
+
+20. **Bring all feedback into one rules list.** Pause the rework. Read every note from the owner, not just the latest one. Write one rules list. Link each rule to its source note by file and line. Add a conflicts table that lists each conflict, how it was settled, why, and which decisions need the owner's approval. Replace the old list with the new one. Use earlier lists only as input (rule 1.3).
+    Prompt: "Pause. Bring all my feedback into one rules list. Show the source of each rule and list the conflicts in a table. Then agree on the rules with me before you start again."
+21. **Study the pattern the owner points to.** Before changing the rules list, study the pattern as described in rule 3.9. Check our own screens at the target sizes (step 18).
+    Prompt: "I like how [product] handles [pattern]. Find out what it is, how and why they use it, and whether it solves [problem] here. Adapt it, do not copy it."
+22. **Check every direction online.** Check each direction in the rules list as described in rule 3.8. If a source disagrees with the owner, show both options on the alignment page.
+    Prompt: "Check my direction online against design systems, usability research and W3C standards. If they disagree with me, show me both options."
+23. **Draw sketches from one script and one words file.** Draw grey sketches that show shapes, not colours. Draw each screen at the target size, at a smaller size and at a larger size. If the product supports a right to left language, draw those layouts too. Keep all sketch text in one words file that one script reads. Then one wording change can update every sketch.
+    Prompt: "Sketch each screen in grey at [three sizes] and in right to left layouts where needed. Keep all the words in one file, so one change updates every sketch."
+24. **Check that you agree on everything.** Build one alignment page (section 4). Show what changed, then one card for each change with a sketch beside it, then the rules list with its open decisions, then the order for rebuilding. End with one card like the Settled card (step 19): "Are we 100 percent aligned?" with Go, Not yet and a note. Rebuild only after Go (rule 1.2).
+    Prompt: "Show me the rules and sketches on one page. End with 'Are we 100 percent aligned?' Do not build anything until I say Go."
+25. **Update the page until Go.** When the owner answers Not yet or adds notes, update the rules list (step 20) and send an updated page. Start with "What changed since your answers". Mark every rule New, Changed, Same or Dropped. End with the same Go card. Repeat until the owner says Go.
+    Prompt: "Update the page with my answers. Start with what changed, mark every rule and end with the Go card again."

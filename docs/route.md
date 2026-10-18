@@ -9,9 +9,9 @@ pages, research and one-off tasks do not need it.
 
 For a long project of any kind (research, concepts, review pages and a build, over many
 sessions), the workflow-playbook skill provides the working method. It covers stage
-gates, a map that always shows the next step, evidence first, review pages, when to ask
-or act, and the steps for taking a weak prototype to a liked wireframe direction and an
-approved journey map.
+gates, a map that always shows the next step, evidence and research at every stage,
+review pages, when to ask or act, and the steps for taking a weak prototype to a liked
+wireframe direction, an approved journey map and an aligned rules list.
 
 | Step | What happens | Skill |
 | --- | --- | --- |
@@ -42,5 +42,6 @@ The `preferences` module offers these as optional rules (see
   terms and decision records with the change that introduces them. Start the files only
   when a term or a hard-to-reverse decision comes up.
 - `PREFS_PROTOTYPE_CHECK`: before you see a prototype, the agent opens it at your target
-  screen size first, then at laptop width and at phone width (390 px), and fixes broken
-  layout, unclear labels and dead ends.
+  screen size first, then at laptop width and at phone width (390 px), checks that font
+  sizes and column positions stay the same on every tab, and fixes broken layout, unclear
+  labels and dead ends.

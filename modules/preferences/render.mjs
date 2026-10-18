@@ -194,7 +194,7 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     get('PREFS_GLOSSARY_ADR') &&
       'Before building, read GLOSSARY.md and docs/adr/ if they exist. Add new terms and decision records in the same change that introduces them. Start these files in any project, but only when a term or a hard-to-reverse decision comes up.',
     get('PREFS_PROTOTYPE_CHECK') &&
-      "Before the user sees a prototype, open it in the agent's browser at the user's target screen size first, then at laptop width and at phone width (390 px). Fix broken layout, unclear labels and dead ends first.",
+      "Before the user sees a prototype, open it in the agent's browser at the user's target screen size first, then at laptop width and at phone width (390 px). Check that font sizes and column positions stay the same on every tab. Fix broken layout, unclear labels and dead ends first.",
     get('PREFS_MODEL_GUIDE') &&
       "When a model is named for a task, read that vendor's official prompting guide first and brief the model the way it says.",
   ]);
