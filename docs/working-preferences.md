@@ -95,7 +95,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | `PREFS_ROUTE` | no | Software projects go through six steps, each with its skill: Plan, Decide, Prototype, Breakdown, Build, Ship, with short paths for a small change and a bug. [The route](route.md) describes each step. |
 | `PREFS_TEST_FIRST` | no | Product code is built test-first at the seams the spec names (tdd, codebase-design). Prototypes, docs and config are not test-first. |
 | `PREFS_GLOSSARY_ADR` | no | `GLOSSARY.md` and `docs/adr/` are read before building, and new terms and decision records land with the change that introduces them. The files start only when a term or a hard-to-reverse decision comes up. |
-| `PREFS_PROTOTYPE_CHECK` | no | Before you see a prototype, the agent opens it at your target screen size first, then at laptop width and at phone width (390 px), and fixes broken layout, unclear labels and dead ends. |
+| `PREFS_PROTOTYPE_CHECK` | no | Before you see a prototype, the agent opens it at your target screen size first, then at laptop width and at phone width (390 px), checks that font sizes and column positions stay the same on every tab, and fixes broken layout, unclear labels and dead ends. |
 | `PREFS_MODEL_GUIDE` | yes | When a model is named for a task, the agent reads that vendor's official prompting guide first and briefs the model the way it says. |
 
 ### Ideas and priorities
