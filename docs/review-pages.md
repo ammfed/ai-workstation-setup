@@ -54,5 +54,10 @@ Next button instead of options. `WAITING` lists things you only have to press (a
 sign-in); they show in a strip under the intro, apart from the real decisions. Below 720px
 the card and its picture stack, and a picture opens full size on tap.
 
+The page is light by default and does not follow the browser's dark setting. A small "Dark"
+button at the top right switches it to dark (and back to "Light"). The choice is remembered per
+page in the browser's local storage and applied before the page first paints; if storage is
+blocked, the page simply stays light.
+
 The comment block at the top of the template lists the visual rules (bars on one scale,
 "3 of 10" before percentages, never colour alone, and so on).

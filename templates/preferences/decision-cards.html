@@ -20,7 +20,9 @@
   - a short "why" stays closed until opened;
   - answers are queued, shown in a one-screen recap, then sent together;
   - a banner says when no agent is listening (the page was opened without lavish-axi);
-  - what is already decided sits below, collapsed.
+  - what is already decided sits below, collapsed;
+  - light by default, whatever the browser's dark setting says; a small "Dark" button at the top
+    right switches to dark and the choice is remembered for that page (localStorage, guarded).
   Keep text minimal: a title, one question, short option labels. No helper text, nothing obvious
   explained. Give every option a preview and let the previews carry the detail.
 
@@ -40,6 +42,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@600;700;800&family=Roboto+Mono:wght@500&family=Roboto:wght@400;500;700&display=swap">
+<script>
+// Set the theme before first paint so a dark choice does not flash light. Light is the default;
+// the browser's own dark setting is not followed. Storage can be blocked, so every access is guarded.
+(function () {
+  try { if (localStorage.getItem('decision-cards-theme:' + location.pathname) === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) {}
+})();
+</script>
 <style>
 :root{
   --bg:#EDEDED; --panel:#FFFFFF; --ink:#1B1D21; --ink-2:#232528; --muted:#5F646D; --line:#E1E3E5;
@@ -50,15 +59,17 @@
   --body:"Roboto",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:"Roboto Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
-@media (prefers-color-scheme: dark){
-  :root{ --bg:#16171A; --panel:#1F2125; --ink:#ECEEF1; --ink-2:#D9DCE0; --muted:#A0A5AD; --line:#33363C;
+:root[data-theme="dark"]{ color-scheme:dark; --bg:#16171A; --panel:#1F2125; --ink:#ECEEF1; --ink-2:#D9DCE0; --muted:#A0A5AD; --line:#33363C;
     --accent:#B68A35; --accent-ink:#D9B56A; --accent-deep:#E6C887; --accent-soft:#2B2618; --on-accent:#16171A;
     --ok:#7FD49A; --ok-soft:#1F3327; --warn:#F0A35E; --warn-soft:#3A3220; }
-}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 var(--body);padding-block:32px}
 .wrap{max-width:1680px;margin:0 auto;padding-inline:clamp(16px,3vw,32px)}
 header{width:100%}
+.themebar{display:flex;justify-content:flex-end;margin-bottom:10px}
+.theme{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:5px 14px;cursor:pointer}
+.theme[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-deep)}
+.theme:focus-visible,.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 h1,h2,.headline .num{font-family:var(--head);color:var(--ink)}
 .eyebrow,.label,.progress,.rec,.tabs .picked,.waiting b{font-family:var(--mono);font-weight:500;text-transform:uppercase;letter-spacing:.06em}
 .eyebrow{font-size:13px;color:var(--accent-ink);margin:0 0 8px}
@@ -126,6 +137,7 @@ dialog.zoom button{position:sticky;top:0;float:right;font:inherit;font-size:14px
 </head>
 <body>
 <div class="wrap">
+  <div class="themebar"><button type="button" class="theme" id="theme" aria-pressed="false" aria-label="Dark mode">Dark</button></div>
   <header>
     <p class="eyebrow">Review</p>
     <h1>Decisions</h1>
@@ -202,6 +214,16 @@ let index = 0;
 let shown = {};
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+// Light is the default. The switch sets data-theme="dark" and remembers the choice for this page.
+const themeKey = 'decision-cards-theme:' + location.pathname;
+function setTheme(dark, save) {
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  $('theme').setAttribute('aria-pressed', String(dark));
+  $('theme').textContent = dark ? 'Light' : 'Dark';
+  if (save) { try { localStorage.setItem(themeKey, dark ? 'dark' : 'light'); } catch (e) {} }
+}
+setTheme(document.documentElement.dataset.theme === 'dark', false);
+$('theme').addEventListener('click', () => setTheme(document.documentElement.dataset.theme !== 'dark', true));
 const decisions = () => CARDS.filter((c) => c.options?.length);
 
 // lavish-axi injects window.lavish after the page script can already have run, so decide the
