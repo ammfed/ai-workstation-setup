@@ -343,7 +343,15 @@ test('the workflow-playbook skill is written to ~/.claude/skills with valid SKIL
     assert.ok(!/\{\{[A-Z_]+\}\}/.test(text), 'no placeholder is left unfilled');
     const checks = path.join(home, '.claude', 'skills', 'workflow-playbook', 'principles', 'checks.md');
     assert.equal(fs.readFileSync(checks, 'utf8'), fs.readFileSync(path.join(repoRoot, 'templates', 'principles', 'checks.md'), 'utf8'), 'the principle check list sits in the playbook folder');
-    assert.match(await capture(() => choice.install(context(home))), /checks\.md is already up to date/);
+    const checker = path.join(home, '.claude', 'skills', 'workflow-playbook', 'principles', 'bin', 'principle-check.mjs');
+    assert.equal(fs.readFileSync(checker, 'utf8'), fs.readFileSync(path.join(repoRoot, 'templates', 'principles', 'bin', 'principle-check.mjs'), 'utf8'), 'the checker sits beside the list');
+    fs.writeFileSync(path.join(home, 'good.html'), '<!doctype html><style>body{line-height:1.6}</style><button>Send report</button>');
+    fs.writeFileSync(path.join(home, 'bad.html'), '<!doctype html><style>body{line-height:1.6}</style><button><svg></svg></button>');
+    assert.equal(spawnSync(process.execPath, [checker, path.join(home, 'good.html')]).status, 0, 'the installed checker passes a good page');
+    assert.equal(spawnSync(process.execPath, [checker, path.join(home, 'bad.html')]).status, 1, 'and fails a page with an icon-only button');
+    const second = await capture(() => choice.install(context(home)));
+    assert.match(second, /checks\.md is already up to date/);
+    assert.match(second, /principle-check\.mjs is already up to date/);
     fs.writeFileSync(file, `${text}\nA local rule.\n`);
     assert.match(await capture(() => writeBundledSkill(context(home), 'workflow-playbook')), /local edit/);
     assert.match(fs.readFileSync(file, 'utf8'), /A local rule\./);

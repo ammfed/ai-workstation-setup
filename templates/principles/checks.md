@@ -108,7 +108,9 @@ The look itself is the owner's call: whether a visual earns its place, the accen
 
 ## What the checker covers today
 
-`principle-check` checks A6, W5, W6, L3, L5, L7 (viewport tag and text size), L10, N1, N4 and N8 on `.html`, `.md` and `.txt` files. It prints one line per failed check with the file, the check ID and what to fix, and exits with 1 when any check fails. The rows marked "script later" need a running browser and stay with the reviewer until the checker can drive one.
+`principle-check` checks A6, W5, W6, L3, L5, L7 (viewport tag and text size), L10, N1, N4 and N8 on `.html`, `.md` and `.txt` files. It prints one line per finding with the file, the line, the check ID and what to fix, and exits with 1 when any check fails. W6, N4 and N8 print as "check" lines: a likely slip that a reviewer decides on, which does not fail the run. L7 runs only with `--phone`. It reads the files as they are, so a stylesheet in a separate file is not checked. The rows marked "script later" need a running browser and stay with the reviewer until the checker can drive one.
+
+Run it from the playbook folder: `node principles/bin/principle-check.mjs [--phone] <files or folder>`. Exit 0 means nothing failed, 1 means at least one check failed, 2 means a usage error or a path it cannot read.
 
 ## Reviewer brief
 

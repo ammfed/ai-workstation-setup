@@ -18,7 +18,9 @@ ten phases, with the early phases (requirements, whether it already exists, visi
 before anything is built, and says which phases each kind of work needs. Its
 `principles/checks.md` lists the design and writing checks (attention, time, words,
 layout, colour, charts, AI) that every screen and page meets, who runs each one and what
-a failure blocks.
+a failure blocks. `node principles/bin/principle-check.mjs <files or folder>` runs the
+script rows on `.html`, `.md` and `.txt` files and exits 1 on a failure; add `--phone`
+for anything built for other people.
 
 | Step | What happens | Skill |
 | --- | --- | --- |

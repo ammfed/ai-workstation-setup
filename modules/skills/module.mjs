@@ -3,9 +3,13 @@ import { Skip } from '../../lib/context.mjs';
 import { claudeDir, installSkill, skillInstalled } from '../../lib/claude.mjs';
 
 // Files a bundled skill gets beside its SKILL.md: [template under templates/, path inside the skill folder].
-// The playbook's principles/ folder holds the principle check list its review steps run (rule 4.7).
+// The playbook's principles/ folder holds the principle check list its review steps run (rule 4.7)
+// and the checker for its script rows.
 const BUNDLED_EXTRAS = {
-  'workflow-playbook': [['principles/checks.md', 'principles/checks.md']],
+  'workflow-playbook': [
+    ['principles/checks.md', 'principles/checks.md'],
+    ['principles/bin/principle-check.mjs', 'principles/bin/principle-check.mjs'],
+  ],
 };
 
 /**
