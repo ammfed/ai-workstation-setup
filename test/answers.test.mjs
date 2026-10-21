@@ -79,4 +79,23 @@ test('a folder inside the clone is refused', () => {
   assert.match(r.out, /inside this clone/);
 });
 
+test('a retired choice is swapped for what covers it; an unknown one still stops the run', () => {
+  const file = path.join(tmp, 'retired.env');
+  // Everything on offer today plus the two retired names, so no new skill joins the selection.
+  const offered = `${readAnswers(path.join(repoRoot, 'answers.example.env')).SKILLS_OFFERED},grill-me,grill-with-docs`;
+  fs.writeFileSync(file, `MODULES=skills\nSKILLS=kun,grill-me,tdd,grill-with-docs\nSKILLS_OFFERED=${offered}\n`);
+  const r = install('--answers', file, '--save-answers', file);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /SKILLS: grill-me is retired; grilling covers it \(added in its place\)/);
+  assert.match(r.out, /SKILLS: grill-with-docs is retired; grilling covers it \(already chosen\)/);
+  assert.doesNotMatch(r.out, /new skills added/);
+  assert.match(r.out, /would install: kun, grilling, tdd\n/);
+  assert.equal(readAnswers(file).SKILLS, 'kun,grilling,tdd');
+
+  fs.writeFileSync(file, `MODULES=skills\nSKILLS=kun,grill-never-offered\nSKILLS_OFFERED=${offered}\n`);
+  const bad = install('--answers', file);
+  assert.equal(bad.code, 2, bad.out);
+  assert.match(bad.out, /SKILLS: unknown option\(s\) grill-never-offered/);
+});
+
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));

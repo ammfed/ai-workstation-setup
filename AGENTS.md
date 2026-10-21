@@ -44,7 +44,8 @@ platforms, unsupported?, requires?, default?, questions?, install(ctx) }`;
 `lib/installer.mjs` `loadModules` validates it. `platforms` lists supported OSes;
 `unsupported[os]` is the reason printed when skipped. Questions are asked up front
 (`type`: text, confirm, choice, multi, secret; `when(ctx)` for conditions; `useDefault(ctx)`
-takes the saved answer or default without asking).
+takes the saved answer or default without asking). Never just delete a `multi` choice: a saved
+answer naming it would exit 2. List it in the question's `retired: { old: 'replacement' }`.
 
 `install(ctx)` must go through `lib/context.mjs` for every side effect, so dry-run,
 idempotency and backups hold: `ctx.ensureTool`, `ctx.run`, `ctx.pkgInstall`,

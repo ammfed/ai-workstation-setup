@@ -318,7 +318,7 @@ test('the skill update question is asked only when a chosen skill is installed, 
     assert.equal(ask(['teach', 'tdd']), true);
     const choices = skills.questions.find((q) => q.key === 'SKILLS');
     for (const name of ['tdd', 'codebase-design']) assert.ok(choices.default.includes(name), name);
-    for (const name of ['grill-with-docs', 'to-spec', 'to-tickets']) assert.ok(choices.choices.some((c) => c.value === name && c.repo === 'mattpocock/skills'), name);
+    for (const name of ['grilling', 'to-spec', 'to-tickets']) assert.ok(choices.choices.some((c) => c.value === name && c.repo === 'mattpocock/skills'), name);
     assert.equal(skills.questions.find((q) => q.key === 'SKILLS_UPDATE').default, true);
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
@@ -467,7 +467,7 @@ test('the vision skill comes from its own upstream repository', () => {
 test('the default skill set is every skill on offer, so a fresh clone gets the full set', () => {
   const q = skills.questions.find((x) => x.key === 'SKILLS');
   assert.deepEqual([...q.default].sort(), q.choices.map((c) => c.value).sort());
-  const full = ['kun', 'vision', 'grill-me', 'grilling', 'teach', 'tdd', 'codebase-design', 'grill-with-docs', 'to-spec', 'to-tickets', 'to-questionnaire', 'wayfinder', 'find-docs', 'no-mistakes', 'workflow-playbook', 'composio-cli'];
+  const full = ['kun', 'vision', 'grilling', 'teach', 'tdd', 'codebase-design', 'to-spec', 'to-tickets', 'to-questionnaire', 'wayfinder', 'find-docs', 'no-mistakes', 'workflow-playbook', 'composio-cli'];
   for (const name of full) assert.ok(q.default.includes(name), name);
   assert.deepEqual(q.choices.find((c) => c.value === 'wayfinder').helpers, ['domain-modeling', 'research', 'prototype']);
 });
@@ -534,7 +534,7 @@ test('the end of the install lists the skills installed and skipped, then says t
   const { code, out } = skillsDryRun();
   assert.equal(code, 0, out);
   const tail = out.slice(out.indexOf('\nSummary'));
-  assert.match(tail, /would install: kun, vision, grill-me, grilling, teach, tdd, codebase-design, grill-with-docs, to-spec, to-tickets, to-questionnaire, wayfinder, domain-modeling \(for wayfinder\), research \(for wayfinder\), prototype \(for wayfinder\), find-docs, workflow-playbook\n/);
+  assert.match(tail, /would install: kun, vision, grilling, teach, tdd, codebase-design, to-spec, to-tickets, to-questionnaire, wayfinder, domain-modeling \(for wayfinder\), research \(for wayfinder\), prototype \(for wayfinder\), find-docs, workflow-playbook\n/);
   assert.match(tail, /skipped: no-mistakes: the no-mistakes CLI is not installed/);
   assert.match(tail, /skipped: composio-cli: the composio CLI is not installed/);
   assert.doesNotMatch(tail, /failed:/);
