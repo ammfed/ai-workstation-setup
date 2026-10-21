@@ -20,8 +20,15 @@ by one. One question is always asked: `PREFS_PAGE_PREPARE_NEXT`, which controls 
 the agent prepares the next stage while a review page waits for your decision. An answers
 file still sets any key it names either way.
 
-With `PREFS_WRITING_STYLE=ste` and the `firstmate` target, the same house style also goes to
-Firstmate's `config/brief-include.md`, so every worker writes its status lines and reports in it.
+With the `firstmate` target, the module also writes Firstmate's `config/brief-include.md`, which
+Firstmate appends to every worker brief. It holds what applies: the house style with
+`PREFS_WRITING_STYLE=ste` (for what workers write to Firstmate, never the deliverable), the
+helper-model rule from `PREFS_DELEGATE_RETRIEVAL`, the build rules from `PREFS_TEST_FIRST` and
+`PREFS_GLOSSARY_ADR`, the principle checker line from `PREFS_PRINCIPLE_CHECKS`, and your private
+Everywhere and Workers lines. Nothing applies, nothing is written.
+
+Your own rules that are not generic go in a private rules file outside the clone; see
+[Your private rules](#your-private-rules).
 
 ## Questions and the rules they write
 
@@ -96,6 +103,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | `PREFS_TEST_FIRST` | no | Product code is built test-first at the seams the spec names (tdd, codebase-design). Prototypes, docs and config are not test-first. |
 | `PREFS_GLOSSARY_ADR` | no | `GLOSSARY.md` and `docs/adr/` are read before building, and new terms and decision records land with the change that introduces them. The files start only when a term or a hard-to-reverse decision comes up. |
 | `PREFS_PROTOTYPE_CHECK` | no | Before you see a prototype, the agent opens it at your target screen size first, then at laptop width and, when `PREFS_PAGE_PHONE` is yes, at phone width (390 px), checks that font sizes and column positions stay the same on every tab, and fixes broken layout, unclear labels and dead ends. |
+| `PREFS_PRINCIPLE_CHECKS` | yes | With the `firstmate` target: every worker brief tells the worker to run the principle checker that `workflow-playbook` installs (`principles/bin/principle-check.mjs`, with `--phone` for work built for other people) before it reports done on anything with a screen, fix every `fail` line and list each `check` line for the reviewer. Written only when the playbook is chosen or already installed. |
 | `PREFS_MODEL_GUIDE` | yes | When a model is named for a task, the agent reads that vendor's official prompting guide first and briefs the model the way it says. |
 
 ### Ideas and priorities
@@ -141,6 +149,36 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 
 Always included: no secrets or personal data anywhere, only genuine decisions brought
 to you, and saying plainly when something was reasoned about rather than tested.
+
+## Your private rules
+
+Some of your rules are yours alone: a screen size, a house style detail, the name of a tool or
+a home. They never go in this repository. Keep them in a private rules file outside the clone,
+at `PREFS_PRIVATE_RULES` (default `~/.config/ai-workstation-setup/private-rules.md`, beside the
+card template). The module reads it when it exists; a path inside the clone is refused.
+
+It is plain Markdown. Each `##` heading says where its lines go:
+
+| Heading | Goes to |
+| --- | --- |
+| `Everywhere` | All three files below |
+| `Sessions` | The rules file (`working-preferences.md`, and Firstmate's `data/captain.md`) |
+| `Workers` | Firstmate's `config/brief-include.md`, appended to every worker brief |
+| `Second mates` | Firstmate's `data/captain-shared.md` in the main home, which every second mate reads; written only when there are lines for it |
+| `Reviewer` | Kept for the no-mistakes review rules; read, but not written anywhere yet |
+
+Each `-` or numbered item, or each paragraph, is one rule; a line that follows without a blank
+line continues it. A `#` title, text before the first heading and HTML comments are not used.
+An unknown heading is reported and its lines are left out. The lines land in a "Private rules"
+section at the end of each file, so edit them in your private file, not in the written copies.
+
+```markdown
+## Everywhere
+- Check every page at my laptop size before you send it.
+
+## Workers
+- Use the research browser for anything that needs a sign-in.
+```
 
 ## Tools the rules point to
 

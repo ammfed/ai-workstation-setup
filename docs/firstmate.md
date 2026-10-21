@@ -35,10 +35,13 @@ fails its first steer to a worker (upstream issue
 | `FIRSTMATE_WATCH_UPDATES` | `config/watched-tools.json` | Firstmate announces new releases of itself, quota-axi and lavish-axi. |
 | `FIRSTMATE_STOW_REMINDER` | `.claude/settings.local.json` in the clone and in each second-mate home | On by default. Once the session's context passes `FIRSTMATE_STOW_REMINDER_TOKENS`, its next prompt carries one reminder to run `/stow` (save its state) before anything else; it fires again only after the context drops back below 90% of that. The default `auto` reminds at seven eighths of that home's auto-compact window (175000 for a 200000 window, 350000 for 400000), so a home that compacts earlier is reminded earlier. Workers start in their own worktrees and get the claude-code module's general reminder instead. It reuses that module's context-reminder hook script. |
 
-The preferences module adds one more: with `PREFS_WRITING_STYLE=ste` and the `firstmate`
-target, it writes `config/brief-include.md`, which Firstmate appends to every worker brief
-(its docs/configuration.md, "Home brief include"), so workers write their status lines and
-reports to Firstmate in the same plain-English house style.
+The preferences module adds two more with the `firstmate` target. `config/brief-include.md`,
+which Firstmate appends to every worker brief (its docs/configuration.md, "Home brief
+include"), carries the standing worker rules that apply: the plain-English house style with
+`PREFS_WRITING_STYLE=ste`, the helper-model rule, the build rules, the principle checker to run
+before reporting done (`PREFS_PRINCIPLE_CHECKS`), and the Everywhere and Workers lines of your
+private rules file. `data/captain-shared.md` gets that file's Everywhere and Second mates lines,
+only when there are any ([Your private rules](working-preferences.md#your-private-rules)).
 
 Each file is written only when it differs, and a changed file is never replaced without asking.
 
@@ -54,7 +57,8 @@ on anyone reading its chat. The working pattern:
 - Idle by default: a second mate wakes when work is routed to it, finishes, reports up, and
   goes quiet again.
 - Configuration flows down from the main home (`bin/fm-config-push.sh`); preferences you want
-  everywhere go in the main home's `data/captain-shared.md`.
+  everywhere go in the main home's `data/captain-shared.md`, which the preferences module writes
+  from your private rules file.
 - Each home gets its own `FM_HOME` pin. The module reads the registry on every run and pins
   every local second-mate home it finds, so re-run it after adding one:
   `./install.sh --modules firstmate`.

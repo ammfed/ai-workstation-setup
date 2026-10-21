@@ -1,7 +1,9 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { Skip } from '../../lib/context.mjs';
 import { claudeDir } from '../../lib/claude.mjs';
-import { renderBriefInclude, renderPreferences } from './render.mjs';
+import { PRIVATE_HEADINGS, parsePrivateRules } from './private-rules.mjs';
+import { renderBriefInclude, renderCaptainShared, renderPreferences } from './render.mjs';
 
 // Writes how you want your agents to work (status format, tone, decisions, review
 // pages, building, ideas, away mode, merges, research, quota) as a plain rules file your agents load.
@@ -25,6 +27,26 @@ function grillDefault(ctx) {
 const GATE = ['PREFS_TARGETS', 'PREFS_REVIEW_EACH', 'PREFS_PAGE_PREPARE_NEXT'];
 function withRecommended(questions) {
   return questions.map((q) => (GATE.includes(q.key) ? q : { ...q, useDefault: (ctx) => !ctx.get('PREFS_REVIEW_EACH') }));
+}
+
+// Your own extra rules, kept outside the clone (PREFS_PRIVATE_RULES). Null when there is no file.
+function readPrivateRules(ctx) {
+  const file = ctx.get('PREFS_PRIVATE_RULES');
+  if (!file) return null;
+  if (!fs.existsSync(file)) {
+    ctx.info(`no private rules file at ${file}; nothing extra written`);
+    return null;
+  }
+  const { rules, unknown } = parsePrivateRules(fs.readFileSync(file, 'utf8'));
+  for (const h of unknown) ctx.warn(`${file}: unknown heading "${h}"; its lines are not used (headings: ${Object.values(PRIVATE_HEADINGS).join(', ')})`);
+  ctx.info(`private rules from ${file}: ${Object.entries(rules).map(([k, l]) => `${PRIVATE_HEADINGS[k]} ${l.length}`).join(', ')}`);
+  return rules;
+}
+
+// The principle checker the workflow-playbook skill installs, when it is chosen now or already there.
+function checkerPath(ctx) {
+  const file = path.join(claudeDir(ctx), 'skills', 'workflow-playbook', 'principles', 'bin', 'principle-check.mjs');
+  return (ctx.values.SKILLS || []).includes('workflow-playbook') || fs.existsSync(file) ? file : null;
 }
 
 function cardsPath(ctx) {
@@ -191,6 +213,9 @@ export default {
     yes('PREFS_TEST_FIRST', 'Building: build product code test-first at the seams the spec names (not prototypes, docs or config)?', { default: false }),
     yes('PREFS_GLOSSARY_ADR', 'Building: read GLOSSARY.md and docs/adr before building, and add new terms and decision records with the change?', { default: false }),
     yes('PREFS_PROTOTYPE_CHECK', 'Building: check every prototype at your target screen size, then at laptop width (and phone width when review pages are checked on a phone), keep font sizes and column positions the same on every tab, and fix broken layout, unclear labels and dead ends before you see it?', { default: false }),
+    yes('PREFS_PRINCIPLE_CHECKS', 'Building: tell every Firstmate worker to run the principle checker (installed with workflow-playbook) before reporting done on anything with a screen?', {
+      when: (ctx) => ctx.get('PREFS_TARGETS').includes('firstmate'),
+    }),
     yes('PREFS_MODEL_GUIDE', 'Models: when a model is named for a task, read its vendor\'s prompting guide first?'),
 
     // Ideas and priorities
@@ -272,6 +297,16 @@ export default {
     yes('PREFS_BLOCKED_COMMANDS', 'Safety: when a permission check blocks an install, schedule, service or push, never work around it; give you the exact command to run?'),
     yes('PREFS_PRIVATE_STAYS_LOCAL', 'Safety: private chats and anything captured from your own sessions never go to an outside model?'),
     yes('PREFS_PUBLIC_REPOS', 'Safety: in public repositories, a no-reply commit identity, no email trailers, pull request text naming nothing private, and a privacy scan before each push?'),
+
+    // Your private layer
+    {
+      key: 'PREFS_PRIVATE_RULES',
+      type: 'text',
+      path: true,
+      message:
+        'Private rules: a Markdown file outside this clone with your own extra rules under the headings Everywhere, Sessions, Workers, Second mates and Reviewer, read when it exists (empty for none)',
+      default: '~/.config/ai-workstation-setup/private-rules.md',
+    },
   ]),
 
   async install(ctx) {
@@ -284,7 +319,8 @@ export default {
     }
 
     const log = ctx.get('PREFS_DECISIONS_LOG');
-    const text = renderPreferences((key) => ctx.get(key), { cardsPath: cards, decisionsPath: log ? ctx.path(log) : null });
+    const privateRules = readPrivateRules(ctx);
+    const text = renderPreferences((key) => ctx.get(key), { cardsPath: cards, decisionsPath: log ? ctx.path(log) : null, privateRules });
     for (const name of targets) {
       const target = TARGETS[name];
       await ctx.step(name, () => {
@@ -293,12 +329,15 @@ export default {
         return ctx.writeFile(target.file(ctx), text, { onConflict: 'ask' });
       });
     }
-    // Firstmate's config/brief-include.md (its docs/configuration.md "Home brief include") is
-    // appended to every worker brief, so workers write to firstmate in the same house style.
-    const brief = renderBriefInclude((key) => ctx.get(key));
-    if (brief && targets.includes('firstmate') && !ctx.forOs(TARGETS.firstmate.unsupported)) {
+    if (targets.includes('firstmate') && !ctx.forOs(TARGETS.firstmate.unsupported)) {
       const home = ctx.path(ctx.get('FIRSTMATE_HOME') || ctx.get('FIRSTMATE_DIR') || '~/firstmate');
-      await ctx.step('firstmate worker briefs', () => ctx.writeFile(path.join(home, 'config', 'brief-include.md'), brief, { onConflict: 'ask' }));
+      // config/brief-include.md (Firstmate's docs/configuration.md "Home brief include") is appended
+      // to every worker brief: house style, helper model, build rules, principle checker, private lines.
+      const brief = renderBriefInclude((key) => ctx.get(key), { checkerPath: checkerPath(ctx), privateRules });
+      if (brief) await ctx.step('firstmate worker briefs', () => ctx.writeFile(path.join(home, 'config', 'brief-include.md'), brief, { onConflict: 'ask' }));
+      // data/captain-shared.md in the main home is copied read-only into every second-mate home.
+      const shared = renderCaptainShared(privateRules);
+      if (shared) await ctx.step('firstmate second mates', () => ctx.writeFile(path.join(home, 'data', 'captain-shared.md'), shared, { onConflict: 'ask' }));
     }
     ctx.info('edit the written file any time; re-running asks before replacing your edits (and keeps a backup)');
   },
