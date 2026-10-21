@@ -8,10 +8,13 @@ The route is for building or changing an app, a tool or a codebase. Documents, r
 pages, research and one-off tasks do not need it.
 
 For a long project of any kind (research, concepts, review pages and a build, over many
-sessions), the workflow-playbook skill provides the working method. It covers stage
-gates, a map that always shows the next step, evidence and research at every stage,
-review pages, when to ask or act, and the steps for taking a weak prototype to a liked
-wireframe direction, an approved journey map and an aligned rules list.
+sessions), the workflow-playbook skill provides the working method. It covers ten
+phases from an idea to shipped and improved, stage gates, a map that always shows the
+next step, evidence and research at every stage, review pages, when to ask or act, and
+the steps for taking a weak prototype to a liked wireframe direction, an approved
+journey map and an aligned rules list. Its phase table splits these six steps into the
+ten phases, with the early phases (requirements, whether it already exists, vision)
+before anything is built, and says which phases each kind of work needs.
 
 | Step | What happens | Skill |
 | --- | --- | --- |

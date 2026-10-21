@@ -1,11 +1,41 @@
 ---
 name: workflow-playbook
-description: A working method for long projects run by one owner with AI agents. Use when a new goal takes more than one session, when planning or running multi-stage work (research, concepts, layout options, wireframes, build), when reworking a weak prototype into a liked direction, an approved journey map and an aligned rules list, when any stage needs research, when briefing a worker or helper, when building a review page for the owner or a page for stakeholders, or when deciding whether to ask the owner or act.
+description: A working method for long projects run by one owner with AI agents. Use when a new goal takes more than one session, when capturing an idea and choosing which phases it needs, when planning or running multi-stage work (research, concepts, layout options, wireframes, build), when reworking a weak prototype into a liked direction, an approved journey map and an aligned rules list, when any stage needs research, when briefing a worker or helper, when building a review page for the owner or a page for stakeholders, or when deciding whether to ask the owner or act.
 ---
 
 # Workflow playbook
 
 These rules come from a long project that was restarted several times. Every restart had the same cause: work moved ahead of the owner's decisions, or research went into the product without a purpose. Each rule below fixes one of those failures, or a later one: the owner was left with a blank page and no clear next step. The owner is the person who decides. Agents and workers do the rest.
+
+## Phases, from an idea to shipped and improved
+
+Every piece of work runs through some of these ten phases, in this order. Each phase has one owner, so two skills never do the same job. The route column is the step of the software route (`docs/route.md` in this setup) that the phase belongs to, so the two never disagree. A gate is an item only the owner closes (rule 2.5).
+
+| Phase | Route step | Goal | Leads | Owner | Hands to | The next phase starts when |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1. Capture | Plan | Write the idea down, judge whether it fits and when, pick the phases from the table below | The coordinator | wayfinder | A map with every phase of the path queued as an item (rule 2.4) | The map is written. The first item has no blocker |
+| 2. Requirements | Decide | Turn a vague goal into requirements the owner agrees with | A skill, in rounds with the owner | grilling, with domain-modeling in a repo | Requirements, and a glossary in a repo | The owner agrees to the last round (gate) |
+| 3. Does it already exist | Decide | Find products, tools or people that already do this | A research worker, beside phase 2 | research | A report and one card: build, reuse or stop | The card is answered in the next requirements round |
+| 4. Vision | Decide | Fix the destination and the test for which later ideas to accept | A skill, with the owner | vision | A vision file, once per project | The owner approves it. This closes the early phases gate |
+| 5. Prototype | Prototype | Settle the look and the flow, then write the spec | Workers build, the owner judges | prototype with section 10, then to-spec | The approved prototype link and the spec | The owner approves the checkpoint page (gate) |
+| 6. Breakdown | Breakdown | Cut the spec into items, one worker each | The coordinator | to-tickets | Items with blockers, including the fixed items (rule 1.6) | Each item starts as soon as its blockers clear |
+| 7. Build | Build | Build each item, test-first where it pays | Workers | tdd, codebase-design | A pull request with a labelled preview | Green checks file the review item |
+| 8. Review | Ship | The owner's review of what will ship, after the checks | The owner | a review page (section 4) | Keep, Change or Discard answers | The owner says to merge |
+| 9. Ship and hand over | Ship | Merge, link the result, name who runs it | The coordinator, on the owner's word | no-mistakes | The merged result and the handover item | The merge files the improve item |
+| 10. Improve | After Ship | Turn what slowed the work into rules and checks | The coordinator prepares, the owner approves | this playbook, section 9 | Proposal cards | A standing item, approved once |
+
+Phases 2 to 4 are the early phases. They run before anything is built, and the early phases gate blocks phase 5 (rule 1.1).
+
+**Which phases a piece of work needs.** Pick by the kind of work, never by a guess of how long it takes.
+
+| Kind of work | Phases it runs | Test |
+| --- | --- | --- |
+| A foggy goal, more than one session | All ten | The goal is bigger than one session |
+| A product or feature with a look | All ten. Vision once per project | There is a look or a flow to choose |
+| A change with no look or design choice | 1, 7, 9, and 8 if the owner will look at it | One worker, an existing item |
+| A bug | 1, find the cause, 7 with the reproduction as the regression test, 9 | Something that worked is broken |
+| A prototype the owner will show soon | 1 to 5 | Nothing is built for real before approval |
+| A report or research only | 1, 3, 8 | No pull request |
 
 ## 1. Stage gates
 
@@ -19,22 +49,39 @@ These rules come from a long project that was restarted several times. Every res
    Why: wireframes drawn straight from concepts come out scattered, with each concept pushed into its own page.
 5. **Build work for other audiences last.** Build a deck, demo or report for others just before its date. Use the latest approved stage. Include a journey showcase with the hours spent, the rounds and old screens beside the new ones. Track time from the session logs. Count active time by adding the gaps between events that are under 5 minutes apart. Count calendar time from the first event to the last. State which measure you use.
    Why: work built early may show a stage that has since changed. The showcase shows the effort behind the result. Calendar time includes nights and waiting periods, so it makes the work look longer than it was.
+6. **Some items are always on the list.** Breakdown (phase 6) adds these items whenever they apply, before any other build item:
+   - **System design first.** The first build item settles the contracts, the data model and the hard-to-reverse decisions. Front end and back end work start only after it.
+   - **Outside approvals as held items.** Any approval someone else owns (security, IT, a client) becomes its own held item at once, so the wait shows early.
+   - **An evaluation item for any AI part.** Test how well the AI part does its job on real examples before any pilot.
+   - **A real-user try-out.** When real people will use the result, they try the prototype, guided by a short questionnaire. The results come back as a card.
+   - **A handover item.** When real people will run or use it, an item names who runs it and how they learn it, blocked by the last build item.
+
+   Finished items stay on the list, marked done, never deleted. Dates belong to the owner: agents never set or move a date, they only flag one that has passed.
+   Why: each of these is easy to forget until it blocks a launch, and a date moved by an agent hides the slip the owner needs to see.
 
 ## 2. Lead the way
 
 1. **Start the map yourself.** When a new goal takes more than one session, start a map at once. Do not wait for the owner to ask. The map names the goal, the stages from here to the goal, where the work is now and the next step. If the goal is vague, the first stage is to define the requirements. Show the map to the owner, then lead the work one step at a time. Update the map when a stage ends or the plan changes.
    Why: without a clear view of the whole project, the owner faces a blank page at every step and cannot see where the work is going.
-2. **Never leave the next step empty.** While the owner reviews a stage, prepare the next one. Gather its inputs, draft its plan and list its open questions. Keep the stage gates: prepare a stage that needs approval, but never start it before approval. If the owner changes an input, update the preparation first.
+2. **Never leave the next step empty.** While the owner reviews a stage, prepare the next one. Gather its inputs, draft its plan and list its open questions. Keep the stage gates: prepare a stage that needs approval, but never start it before approval. If the owner changes an input, update the preparation first. The preparation is its own item and no gate blocks it.
    Why: an empty next step stalls the work, and a stage started before approval may have to be done again.
 3. **End every reply with where the work is.** End each project reply with one plain line that says where the work is on the map, the next step, who takes it and when. For example: "Where we are: concepts are on the review page. Next: you answer the cards, then I offer the layout options." Name the step in words, not as a count such as "step 3 of 6". Say when as an event or a day, not a clock time. When the owner takes the next step, say exactly what they need to do and link to it.
    Why: the owner always knows what comes next without asking, and a step count gives a number but does not say what to do.
+4. **Queue the whole path at the start.** When the map is drawn (phase 1), write every phase of the chosen path as an item in the work queue, each with what blocks it, not only the first one. Add the research items of rule 3.6 and the fixed items of rule 1.6 as soon as they are known.
+   Why: a queue that holds only the next item stops when that item ends, and the work waits for someone to remember the rest.
+5. **A gate item ends every phase.** The owner owns it, and the next phase is blocked by it. When the owner's answer arrives, collect it, close the gate on the owner's words and start the next phase at once, without waiting to be asked.
+   Why: one pattern gives both the stage gates and the momentum. The work stops exactly where the owner decides and nowhere else.
+6. **No item without a blocker or a date.** Every queued item names what it waits for or when it runs. The only work that starts with neither is a standing item the owner approved once, such as a daily check or the improve item (phase 10).
+   Why: an item with neither stalls without anyone noticing, and a habit the owner never approved is work they did not choose.
+7. **Ask a few questions, then keep going.** Ask the owner only the few questions that set the direction, each with a recommendation. When a choice can be undone, go ahead on the recommendation and fold in the answer when it comes. When it cannot, hold only that branch and keep the rest moving. Decisions only the owner can make (dates, money, people, taste, anything hard to undo) and every merge never start on their own.
+   Why: waiting on every answer stalls the work, and acting on an answer that cannot be undone takes a decision away from the owner.
 
 ## 3. Evidence and research
 
 1. **Requirements are the backbone.** Organize all work by the requirements. Research shows how others meet each requirement. An idea that serves no requirement goes on a parked list with a reason.
    Why: research that goes straight into the product adds features nobody asked for.
-2. **Grill for the requirements when the goal is vague.** When work starts from a vague goal, project or problem, build the requirements first by grilling the stakeholders or clients. Do this before any research or building.
-   Why: research and building that start before the requirements are clear serve a guess, not a need.
+2. **Grill for the requirements when the goal is vague.** When work starts from a vague goal, project or problem, build the requirements first by grilling the stakeholders or clients. Do this before any research or building. Beside the first round, a research worker checks whether it already exists: products and tools that already do it, and people in the organisation who already own or run something like it. The answer goes into the next round as one card: build, reuse or stop.
+   Why: research and building that start before the requirements are clear serve a guess, not a need, and the cheapest project is the one someone already runs.
 3. **All research counts.** Fold in every study, trial and lesson. Name the source of each item. List what was not used and why. When two sources disagree, show how they fit together in a conflicts table instead of dropping one.
    Why: research that is left out silently is research the owner paid for and lost.
 4. **Show the evidence, not a summary.** A findings page shows the real material (screens, documents) and says how deeply each source was read. When there is a lot, give the owner a gallery to mark.
@@ -47,10 +94,27 @@ These rules come from a long project that was restarted several times. Every res
    - Before any visual work: study design references from a library of styles, screens and flows.
    - Feedback or a direction from the owner: check it online (rule 3.8). If the owner points to a product, study it (rule 3.9).
    - The end of a stage: include all research so far (rule 3.3).
-   - A tool to install or buy: check it live (rule 3.10).
+   - A tool, product or service is named that the work does not use yet: check it live against each use the requirements name before anything is installed or bought (rule 3.10).
+   - A card or open decision has no evidence behind it: before it goes to the owner, run one narrow study that answers that one question, and put the answer on the card's "Based on" line.
+   - A stage gate is about to open: list the research that feeds the next stage, marked approved, replaced or missing. Each missing row becomes a research item for that stage.
+   - A stakeholder date or an outside document arrives: check their stated needs against the current work before that date. Show which are met and the cheapest changes now.
+   - The owner's feedback shows no effect: a fresh worker that did not build the work finds what was dropped, where and why. Each dropped item becomes a card: restore it, or confirm it is dropped.
+   - A result is thin: before a findings page goes out, a fresh reviewer checks its depth (evidence for every requirement, real material, how much of each source was read). A thin result goes back for the same question, deeper, never for a wider one.
+   - A new idea arrives partway through: if it serves a requirement of the current stage, a separate study starts beside the work without blocking it. Otherwise it is parked with the trigger that brings it back.
 
-   Name the research used in each stage output. Check this before passing it on (rule 4.5).
-   Why: research that waits to be requested comes too late, and a stage that does not name its research rests on a guess.
+   Queue the start studies as items when the work is captured (rule 2.4): one per group of requirements, plus the check of rule 3.2. Every other moment above files its own item when it happens. Name the research used in each stage output. Check this before passing it on (rule 4.5). Plan and judge each study on the strongest model and hand fetching and reading to cheaper helpers (rule 7.1).
+
+   A study is done when it ends in a card the owner answers or a change they can see, never in a report alone. It names its requirement first, then each source and its type, and lists the research it did not use, with the reason.
+
+   Six things stop research from widening the scope:
+   - Requirements bound it. No study starts without a requirement or a card question. A new question found during a study is parked with a trigger, not added as a new track.
+   - Reuse comes first. Every study starts from earlier research and names what it reuses.
+   - One question per study for a card. The study ends when the question is answered.
+   - The number of tracks is set at the start and said in the capture line. Another track is a new item the owner can see in the status.
+   - Gates still hold. Research for a later stage may be prepared, but its findings wait for the gate, and replaced work is never an input (rule 1.3).
+   - Check the usage limits before a parallel fan-out starts, and pause near a limit.
+
+   Why: research that waits to be requested comes too late, a stage that does not name its research rests on a guess, and research with no bound grows until it buries the decision it was for.
 7. **Use trusted sources.** Use usability research groups, design systems, standards bodies such as the W3C, and official documentation. Name the type of each source. Skip blogs and content farms.
    Why: a weak source makes a strong claim look settled.
 8. **Check the owner's direction online.** When the owner gives feedback or a direction, check it against trusted sources without being asked. Show what the sources support and where they suggest a different path, with numbers. When a source disagrees with the owner, show both options and recommend one (rule 5.1). Name the types of sources in each card's "Based on" line (rule 4.2).
