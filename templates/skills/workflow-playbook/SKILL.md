@@ -102,7 +102,7 @@ Phases 2 to 4 are the early phases. They run before anything is built, and the e
    - A result is thin: before a findings page goes out, a fresh reviewer checks its depth (evidence for every requirement, real material, how much of each source was read). A thin result goes back for the same question, deeper, never for a wider one.
    - A new idea arrives partway through: if it serves a requirement of the current stage, a separate study starts beside the work without blocking it. Otherwise it is parked with the trigger that brings it back.
 
-   Queue the start studies as items when the work is captured (rule 2.4): one per group of requirements, plus the check of rule 3.2. Every other moment above files its own item when it happens. Name the research used in each stage output. Check this before passing it on (rule 4.5). Plan and judge each study on the strongest model and hand fetching and reading to cheaper helpers (rule 7.1).
+   Queue the start studies as items when the work is captured (rule 2.4): one per group of requirements, plus the check of rule 3.2. Every other moment above files its own item when it happens. Name the research used in each stage output. Check this before passing it on (rule 4.7, the trace check). Plan and judge each study on the strongest model and hand fetching and reading to cheaper helpers (rule 7.1).
 
    A study is done when it ends in a card the owner answers or a change they can see, never in a report alone. It names its requirement first, then each source and its type, and lists the research it did not use, with the reason.
 
@@ -128,14 +128,34 @@ Phases 2 to 4 are the early phases. They run before anything is built, and the e
 
 1. **The owner decides from a page, never from a description.** Put every decision, and every change to look or experience, on a review page before it is built.
    Why: people judge what they can see, and a question asked before the page exists is noise.
-2. **One card at a time.** Each card holds one decision or rule, a picture beside it where the picture makes the point clearer, little text, and clear choices (for example Agree, Change it, Reject). End each card with a short "Based on" line that names the types of sources behind it, such as the owner's notes, a design system or a usability study. Check the page before sharing it (rule 4.5). At every stage end, send a short results page: what was found, what was decided and by whom, and what is still open. Open the page for the owner. Do not only link it.
-   Why: long pages overwhelm, and a page that is only linked is often never seen.
+2. **One card at a time.** Each card holds one decision or rule, a picture beside it where the picture makes the point clearer, little text, and clear choices (for example Agree, Change it, Reject). End each card with a short "Based on" line that names the types of sources behind it, such as the owner's notes, a design system or a usability study. Check the page before sharing it (rules 4.5 and 4.7). At every stage end, send a short results page: what was found, what was decided and by whom, and what is still open. Create the page without opening it, check it, then open it once for the owner and give the link. Do not only link it. While the owner is away, open nothing: the link goes into the brief they get on return.
+   Why: long pages overwhelm, a page that is only linked is often never seen, and a page that opens itself before it is checked can show the owner a broken page.
 3. **Every element has a reason.** Each element on a page or screen helps someone decide or act. Remove filler text, captions and decoration.
    Why: anything without a reason makes the owner read instead of see.
 4. **Present stakeholder pages live.** When the owner needs to align other people, build a page they can present live in the meeting. Give each item one card with Approve, Change or Discard and a note. End with a summary the owner can copy.
    Why: answers given in the room are recorded at once, and the summary goes straight into the meeting notes.
 5. **Check the page before sharing it.** Open it at the owner's target screen size first (step 18), then at laptop width and phone width. Check that font sizes and column positions stay the same on every card and tab. Use plain names, not internal codes such as Q1 or K1. Then open the hosted page itself. Check that it loads, has no answers yet and includes every source it cites. Only then tell the owner it is ready.
    Why: the owner notices changes in font size or column position before the content, codes force them to look things up, and a page marked ready that is broken or already answered wastes a round.
+6. **Four review points.** The owner reviews at four points, each on a page built from the same card template:
+
+   | Review point | Phase | What the page shows | The owner answers |
+   | --- | --- | --- | --- |
+   | Round page | 2, 3 | What is settled on top, then one question per card, each with a recommendation (rule 5.3) | Yes, a pick, or a note |
+   | Checkpoint page | 5 | Options the owner can flip between, with real screenshots | Keep, Change or Discard. Comments are not agreement (rule 1.2) |
+   | Preview page | 8 | The build running. The first line says which code it runs and which data: sample data, or real data the owner has already allowed | Keep, Change or Discard, then the word to merge |
+   | Outcomes page | The end of each phase | What was found, what was decided and by whom, what it means, what is still open | Next, or a note |
+
+   What only the owner can judge (taste, look and feel) is never graded by an agent. It goes on a card with a recommendation. When several pages are ready at once, hold them, check them against each other (each question asked once, no clashing recommendations, one set of names) and hand them over together in the order to take them. A page for a gate goes alone.
+   Why: a few fixed review points tell the owner when they are needed, and everything between them can run without waiting.
+7. **Six checks before any page reaches the owner.** Run them in this order. A failure stops the page until it is fixed or becomes a card for the owner.
+   1. The principle checker in this skill's `principles/` folder, run on the page and its words.
+   2. A fresh reviewer who did not build the work, briefed with the reviewer list in `principles/checks.md`, looking at screenshots.
+   3. The trace check: every item names its requirement and its research source, and research that was not used is listed with the reason (rule 3.3).
+   4. The live-state check: every status line and every "done" is checked against the live state, and a few real items are opened and read (checkpoint step 12).
+   5. The words check: every text a person will read goes to a second model (rule 6.1).
+   6. The screenshot check: the page really renders at the target sizes (rule 4.5).
+
+   Why: each check catches a failure the owner would otherwise find first, and the owner's time goes to decisions, not to finding mistakes.
 
 ## 5. Asking and acting
 
@@ -143,6 +163,8 @@ Phases 2 to 4 are the early phases. They run before anything is built, and the e
    Why: most questions are already answered, and each extra question costs the owner attention.
 2. **Keep work moving.** Act on anything the owner is not blocking. Keep a pass to what the owner named, and ask before widening it. Merge low-risk paperwork (notes, records, prototypes) once checks pass, if the owner has granted that. Product code, sign-in, real data and anything risky wait for the owner's word.
    Why: asking for approval on things the owner cannot judge wastes their time, and widening a pass changes things they did not choose.
+3. **A round reaches the owner one question at a time.** A round decides what is asked now: the open questions that can be answered now, with facts looked up instead of asked. How it reaches the owner is separate: one question or one card at a time, each with a recommendation, worded so that "yes" takes the recommendation. Put what is already settled first. In chat, use the question tool, never a numbered list of questions. On a page, the round is one page from the card template, its cards shown one at a time, with one send at the end. Ask the next round only after the answers.
+   Why: a list of questions makes the owner hunt for the one to answer, and a round that asks what is not yet answerable wastes a turn.
 
 ## 6. Wording
 
@@ -159,6 +181,8 @@ Phases 2 to 4 are the early phases. They run before anything is built, and the e
    Why: quota is limited, and planning at the wrong effort quietly lowers the quality of everything built on it.
 2. **One complete brief.** Each worker gets one brief: the owner's exact words, the whole goal, every earlier report and version (not a chosen subset), the current rulings, the tools ruled out, and the finish line. Never drip steps.
    Why: step-by-step prompts make a builder loop on details and miss the main idea, and a partial inventory hides earlier work.
+3. **Standing lines in every build brief.** Each build item (phase 7) names the approved prototype page it builds. A spec with several items builds on one integration branch: an item starts when its blockers have merged into that branch, and each worker merges the branch tip into its own work and re-runs the checks before it reports done. The pull request body opens with the smallest visual that shows the change (a screenshot, a short clip or a before and after), then the evidence that it works, then the merge danger: whether it can be undone easily, and what else it touches if it goes wrong.
+   Why: a worker that builds from a description instead of the approved page drifts from it, items merged one by one into the main branch clash late, and a reviewer who cannot see the change or its risk either waves it through or holds it too long.
 
 ## 8. Memory and status
 
@@ -167,10 +191,16 @@ Phases 2 to 4 are the early phases. They run before anything is built, and the e
 2. **Status the owner can act on.** Lead with what needs the owner, then what is at risk, then a short table of to do, doing and done. Check live state before saying anything is in progress. Give a link for every finished item. No clock times and no narration of your own steps.
    Why: a status built from memory hides stalls, and a long status buries the owner's asks.
 
-## 9. Keep the playbook current
+## 9. Improve
+
+This section is phase 10. It keeps the way of working, and this playbook, current.
 
 1. **Record each method lesson when it happens.** When the owner corrects the way of working, write the lesson down in one line with what triggered it. At each stage end, fold the lessons into this playbook. Show every change to the playbook on a review page before it ships.
    Why: a method that is not written down has to be taught again on the next project.
+2. **Improve as a standing item.** The improve item is a dated, repeating item that the owner approves once. It also follows every merge (phase 9). Each run looks back over the finished work or the last day: what slowed the work, which of the owner's corrections came more than once, and which check failed most. Sort each finding: a mechanical slip becomes a script check, and a judgement call becomes a reviewer check or a written rule. Each proposal goes to the owner as a card. Approved ones land as a check, a rule or a playbook change. Edits to saved memory are proposed, never made on their own.
+   Why: the coordinator never starts work in an empty queue, so a look back runs only if it is an approved item, and a lesson that does not become a check is made again.
+3. **Save, then compact, at a phase boundary.** When the context needs compacting, finish the phase step in hand, save the session's lessons and the owner's rulings (rule 8.1), then compact.
+   Why: compacting in the middle of a step loses the half-done work, and compacting before a save loses what the owner taught.
 
 ## 10. From a weak prototype to an aligned rules list
 

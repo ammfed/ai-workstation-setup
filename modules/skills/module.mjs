@@ -44,8 +44,8 @@ const SKILLS = [
     value: 'workflow-playbook',
     label:
       'workflow-playbook - a working method for long projects run with AI agents. Covers ten phases from an idea to shipped and improved, stage gates, ' +
-      'a map that always shows the next step, evidence and research at every stage, review pages, when to ask or act, wording, briefs, ' +
-      'memory and status, and the steps from a weak prototype to a liked direction, an approved journey map and an aligned rules list. Included with this setup.',
+      'a map that always shows the next step, evidence and research at every stage, four review points with checks before every page, when to ask or act, wording, briefs, ' +
+      'memory and status, a standing improve step, and the steps from a weak prototype to a liked direction, an approved journey map and an aligned rules list. Included with this setup.',
     install: (ctx) => writeBundledSkill(ctx, 'workflow-playbook'),
   },
   {
