@@ -53,6 +53,11 @@ function cardsPath(ctx) {
   return path.join(ctx.home, '.config', 'ai-workstation-setup', 'decision-cards.html');
 }
 
+// The Firstmate home: this run's answer when the firstmate module runs too, else the saved one,
+// so `--modules preferences` alone still writes into the home Firstmate reads, not ~/firstmate.
+const firstmateHome = (ctx) =>
+  ctx.path(['FIRSTMATE_HOME', 'FIRSTMATE_DIR'].map((key) => ctx.get(key) ?? ctx.answers.get(key)).find(Boolean) || '~/firstmate');
+
 const TARGETS = {
   claude: {
     label: 'claude - a Claude Code user rules file (~/.claude/rules/working-preferences.md), loaded in every session',
@@ -60,7 +65,7 @@ const TARGETS = {
   },
   firstmate: {
     label: "firstmate - seed firstmate's local preferences file (data/captain.md in your Firstmate home)",
-    file: (ctx) => ctx.path(ctx.get('FIRSTMATE_HOME') || ctx.get('FIRSTMATE_DIR') || '~/firstmate', 'data/captain.md'),
+    file: (ctx) => path.join(firstmateHome(ctx), 'data', 'captain.md'),
     unsupported: { windows: 'firstmate runs in WSL; .\\install.ps1 --modules wsl sets it up there with this target' },
   },
 };
@@ -330,7 +335,7 @@ export default {
       });
     }
     if (targets.includes('firstmate') && !ctx.forOs(TARGETS.firstmate.unsupported)) {
-      const home = ctx.path(ctx.get('FIRSTMATE_HOME') || ctx.get('FIRSTMATE_DIR') || '~/firstmate');
+      const home = firstmateHome(ctx);
       // config/brief-include.md (Firstmate's docs/configuration.md "Home brief include") is appended
       // to every worker brief: house style, helper model, build rules, principle checker, private lines.
       const brief = renderBriefInclude((key) => ctx.get(key), { checkerPath: checkerPath(ctx), privateRules });

@@ -437,6 +437,30 @@ test('a real run writes the private lines into all three files, warns about an u
   }
 });
 
+test('without the firstmate module in the run, the saved Firstmate home is used, not ~/firstmate', { skip: process.platform === 'win32' }, async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const saved = path.join(home, '.fm-home');
+    // The checker an earlier run installed, so the brief has a line without SKILLS in this run.
+    const checker = path.join(home, '.claude', 'skills', 'workflow-playbook', 'principles', 'bin', 'principle-check.mjs');
+    fs.mkdirSync(path.dirname(checker), { recursive: true });
+    fs.writeFileSync(checker, '');
+    const answers = new Map(Object.entries({ PREFS_TARGETS: 'claude,firstmate', PREFS_DECISIONS: 'chat', FIRSTMATE_HOME: saved, PREFS_PRIVATE_RULES: path.join(home, 'missing.md') }));
+    const ctx = new Context({ platform: { ...detectPlatform(), home }, dryRun: false, interactive: false, answers, prompter: null, repoRoot });
+    ctx.beginModule('preferences');
+    for (const q of preferences.questions) if (!q.when || q.when(ctx)) await ctx.ask(q);
+    const out = await capture(() => preferences.install(ctx));
+    assert.equal(ctx.record.failures.length, 0, out);
+    assert.ok(fs.existsSync(path.join(saved, 'data', 'captain.md')), out);
+    assert.ok(fs.readFileSync(path.join(saved, 'config', 'brief-include.md'), 'utf8').includes(checker), out);
+    assert.ok(!fs.existsSync(path.join(home, 'firstmate')), 'nothing lands in ~/firstmate');
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('with no private rules file, nothing extra is written and no shared second-mate file appears', { skip: process.platform === 'win32' }, async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-'));
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');

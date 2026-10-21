@@ -9,7 +9,7 @@ Where it writes (`PREFS_TARGETS`):
 | Target | File | Loaded by |
 | --- | --- | --- |
 | `claude` | `~/.claude/rules/working-preferences.md` | Claude Code, as user rules in every project |
-| `firstmate` | `data/captain.md` in your Firstmate home (`FIRSTMATE_HOME`, else the clone; the file firstmate reads for preferences) | Firstmate, at session start |
+| `firstmate` | `data/captain.md` in your Firstmate home (`FIRSTMATE_HOME` from this run or your saved answers, else the clone; the file firstmate reads for preferences) | Firstmate, at session start |
 
 The file is yours: edit it freely. Re-running the installer asks before replacing a
 changed file and keeps a timestamped backup.
