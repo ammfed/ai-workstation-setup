@@ -2,12 +2,21 @@ import path from 'node:path';
 import { Skip } from '../../lib/context.mjs';
 import { claudeDir, installSkill, skillInstalled } from '../../lib/claude.mjs';
 
+// Files a bundled skill gets beside its SKILL.md: [template under templates/, path inside the skill folder].
+// The playbook's principles/ folder holds the principle check list its review steps run (rule 4.7).
+const BUNDLED_EXTRAS = {
+  'workflow-playbook': [['principles/checks.md', 'principles/checks.md']],
+};
+
 /**
- * Write a skill this repo ships in templates/skills/<name> to ~/.claude/skills/<name>.
+ * Write a skill this repo ships in templates/skills/<name> to ~/.claude/skills/<name>, with its extra files.
  * A copy this setup shipped earlier is refreshed; a local edit is left alone.
  */
-export function writeBundledSkill(ctx, name) {
-  return ctx.writeFile(path.join(claudeDir(ctx), 'skills', name, 'SKILL.md'), ctx.template(`skills/${name}/SKILL.md`), { onConflict: 'ask' });
+export async function writeBundledSkill(ctx, name) {
+  const dir = path.join(claudeDir(ctx), 'skills', name);
+  const wrote = await ctx.writeFile(path.join(dir, 'SKILL.md'), ctx.template(`skills/${name}/SKILL.md`), { onConflict: 'ask' });
+  for (const [from, to] of BUNDLED_EXTRAS[name] ?? []) await ctx.writeFile(path.join(dir, to), ctx.template(from), { onConflict: 'ask' });
+  return wrote;
 }
 
 // Installed user-wide for Claude Code with the skills CLI (github.com/vercel-labs/skills).

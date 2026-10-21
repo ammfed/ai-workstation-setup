@@ -341,6 +341,9 @@ test('the workflow-playbook skill is written to ~/.claude/skills with valid SKIL
     assert.equal(fields.name, 'workflow-playbook');
     assert.ok(fields.description?.length > 20, 'it has a description');
     assert.ok(!/\{\{[A-Z_]+\}\}/.test(text), 'no placeholder is left unfilled');
+    const checks = path.join(home, '.claude', 'skills', 'workflow-playbook', 'principles', 'checks.md');
+    assert.equal(fs.readFileSync(checks, 'utf8'), fs.readFileSync(path.join(repoRoot, 'templates', 'principles', 'checks.md'), 'utf8'), 'the principle check list sits in the playbook folder');
+    assert.match(await capture(() => choice.install(context(home))), /checks\.md is already up to date/);
     fs.writeFileSync(file, `${text}\nA local rule.\n`);
     assert.match(await capture(() => writeBundledSkill(context(home), 'workflow-playbook')), /local edit/);
     assert.match(fs.readFileSync(file, 'utf8'), /A local rule\./);

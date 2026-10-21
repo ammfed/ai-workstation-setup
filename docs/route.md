@@ -15,7 +15,10 @@ before any page reaches you, when to ask or act, an improve step after every mer
 the steps for taking a weak prototype to a liked wireframe direction, an approved
 journey map and an aligned rules list. Its phase table splits these six steps into the
 ten phases, with the early phases (requirements, whether it already exists, vision)
-before anything is built, and says which phases each kind of work needs.
+before anything is built, and says which phases each kind of work needs. Its
+`principles/checks.md` lists the design and writing checks (attention, time, words,
+layout, colour, charts, AI) that every screen and page meets, who runs each one and what
+a failure blocks.
 
 | Step | What happens | Skill |
 | --- | --- | --- |
