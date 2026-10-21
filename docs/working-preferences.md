@@ -45,7 +45,7 @@ Firstmate's `config/brief-include.md`, so every worker writes its status lines a
 
 | Key | Default | Rule |
 | --- | --- | --- |
-| `PREFS_STATUS` | `board` | Every status reply opens with one table whose three columns, TODO, DOING and DONE, sit side by side, then groups what is left by who acts: your block labelled YOU, the agent's labelled with its own role name (never ME). Small text bars and boxes only where they carry meaning. `actions` gives a very short list of action items, yours first, then a pointer to the full report; `brief` opens with a one-line answer, then brief action items. |
+| `PREFS_STATUS` | `needs-you` | Every status reply opens with one line of headline counts, then NEEDS YOU (only what you alone can do, ranked, each with a rough time cost and one link), AT RISK (what is stuck or slipping and what it costs you), always a table with To do, Doing and Done side by side (one row per project, Done only since the last status), and one Links line. Empty parts are left out, except the table. `board` opens with one table whose three columns, TODO, DOING and DONE, sit side by side, then groups what is left by who acts: your block labelled YOU, the agent's labelled with its own role name (never ME). Small text bars and boxes only where they carry meaning. `actions` gives a very short list of action items, yours first, then a pointer to the full report; `brief` opens with a one-line answer, then brief action items. |
 | `PREFS_HONEST_NUMBERS` | yes | Uncertain numbers are ranges or "not yet known"; charts are plain bars or small multiples, never radar or gauges. |
 | `PREFS_LINK_DELIVERABLES` | yes | Every finished item links to its output: a URL, or an absolute path for a local file. |
 | `PREFS_DAILY_CHECK` | yes | Once a day, a nothing-forgotten check: uncollected review answers, anything waiting longer than `PREFS_STALE_DAYS` (default 2), and standing rules with no evidence they ran. Each item is verified before it is called dropped. |
@@ -55,7 +55,7 @@ Firstmate's `config/brief-include.md`, so every worker writes its status lines a
 
 | Key | Default | Rule |
 | --- | --- | --- |
-| `PREFS_DECISIONS` | `both` | Quick questions go through the agent's question tool, one at a time, with a preview on every option and a recommendation; larger or visual decisions go on a Lavish decision-card page. `cards` puts every decision on a card page; `tool` uses only the question tool; `chat` asks in chat. |
+| `PREFS_DECISIONS` | `both` | Quick questions go through the agent's question tool, one at a time, with a preview on every option and a recommendation; larger or visual decisions go on a Lavish decision-card page. `cards` puts every decision on a card page; `tool` uses only the question tool; `chat` asks in chat. With `both` or `cards`, a page is created without opening a tab (`--no-open`), checked, then opened once in your browser when it is handed over, with its link; while you are away nothing opens and the link waits for your return brief. |
 | `PREFS_YES_NO_IN_CHAT` | yes | Simple yes-or-no questions stay in plain chat. |
 | `PREFS_PREVIEW_BEFORE_BUILD` | yes | A change to how something looks or feels is shown on a review page before it is built. |
 | `PREFS_CHECK_ANSWERS_FIRST` | yes | The agent checks for your answer before calling a page or question open. |
@@ -74,7 +74,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | `PREFS_PAGE_SIDE_BY_SIDE` | yes | The decision card sits on one side and a canvas showing the current decision on the other, horizontally, never stacked. |
 | `PREFS_PAGE_FLIP_PREVIEWS` | yes | Every option of a visual choice has a preview, and you can flip between all of them; never only the recommended one. |
 | `PREFS_PAGE_MINIMAL_TEXT` | yes | A title, the question and short option labels: no fluff, no helper text, no explaining the obvious. Visuals carry the meaning. |
-| `PREFS_PAGE_PHONE` | yes | Every review page also reads well on a phone (390 px wide): the card and its picture stack, body text is at least 14 px, and a wide diagram gets a phone version instead of tiny labels. A 390 by 844 screenshot is checked before the link is sent. |
+| `PREFS_PAGE_PHONE` | yes | Every review page also reads well on a phone (390 px wide): the card and its picture stack, body text is at least 14 px, and a wide diagram gets a phone version instead of tiny labels. A 390 by 844 screenshot is checked before the link is sent. The same answer decides whether `PREFS_PROTOTYPE_CHECK` also checks phone width, so one answer pauses or restores every phone check. |
 | `PREFS_PAGE_WIDE_HEADER` | yes | A large title and intro spread across the full page width. |
 
 ### Review page delivery and workflow
@@ -95,7 +95,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | `PREFS_ROUTE` | no | Software projects go through six steps, each with its skill: Plan, Decide, Prototype, Breakdown, Build, Ship, with short paths for a small change and a bug. [The route](route.md) describes each step. |
 | `PREFS_TEST_FIRST` | no | Product code is built test-first at the seams the spec names (tdd, codebase-design). Prototypes, docs and config are not test-first. |
 | `PREFS_GLOSSARY_ADR` | no | `GLOSSARY.md` and `docs/adr/` are read before building, and new terms and decision records land with the change that introduces them. The files start only when a term or a hard-to-reverse decision comes up. |
-| `PREFS_PROTOTYPE_CHECK` | no | Before you see a prototype, the agent opens it at your target screen size first, then at laptop width and at phone width (390 px), checks that font sizes and column positions stay the same on every tab, and fixes broken layout, unclear labels and dead ends. |
+| `PREFS_PROTOTYPE_CHECK` | no | Before you see a prototype, the agent opens it at your target screen size first, then at laptop width and, when `PREFS_PAGE_PHONE` is yes, at phone width (390 px), checks that font sizes and column positions stay the same on every tab, and fixes broken layout, unclear labels and dead ends. |
 | `PREFS_MODEL_GUIDE` | yes | When a model is named for a task, the agent reads that vendor's official prompting guide first and briefs the model the way it says. |
 
 ### Ideas and priorities
@@ -151,7 +151,8 @@ to you, and saying plainly when something was reasoned about rather than tested.
   between every option's preview. It is light by default, with a small switch to go dark.
   [Review pages](review-pages.md) describes the loop and the card fields.
 - **No surprise tabs**: agent-clis sets `LAVISH_AXI_NO_OPEN=1` (`LAVISH_NO_OPEN`), so review
-  pages never open browser tabs on their own; links are shared in chat.
+  pages never open browser tabs on their own. The agent opens a checked page once, on
+  purpose, when it hands it over, and shares the link in chat.
 - **Research browser**: agent-clis installs `research-browser` (`RESEARCH_BROWSER`, Linux,
   macOS, WSL): a visible Chrome window with its own profile. Sign in to research sites
   there once; agents drive it with `research-browser axi <command>`.

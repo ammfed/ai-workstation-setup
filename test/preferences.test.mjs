@@ -1,7 +1,7 @@
 // Tests for the working-preferences rules: what the defaults write, how the decision,
-// grilling, status and writing-style choices change the text, the route and its build
-// rules, that an earlier PREFS_GRILL_ON_GAPS answer carries over to PREFS_GRILL, and that
-// the card template ships its style and phone layout.
+// grilling, status and writing-style choices change the text, how pages are opened, the one
+// phone answer, the route and its build rules, that an earlier PREFS_GRILL_ON_GAPS answer
+// carries over to PREFS_GRILL, and that the card template ships its style and phone layout.
 // Run: node --test test/preferences.test.mjs
 
 import assert from 'node:assert/strict';
@@ -54,8 +54,24 @@ test('the defaults ask through both the question tool and card pages, and grill 
   assert.match(decisions, /--no-open/, 'card-page rules still apply with both');
 });
 
-test('the default status is the board, with a YOU block and never ME', async () => {
+test('the default status leads with what needs the user, then what is at risk, the table and the links', async () => {
+  assert.equal((await answer()).get('PREFS_STATUS'), 'needs-you');
   const status = sectionOf(await render(), 'Reporting and status');
+  const parts = ['one line of headline counts', 'Then NEEDS YOU: only what the user alone can do', 'Then AT RISK:', 'Then always a table with To do, Doing and Done', 'End with one Links line'];
+  let at = -1;
+  for (const part of parts) {
+    const i = status.indexOf(part);
+    assert.ok(i > at, `"${part}" missing or out of order`);
+    at = i;
+  }
+  assert.match(status, /Leave out any empty part except the table/);
+  assert.match(status, /Show progress as counts like "3 of 5"/);
+  assert.doesNotMatch(status, /TODO, DOING, DONE|labelled YOU/, 'the older board shape is not mixed in');
+  assert.doesNotMatch(sectionOf(await render({ PREFS_STATUS: 'board' }), 'Reporting and status'), /NEEDS YOU/);
+});
+
+test('the board status is still a choice, with a YOU block and never ME', async () => {
+  const status = sectionOf(await render({ PREFS_STATUS: 'board' }), 'Reporting and status');
   assert.match(status, /TODO, DOING, DONE/);
   assert.match(status, /the user's block labelled YOU, the agent's labelled with its own role name \(for example FIRST MATE\), never ME\./);
   assert.match(status, /small text bars and boxes where they carry meaning/);
@@ -123,6 +139,25 @@ test('review pages also read well on a phone, a page in a skill\'s own look is r
   assert.match(pages, /a wide diagram gets a phone version/);
   assert.match(pages, /and the look of boards that a skill brings with it/);
   assert.doesNotMatch(await render({ PREFS_PAGE_PHONE: 'no' }), /reads well on a phone/);
+});
+
+test('one phone answer covers review pages and the prototype check', async () => {
+  const on = await render({ PREFS_PROTOTYPE_CHECK: 'yes' });
+  assert.match(sectionOf(on, 'Building'), /then at laptop width and at phone width \(390 px\)\. Check/);
+  const off = await render({ PREFS_PROTOTYPE_CHECK: 'yes', PREFS_PAGE_PHONE: 'no' });
+  assert.match(sectionOf(off, 'Building'), /at the user's target screen size first, then at laptop width\. Check that font sizes/);
+  assert.doesNotMatch(off, /390|phone/i, 'no phone width is left anywhere');
+});
+
+test('a page is created without a tab, checked, then opened once at hand-over, and nothing opens while the user is away', async () => {
+  const decisions = sectionOf(await render(), 'Decisions');
+  assert.match(decisions, /Create review pages without launching a browser tab \(`--no-open`, or `LAVISH_AXI_NO_OPEN=1`\)/);
+  assert.match(decisions, /never re-run the open command just to refresh a page/);
+  assert.match(decisions, /Once the page is checked, open it once in the user's browser at hand-over and give the link/);
+  assert.match(decisions, /While the user is away, open nothing; the link goes into the return brief\./);
+  assert.doesNotMatch(decisions, /never open one automatically/, 'the older rule that forbade every open is gone');
+  assert.doesNotMatch(await render({ PREFS_AWAY_MODE: 'no' }), /While the user is away, open nothing/);
+  assert.doesNotMatch(await render({ PREFS_DECISIONS: 'chat' }), /open it once/);
 });
 
 test('planning effort is checked, and the agent decides process questions from the primary source', async () => {

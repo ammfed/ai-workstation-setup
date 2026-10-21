@@ -69,6 +69,15 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
   const status = get('PREFS_STATUS');
   const days = get('PREFS_STALE_DAYS') || '2';
   section('Reporting and status', [
+    status === 'needs-you' &&
+      'Open every status reply with one line of headline counts (for example "3 need you, 5 finished, 1 at risk").',
+    status === 'needs-you' &&
+      'Then NEEDS YOU: only what the user alone can do, ranked by impact, one line each with a rough time cost and one link. Fold older open review pages into one line.',
+    status === 'needs-you' && 'Then AT RISK: anything stuck or slipping, with what it costs the user.',
+    status === 'needs-you' &&
+      'Then always a table with To do, Doing and Done as three columns side by side, one row per project, short cells. Done holds only what finished since the last status.',
+    status === 'needs-you' &&
+      'End with one Links line: the full link of each Done item. Leave out any empty part except the table, and leave out how the work was done and work that did not change.',
     status === 'board' &&
       'Open every status reply with the current work as one table whose three columns sit side by side: TODO, DOING, DONE. Each column lists its own items, one short line each. Never three stacked lists or three separate rows.',
     status === 'actions' &&
@@ -101,7 +110,10 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     decisions === 'both' &&
       'Ask quick questions with the question tool, one at a time, a preview on every option and a recommendation. Put larger or visual decisions on a Lavish decision-card page.',
     cards && cardsPath && !allCards && `Start each decision page from the template at \`${cardsPath}\`.`,
-    cards && 'Open review pages without launching a browser tab (`--no-open`, or `LAVISH_AXI_NO_OPEN=1`), never open one automatically, and never re-run the open command just to refresh a page; the running page already updates.',
+    cards &&
+      `Create review pages without launching a browser tab (\`--no-open\`, or \`LAVISH_AXI_NO_OPEN=1\`), and never re-run the open command just to refresh a page; the running page already updates. Once the page is checked, open it once in the user's browser at hand-over and give the link: a page that is only linked is easily missed.${
+        get('PREFS_AWAY_MODE') ? ' While the user is away, open nothing; the link goes into the return brief.' : ''
+      }`,
     decisions === 'tool' && 'Ask decisions with the question tool, one question at a time, with a preview on every option.',
     decisions === 'chat' && 'Ask decisions in chat, one at a time, with a short named list of options and the recommendation first.',
     decisions !== 'chat' && get('PREFS_YES_NO_IN_CHAT') && 'Ask a simple yes-or-no question in plain chat, not on a review page.',
@@ -194,7 +206,7 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     get('PREFS_GLOSSARY_ADR') &&
       'Before building, read GLOSSARY.md and docs/adr/ if they exist. Add new terms and decision records in the same change that introduces them. Start these files in any project, but only when a term or a hard-to-reverse decision comes up.',
     get('PREFS_PROTOTYPE_CHECK') &&
-      "Before the user sees a prototype, open it in the agent's browser at the user's target screen size first, then at laptop width and at phone width (390 px). Check that font sizes and column positions stay the same on every tab. Fix broken layout, unclear labels and dead ends first.",
+      `Before the user sees a prototype, open it in the agent's browser at the user's target screen size first, then at laptop width${get('PREFS_PAGE_PHONE') ? ' and at phone width (390 px)' : ''}. Check that font sizes and column positions stay the same on every tab. Fix broken layout, unclear labels and dead ends first.`,
     get('PREFS_MODEL_GUIDE') &&
       "When a model is named for a task, read that vendor's official prompting guide first and brief the model the way it says.",
   ]);

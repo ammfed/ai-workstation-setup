@@ -51,6 +51,6 @@ The `preferences` module offers these as optional rules (see
   terms and decision records with the change that introduces them. Start the files only
   when a term or a hard-to-reverse decision comes up.
 - `PREFS_PROTOTYPE_CHECK`: before you see a prototype, the agent opens it at your target
-  screen size first, then at laptop width and at phone width (390 px), checks that font
-  sizes and column positions stay the same on every tab, and fixes broken layout, unclear
-  labels and dead ends.
+  screen size first, then at laptop width, and at phone width (390 px) when `PREFS_PAGE_PHONE`
+  is yes. It checks that font sizes and column positions stay the same on every tab, and fixes
+  broken layout, unclear labels and dead ends.

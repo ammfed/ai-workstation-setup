@@ -12,17 +12,18 @@ page starts from it, not only decisions. This page is the loop an agent follows 
 1. **Build the page.** Copy the template next to the work, replace `CARDS` (and `DECIDED`,
    what is already settled), and give every option a preview. Keep text to a title, one
    question and short option labels.
-2. **Serve it without opening a tab.** The agent shares the link in chat every time; you open
-   it when you are ready. It never opens a tab itself and never re-runs the open command just
-   to refresh the page.
+2. **Serve it without opening a tab.** Creating the page never opens a tab, and the agent never
+   re-runs the open command just to refresh the page.
 
    ```sh
    LAVISH_AXI_NO_OPEN=1 lavish-axi review.html --no-open
    ```
 
    The `agent-clis` module can set `LAVISH_AXI_NO_OPEN=1` for your user (`LAVISH_NO_OPEN`).
-3. **Check the page by screenshot before sending the link.** Open it in the agent's own
-   browser and confirm the content shows. A page can load and still be stuck or blank.
+3. **Check the page by screenshot, then hand it over.** Open it in the agent's own browser and
+   confirm the content shows. A page can load and still be stuck or blank. Then the agent opens
+   it once in your browser and gives the link in chat, because a page that is only linked is
+   easily missed. While you are away it opens nothing, and the link waits for your return.
 4. **Wait for answers.** `lavish-axi poll review.html` waits until you press send. Leave it
    running; if it is interrupted, run it again. Answers stay queued until they are collected.
 5. **Check the real state before saying anything about it.** Running `lavish-axi` with no
