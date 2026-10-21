@@ -165,7 +165,7 @@ It is plain Markdown. Each `##` heading says where its lines go:
 | `Sessions` | The rules file (`working-preferences.md`, and Firstmate's `data/captain.md`) |
 | `Workers` | Firstmate's `config/brief-include.md`, appended to every worker brief |
 | `Second mates` | Firstmate's `data/captain-shared.md` in the main home, which every second mate reads; written only when there are lines for it |
-| `Reviewer` | Kept for the no-mistakes review rules; read, but not written anywhere yet |
+| `Reviewer` | The no-mistakes design review rules (agent-clis, `NO_MISTAKES_PRINCIPLES`), added after the generic ones to every review whose change touches an interface file |
 
 Each `-` or numbered item, or each paragraph, is one rule; a line that follows without a blank
 line continues it. A `#` title, text before the first heading and HTML comments are not used.

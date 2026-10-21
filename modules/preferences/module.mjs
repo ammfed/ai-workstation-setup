@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Skip } from '../../lib/context.mjs';
 import { claudeDir } from '../../lib/claude.mjs';
-import { PRIVATE_HEADINGS, parsePrivateRules } from './private-rules.mjs';
+import { PRIVATE_HEADINGS, PRIVATE_RULES_DEFAULT, parsePrivateRules } from './private-rules.mjs';
 import { renderBriefInclude, renderCaptainShared, renderPreferences } from './render.mjs';
 
 // Writes how you want your agents to work (status format, tone, decisions, review
@@ -305,7 +305,7 @@ export default {
       path: true,
       message:
         'Private rules: a Markdown file outside this clone with your own extra rules under the headings Everywhere, Sessions, Workers, Second mates and Reviewer, read when it exists (empty for none)',
-      default: '~/.config/ai-workstation-setup/private-rules.md',
+      default: PRIVATE_RULES_DEFAULT,
     },
   ]),
 

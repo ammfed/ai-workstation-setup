@@ -11,7 +11,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Context, detectPlatform } from '../lib/context.mjs';
-import { NO_MISTAKES_REVIEW, noMistakesConfigPath, parseReviewModel, withClaudeReviewModel } from '../modules/agent-clis/module.mjs';
+import agentClis, { NO_MISTAKES_REVIEW, REVIEW_RULE_PATHS, REVIEW_RULES, noMistakesConfigPath, parseReviewModel, reviewRulesBlock, withClaudeReviewModel, withReviewRules, writeReviewRules } from '../modules/agent-clis/module.mjs';
 import claudeCode, { installReaderAgent, parseModelEfforts } from '../modules/claude-code/module.mjs';
 import firstmate, { dispatchProfiles } from '../modules/firstmate/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
@@ -93,6 +93,60 @@ test('an existing claude entry or an agent_config the template cannot edit is le
   assert.equal(withClaudeReviewModel('agent_config:\n  codex: {}\n  "claude":\n    effort: high\n', pin), null);
   assert.equal(withClaudeReviewModel('agent_config: {}\n', pin), null);
   assert.equal(withClaudeReviewModel('agent_config: { claude: { model: sonnet } }\n', pin), null);
+});
+
+test('the design review rules go into an empty config and beside other keys, once per interface path', () => {
+  const block = reviewRulesBlock(REVIEW_RULES);
+  assert.equal(withReviewRules('', REVIEW_RULES), `${block}\n`);
+  assert.equal(withReviewRules('agent: auto\nlog_level: info\n', REVIEW_RULES), `agent: auto\nlog_level: info\n\n${block}\n`);
+  assert.match(block, /^review:\n  path_instructions:\n    - path: "\*\.html"\n      instructions: \|\n        Interface code:/m);
+  assert.equal(block.match(/- path: /g).length, REVIEW_RULE_PATHS.length);
+  for (const p of REVIEW_RULE_PATHS) assert.ok(!p.includes('/'), `${p} matches by file name at any depth`);
+  for (const id of ['W4', 'L3', 'L9', 'N1', 'I1', 'I2', 'I3', 'I4', 'I5']) assert.match(block, new RegExp(`${id}: `));
+  // no-mistakes takes at most 32 entries and 16,384 bytes of injected rules, shared with each repository's own.
+  assert.ok(REVIEW_RULE_PATHS.length * (Buffer.byteLength(REVIEW_RULES.join('\n')) + 400) < 16384 / 2);
+});
+
+test('a config with its own review: key is left alone, and a second run gives the same file', () => {
+  assert.equal(withReviewRules('review:\n  path_instructions:\n    - path: "*.go"\n      instructions: mine\n', REVIEW_RULES), null);
+  assert.equal(withReviewRules('agent: auto\nreview: {}\n', REVIEW_RULES), null);
+  const once = withReviewRules('agent: auto\n', REVIEW_RULES);
+  assert.equal(withReviewRules(once, REVIEW_RULES), once);
+  const more = withReviewRules(once, [...REVIEW_RULES, 'Dates are written as 22 Oct.']);
+  assert.match(more, /^        Dates are written as 22 Oct\.$/m);
+  assert.equal(more.match(/^review:/gm).length, 1);
+  assert.equal(withReviewRules(more, []), 'agent: auto\n');
+  assert.equal(withReviewRules('agent: auto\n', []), 'agent: auto\n');
+});
+
+test('the design review rules are asked with no-mistakes, default yes, and take your Reviewer lines', async () => {
+  const q = question(agentClis, 'NO_MISTAKES_PRINCIPLES');
+  assert.equal(q.type, 'confirm');
+  assert.equal(q.default, true);
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'models-'));
+  const saved = process.env.NM_HOME;
+  process.env.NM_HOME = path.join(home, '.nm');
+  fs.mkdirSync(process.env.NM_HOME);
+  const file = path.join(home, '.nm', 'config.yaml');
+  fs.writeFileSync(file, 'agent: auto\n');
+  const rules = path.join(home, 'private-rules.md');
+  fs.writeFileSync(rules, '## Reviewer\n\n- Every chart has a plain title.\n\n## Sessions\n\n- Not for the reviewer.\n');
+  const run = async (on) => {
+    // PREFS_PRIVATE_RULES comes from the saved answers when preferences is not in this run.
+    await writeReviewRules(context(home, { answers: { PREFS_PRIVATE_RULES: rules } }), on);
+    return fs.readFileSync(file, 'utf8');
+  };
+  try {
+    const first = await run(true);
+    assert.match(first, /^agent: auto\n\n# >>> /);
+    assert.match(first, /^        Every chart has a plain title\.$/m);
+    assert.doesNotMatch(first, /Not for the reviewer/);
+    assert.equal(await run(true), first);
+    assert.equal(await run(false), 'agent: auto\n');
+  } finally {
+    if (saved === undefined) delete process.env.NM_HOME;
+    else process.env.NM_HOME = saved;
+  }
 });
 
 test('the no-mistakes config lives in NM_HOME when set, else ~/.no-mistakes', () => {

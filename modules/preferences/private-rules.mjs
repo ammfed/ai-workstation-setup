@@ -2,6 +2,9 @@
 // where each heading says which generated file its lines go to. Pure, so tests feed it text.
 // docs/working-preferences.md "Your private rules" describes the format.
 
+// Where the file is looked for unless PREFS_PRIVATE_RULES says otherwise.
+export const PRIVATE_RULES_DEFAULT = '~/.config/ai-workstation-setup/private-rules.md';
+
 // Heading (any case) -> where its lines go.
 export const PRIVATE_HEADINGS = {
   everywhere: 'Everywhere', // working preferences, worker briefs and the shared second-mate file

@@ -13,6 +13,8 @@ The workflow playbook runs these checks before any page reaches the owner (rule 
 | Words | The script for the mechanical rows, then the second-model read (playbook rule 6.1) for the rest | Every phase that writes something a person will read | The text is rewritten before it is sent |
 | Owner | The owner, on a card with a recommendation | 5 and 8 | Nothing ships until the owner answers |
 
+The reviewer rows that can be judged from the code alone (W4, L3, L9, N1 and I1 to I5) also run inside no-mistakes when this setup adds them to its review rules: every review on the machine whose change touches an interface file checks them, and a finding parks the run for a fix. The rows that need the screen itself stay with the fresh reviewer.
+
 Rows marked "Reviewer (script later)" can become script rows once the checker drives a browser. Until then a reviewer checks them.
 
 The rows about a 390 px phone width run for anything built for other people. For the owner's own review pages and prototypes, follow the owner's screen-size rule; the checker adds those rows with `--phone`.

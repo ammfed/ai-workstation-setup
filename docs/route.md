@@ -20,7 +20,9 @@ before anything is built, and says which phases each kind of work needs. Its
 layout, colour, charts, AI) that every screen and page meets, who runs each one and what
 a failure blocks. `node principles/bin/principle-check.mjs <files or folder>` runs the
 script rows on `.html`, `.md` and `.txt` files and exits 1 on a failure; add `--phone`
-for anything built for other people.
+for anything built for other people. The rows a reviewer can judge from the code (button
+wording, labels, empty states, chart types, AI flags) also run in the Ship step: the
+agent-clis module adds them to no-mistakes' review rules (`NO_MISTAKES_PRINCIPLES`).
 
 | Step | What happens | Skill |
 | --- | --- | --- |
