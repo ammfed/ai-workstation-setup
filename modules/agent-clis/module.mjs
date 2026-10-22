@@ -291,8 +291,8 @@ export default {
     {
       key: 'CTX7_SETUP',
       type: 'confirm',
-      message: 'Run `ctx7 setup --claude --cli` now (browser sign-in; installs the find-docs skill and a docs rule)?',
-      default: true,
+      message: 'Sign in to Context7 at the end of the setup (`ctx7 setup --claude --cli`: installs the find-docs skill and a docs rule)? Without it, it waits until you want it',
+      default: false,
       when: (ctx) => ctx.interactive && ctx.get('AGENT_CLIS').includes('ctx7'),
     },
     {
@@ -404,8 +404,13 @@ export default {
     if (chosen.includes('ctx7')) {
       await ctx.step('ctx7 setup', () => {
         if (fs.existsSync(path.join(claudeDir(ctx), 'skills', 'find-docs'))) return ctx.ok('Context7 is already set up for Claude Code');
-        if (ctx.get('CTX7_SETUP')) ctx.run('ctx7 setup --claude --cli -y');
-        else ctx.todo('ctx7 setup --claude --cli   (signs in with your browser)');
+        ctx.signIn({
+          name: 'Context7',
+          later: 'Context7, for fresh answers about code tools',
+          cmd: 'ctx7 setup --claude --cli -y',
+          todo: 'ctx7 setup --claude --cli   (signs in with your browser)',
+          wanted: Boolean(ctx.get('CTX7_SETUP')),
+        });
       });
     }
 

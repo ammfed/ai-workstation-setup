@@ -279,7 +279,10 @@ export default {
         check: versionCheck('claude'),
       }),
     );
-    if (state === 'installed') ctx.todo('run `claude` once and sign in');
+    // Claude's sign-in is the one stop at the end. An earlier install counts as signed in
+    // unless Claude says it is not (`claude auth status` reports loggedIn).
+    const signedOut = state === 'installed' || (state === 'present' && ctx.os !== 'windows' && /"loggedIn":\s*false/.test(ctx.capture('claude auth status 2>&1 || true') ?? ''));
+    if (signedOut) ctx.signIn({ name: 'Claude', cmd: 'claude auth login', todo: 'run `claude` once and sign in' });
 
     // Anthropic's installer, published to winget as Anthropic.Claude (https://code.claude.com/docs/en/desktop).
     if (ctx.os === 'windows' && ctx.get('CLAUDE_DESKTOP')) {

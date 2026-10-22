@@ -118,8 +118,8 @@ export default {
     {
       key: 'CORE_GH_LOGIN',
       type: 'confirm',
-      message: 'Sign in to GitHub with `gh auth login` if you are not signed in yet?',
-      default: true,
+      message: 'Sign in to GitHub at the end of the setup (`gh auth login`) if you are not signed in yet? Without it, it waits until you want it',
+      default: false,
       when: (ctx) => ctx.interactive,
     },
     {
@@ -174,8 +174,13 @@ export default {
     await ctx.step('GitHub sign-in', () => {
       if (!ctx.dryRun && !ctx.has('gh')) throw new Skip('gh is not on PATH yet; open a new terminal and re-run');
       if (ctx.capture('gh auth status') === null) {
-        if (ctx.get('CORE_GH_LOGIN')) ctx.run('gh auth login');
-        else return ctx.todo(`gh auth login${ctx.os === 'wsl' ? ' && gh auth setup-git' : ''}`);
+        ctx.signIn({
+          name: 'GitHub',
+          later: 'GitHub, to save your work online',
+          cmd: 'gh auth login',
+          todo: `gh auth login${ctx.os === 'wsl' ? ' && gh auth setup-git' : ''}`,
+          wanted: Boolean(ctx.get('CORE_GH_LOGIN')),
+        });
       } else ctx.ok('gh is signed in');
       // Inside WSL, git uses gh's sign-in: no Windows credential manager to bridge.
       if (ctx.os === 'wsl' && !ctx.capture('git config --global --get-all credential.https://github.com.helper')) ctx.run('gh auth setup-git');

@@ -114,9 +114,12 @@ every question then takes its recommended answer. Type `c` to choose for yoursel
 pick modules and every question is asked up front (in a list, the arrow keys move, Space
 ticks or unticks, Enter confirms; typed numbers tick or untick those items; the CLI list
 starts with the tools already on your machine ticked). Your saved answers always win over
-the recommended ones. With `--yes` the lines still print and the install goes ahead. The
-install ends with a summary of what was done, skipped, failed, and what is left for you
-(such as signing in). When a tool
+the recommended ones. With `--yes` the lines still print and the install goes ahead. At a
+terminal no sign-in interrupts the install: they all wait for one screen at the end, where
+Claude's sign-in opens your browser. GitHub and Context7 are listed there under "Later,
+when you want them" (pick them under `c` to sign in at the end of the first run); running
+the setup again offers them. The install ends with a summary of what was done, skipped,
+failed, and what is left for you (with `--yes`, every sign-in is listed there). When a tool
 lands in a folder your shell does not have on PATH yet (such as `~/.local/bin`), the setup
 adds one PATH line to your shell profile, so a new terminal finds it.
 
