@@ -22,8 +22,8 @@ function grillDefault(ctx) {
 }
 
 // Every question after the first three takes its recommended answer (its default, or a saved
-// answer) unless the person chose to go through them one by one. PREFS_PAGE_PREPARE_NEXT has
-// no recommended answer, so it is always asked, even when the person goes ahead with the plan.
+// answer) unless the person chose to go through them one by one. PREFS_PAGE_PREPARE_NEXT is
+// recommended no (a review page waits for your answer) and asked only when you choose for yourself.
 const GATE = ['PREFS_TARGETS', 'PREFS_REVIEW_EACH', 'PREFS_PAGE_PREPARE_NEXT'];
 function withRecommended(questions) {
   return questions.map((q) => (GATE.includes(q.key) ? q : { ...q, useDefault: (ctx) => !ctx.get('PREFS_REVIEW_EACH') }));
@@ -94,7 +94,7 @@ export default {
       message: 'Go through each working preference now (about 60 short questions)? No writes the recommended set, which you can edit any time',
       default: false,
     },
-    yes('PREFS_PAGE_PREPARE_NEXT', 'Review pages: while a review page waits for your decision, should the agent prepare the next stage without starting it?', { default: false, alwaysAsk: true }),
+    yes('PREFS_PAGE_PREPARE_NEXT', 'Review pages: while a review page waits for your decision, should the agent prepare the next stage without starting it?', { default: false }),
 
     // Language and tone
     yes('PREFS_PLAIN_LANGUAGE', 'Tone: plain, natural, friendly language with no jargon?'),

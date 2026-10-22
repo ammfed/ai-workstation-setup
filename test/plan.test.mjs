@@ -1,6 +1,7 @@
-// Tests for the plan shown before anything is installed: the recommended picks are selected by
-// default, the plan prints before any install step, Enter goes ahead (every question takes its
-// recommended answer), "c" opens the module picker and the questions, and saved answers win.
+// Tests for the first screen shown before anything is installed: the recommended picks are
+// selected by default, the screen lists what you get in plain words before any install step,
+// Enter goes ahead (every question takes its recommended answer), "c" opens the module picker
+// and the questions, and saved answers win.
 // Run: node --test test/plan.test.mjs
 
 import assert from 'node:assert/strict';
@@ -11,7 +12,7 @@ import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Context, detectPlatform } from '../lib/context.mjs';
-import { GROUPS, confirmPlan, planLines, selectModules } from '../lib/plan.mjs';
+import { GROUPS, START_LINE, confirmPlan, planLines, selectModules, youGetLines } from '../lib/plan.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -46,10 +47,10 @@ function fakePrompter(replies, picked) {
   };
 }
 
-function ctxFor({ interactive = true, answers = {}, replies = [], picked } = {}) {
+function ctxFor({ interactive = true, answers = {}, replies = [], picked, os: system = 'linux' } = {}) {
   const prompter = fakePrompter(replies, picked);
   const ctx = new Context({
-    platform: detectPlatform('linux'),
+    platform: detectPlatform(system),
     dryRun: true,
     interactive,
     answers: new Map(Object.entries(answers)),
@@ -79,18 +80,53 @@ test('every module has a plan group and a short plain summary', () => {
   }
 });
 
-test('the plan is a few grouped lines, one per group in use', () => {
-  const lines = planLines(modules.filter((m) => recommended.includes(m.name)));
-  assert.match(lines[0], /recommended picks/);
-  assert.ok(lines.length >= 2 && lines.length <= Object.keys(GROUPS).length + 1, lines.join('\n'));
-  assert.match(lines.join('\n'), /Your AI assistant: Claude Code/);
+// The first screen's words, as the design has them (Linux and Mac).
+const HELLO = `  Hi! This sets up an AI assistant on your computer.
+
+  You get:
+    ✓ Claude, an AI assistant you talk to in plain words
+    ✓ The tools it needs to do real work for you
+    ✓ Skills that help it plan with you and check its own work
+    ✓ Good habits: plain words, and it checks with you before big steps
+    ✓ A notes folder it can read and keep tidy
+    ✓ A helper that runs several AI workers for you
+
+  Your computer asks for your password once. You sign in at the end.
+  After that you can leave it running.`;
+
+test('the first screen lists what you get in plain words, one line per part', () => {
+  const { ctx } = ctxFor();
+  const lines = planLines(modules.filter((m) => recommended.includes(m.name)), 'recommended', ctx);
+  assert.equal(lines.join('\n'), HELLO);
+  assert.ok(lines.every((l) => l.length <= 72), 'fits a 72-column terminal');
+  assert.doesNotMatch(lines.join('\n'), /platform:|package manager|Not available|outside connections/);
+});
+
+test('the first screen names the Obsidian app only when it is set up, and Windows gets its own lines', () => {
+  const picked = modules.filter((m) => recommended.includes(m.name));
+  const yes = ctxFor({ answers: { VAULT_APP: 'yes' } }).ctx;
+  assert.ok(youGetLines(picked, yes).includes('A notes folder it can read and keep tidy, with the Obsidian app'));
+  const no = ctxFor({ answers: { VAULT_APP: 'no' } }).ctx;
+  assert.ok(youGetLines(picked, no).includes('A notes folder it can read and keep tidy'));
+
+  const win = ctxFor({ os: 'windows' }).ctx;
+  const onWindows = modules.filter((m) => m.default && m.platforms.includes('windows'));
+  const text = planLines(onWindows, 'recommended', win).join('\n');
+  assert.match(text, /Claude, an AI assistant you talk to in plain words, with its app/);
+  assert.match(text, /Windows may ask you to allow changes\. Click Yes\./);
+  assert.doesNotMatch(text, /password|several AI workers/);
+});
+
+test('a part outside the recommended set shows its own plain summary', () => {
+  const picked = modules.filter((m) => ['claude-code', 'voice-mode'].includes(m.name));
+  assert.deepEqual(youGetLines(picked, ctxFor().ctx), ['Claude, an AI assistant you talk to in plain words', 'Talking with it by voice']);
 });
 
 test('the recommended picks are selected by default', async () => {
   const { ctx } = ctxFor({ interactive: false });
   const { value, out } = await quietly(() => selectModules(ctx, modules));
   assert.deepEqual(value.map((m) => m.name), recommended);
-  assert.match(out, /What will be set up \(the recommended picks\)/);
+  assert.match(out, /Hi! This sets up an AI assistant on your computer\./);
   assert.equal(ctx.acceptPlan, false);
 });
 
@@ -100,7 +136,8 @@ test('Enter goes ahead: no module picker, and questions take their recommended a
   assert.deepEqual(value.map((m) => m.name), recommended);
   assert.equal(ctx.acceptPlan, true);
   assert.equal(prompter.asked.length, 1, 'only the go-ahead prompt');
-  assert.match(prompter.asked[0], /Press Enter to go ahead, or type c to change the picks/);
+  assert.equal(prompter.asked[0].trim(), START_LINE);
+  assert.equal(START_LINE, 'Press Enter to start, or type c to choose for yourself.');
 
   assert.equal(await ctx.ask({ key: 'Q_PLAIN', type: 'text', message: 'q', default: 'recommended' }), 'recommended');
   assert.equal(await ctx.ask({ key: 'Q_NONE', type: 'text', message: 'q', default: '', alwaysAsk: true }), 'asked');
@@ -115,7 +152,7 @@ test('typing c opens the module picker, ticked with the recommended picks, then 
   assert.deepEqual(picker.ticked, recommended);
   assert.deepEqual(value.map((m) => m.name), ['core', 'skills']);
   assert.deepEqual(ctx.values.MODULES, ['core', 'skills']);
-  assert.match(out, /What will be set up \(your picks\)/);
+  assert.match(out, /Your picks:/);
   assert.equal(ctx.acceptPlan, false);
   assert.equal(await ctx.ask({ key: 'Q_PLAIN', type: 'text', message: 'q', default: 'recommended' }), 'asked');
 });
@@ -130,11 +167,27 @@ test('saved answers win over the recommended picks and answers', async () => {
   const { ctx } = ctxFor({ replies: [''], answers: { MODULES: 'core,second-brain', Q_SAVED: 'mine' } });
   const { value, out } = await quietly(() => selectModules(ctx, modules));
   assert.deepEqual(value.map((m) => m.name), ['core', 'second-brain']);
-  assert.match(out, /your saved picks/);
+  assert.match(out, /Welcome back! Your earlier choices are kept\./);
   assert.equal(await ctx.ask({ key: 'Q_SAVED', type: 'text', message: 'q', default: 'recommended' }), 'mine');
 });
 
-test('a dry run prints the plan before any install step, also under --yes', () => {
+test('the first screen hides the system line and the parts this system cannot run', async () => {
+  const { ctx } = ctxFor({ replies: [''] });
+  const { out } = await quietly(() => selectModules(ctx, modules));
+  assert.doesNotMatch(out, /Not available on/);
+  const unattended = ctxFor({ interactive: false }).ctx;
+  assert.match((await quietly(() => selectModules(unattended, modules))).out, /Not available on linux:/, 'an assistant reading the output still sees them');
+});
+
+test('going ahead with the plan asks no other question in any recommended part', () => {
+  const ctx = ctxFor().ctx;
+  for (const m of modules.filter((x) => x.default)) {
+    const qs = typeof m.questions === 'function' ? m.questions(ctx) : m.questions;
+    for (const q of qs) assert.ok(!q.alwaysAsk, `${m.name}: ${q.key}`);
+  }
+});
+
+test('a dry run prints the first screen before any install step, also under --yes', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-test-'));
   const r = spawnSync(process.execPath, [path.join(repoRoot, 'lib/installer.mjs'), '--dry-run', '--yes', '--platform', 'linux', '--answers', path.join(repoRoot, 'answers.example.env')], {
     encoding: 'utf8',
@@ -142,7 +195,7 @@ test('a dry run prints the plan before any install step, also under --yes', () =
     stdin: 'ignore',
   });
   assert.equal(r.status, 0, r.stdout + r.stderr);
-  const plan = r.stdout.indexOf('What will be set up (the recommended picks):');
+  const plan = r.stdout.indexOf('Hi! This sets up an AI assistant on your computer.');
   const firstStep = r.stdout.indexOf('\n[core]');
   assert.ok(plan > 0 && firstStep > plan, r.stdout.slice(0, 2000));
   for (const name of recommended) assert.match(r.stdout, new RegExp(`\\n\\[${name}\\]`), name);

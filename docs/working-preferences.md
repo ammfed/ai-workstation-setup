@@ -16,9 +16,9 @@ changed file and keeps a timestamped backup.
 
 After the targets, one question decides how many follow: `PREFS_REVIEW_EACH` (default no)
 writes the recommended set below without asking each one. Answer yes to go through them one
-by one. One question is always asked: `PREFS_PAGE_PREPARE_NEXT`, which controls whether
-the agent prepares the next stage while a review page waits for your decision. An answers
-file still sets any key it names either way.
+by one. `PREFS_PAGE_PREPARE_NEXT` (default no: a review page waits for your answer) is asked
+only when you choose for yourself; going ahead with the first screen takes its default. An
+answers file still sets any key it names either way.
 
 With the `firstmate` target, the module also writes Firstmate's `config/brief-include.md`, which
 Firstmate appends to every worker brief. It holds what applies: the house style with
@@ -90,7 +90,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | --- | --- | --- |
 | `PREFS_PAGE_CHECK_BEFORE_SEND` | yes | A page is opened in the agent's own browser and checked by screenshot before its link is sent, and the link is always sent. |
 | `PREFS_PAGE_FIRST` | yes | When a decision waits on a page, the page is built and checked first, the link is sent, and the agent stands by until you answer. |
-| `PREFS_PAGE_PREPARE_NEXT` | no | Always asked, even when you skip the others. With `PREFS_PAGE_FIRST`: while a review page waits for your decision, the agent prepares the next stage but does not start it until you approve. |
+| `PREFS_PAGE_PREPARE_NEXT` | no | Asked only when you choose for yourself. With `PREFS_PAGE_FIRST`: while a review page waits for your decision, the agent prepares the next stage but does not start it until you approve. |
 | `PREFS_PAGES_TOGETHER` | yes | While several review pages are in progress, links are held until all open work is done; the pages are checked against each other (each question once, dependencies in order, no clashing recommendations, one set of names) and sent together in the order to take them, with brief status meanwhile. |
 | `PREFS_FLEET_WORKFLOW` | yes | Supervising agents brief workers with a goal, branch and definition of done; workers report only at phase changes and land through a pull request with green checks; review pages are for real decisions and look-and-feel changes, never status or routine choices; permission prompts and command mechanics are never escalated. Live state is checked before work is called in progress or finished, the next step of a plan starts as soon as one lands, and a wait over 30 minutes is raised within the hour. When you must type in an agent's window, it is named by the labels you see on screen, never internal ids. |
 

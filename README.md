@@ -108,9 +108,9 @@ pages, the vault, the browser tools, systemd, PATH, DNS, GPU) is in
 
 The only prerequisite is Node.js 20+; the entry script offers to install it
 (per-user with nvm on Linux/macOS, with winget on Windows). Before anything is installed,
-the setup shows a few plain lines on what it will set up and what each part gives you,
-starting from the recommended picks (`./install.sh --list` shows them as `default: yes`). Press Enter to go
-ahead: every question then takes its recommended answer. Type `c` to change the picks: you
+the setup shows one short screen: what you get, in a few plain lines, starting from the
+recommended picks (`./install.sh --list` shows them as `default: yes`). Press Enter to start:
+every question then takes its recommended answer. Type `c` to choose for yourself: you
 pick modules and every question is asked up front (in a list, the arrow keys move, Space
 ticks or unticks, Enter confirms; typed numbers tick or untick those items; the CLI list
 starts with the tools already on your machine ticked). Your saved answers always win over

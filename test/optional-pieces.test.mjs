@@ -461,11 +461,13 @@ test('a question with useDefault takes its default without asking', async () => 
   assert.deepEqual(asked, ['LOUD']);
 });
 
-test('preferences ask where to write, whether to go through each one and whether to prepare the next stage; the rest take the recommended answer unless you do', () => {
+test('preferences ask where to write, whether to go through each one and whether to prepare the next stage only when you choose; the rest take the recommended answer unless you do', () => {
   const qs = preferences.questions;
   assert.deepEqual(qs.slice(0, 3).map((q) => q.key), ['PREFS_TARGETS', 'PREFS_REVIEW_EACH', 'PREFS_PAGE_PREPARE_NEXT']);
   assert.equal(qs[1].default, false);
-  assert.equal(qs[2].useDefault, undefined, 'preparing the next stage is always asked');
+  assert.equal(qs[2].useDefault, undefined, 'preparing the next stage is asked when you choose for yourself');
+  assert.equal(qs[2].default, false, 'a review page waits for your answer');
+  assert.ok(!qs.some((q) => q.alwaysAsk), 'going ahead with the plan asks no preference');
   const ctx = { get: (k) => ({ PREFS_REVIEW_EACH: false })[k] };
   for (const q of qs.slice(3)) assert.equal(q.useDefault?.(ctx), true, q.key);
   const each = { get: (k) => ({ PREFS_REVIEW_EACH: true })[k] };
