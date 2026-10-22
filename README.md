@@ -108,7 +108,9 @@ pages, the vault, the browser tools, systemd, PATH, DNS, GPU) is in
 
 The only prerequisite is Node.js 20+; the entry script offers to install it
 (per-user with nvm on Linux/macOS, with winget on Windows). You pick modules, every
-question is asked up front, then the install runs and ends with a summary of what
+question is asked up front (in a list, the arrow keys move, Space ticks or unticks, Enter
+confirms; typed numbers tick or untick those items; the CLI list starts with the tools
+already on your machine ticked), then the install runs and ends with a summary of what
 was done, skipped, failed, and what is left for you (such as signing in). When a tool
 lands in a folder your shell does not have on PATH yet (such as `~/.local/bin`), the setup
 adds one PATH line to your shell profile, so a new terminal finds it.

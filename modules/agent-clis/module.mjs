@@ -8,6 +8,13 @@ import { mergePixelSettings, patchPixelAgents } from './pixel-agents.mjs';
 
 export const DEFAULTS = ['gh-axi', 'chrome-devtools-axi', 'lavish-axi', 'tasks-axi', 'quota-axi', 'ctx7', 'no-mistakes', 'treehouse'];
 
+// With no saved answer, the list starts with the defaults and every tool already on this
+// machine ticked, found the way ensureTool finds them (ctx.has on the tool's command).
+export function defaultClis(ctx) {
+  const installed = Object.entries(TOOLS).filter(([key, t]) => !DEFAULTS.includes(key) && ctx.has(t.bin || t.name));
+  return [...DEFAULTS, ...installed.map(([key]) => key)];
+}
+
 // `cswap auto` (github.com/realiti4/claude-swap, `cswap auto --help`) is a foreground loop that
 // switches to another saved account when the active one nears its 5-hour or weekly limit.
 // Run here as a user service; it names no account, cswap keeps its own list.
@@ -250,7 +257,7 @@ export default {
       key: 'AGENT_CLIS',
       type: 'multi',
       message: 'CLIs to install',
-      default: DEFAULTS,
+      default: defaultClis,
       choices: Object.entries(TOOLS).map(([value, t]) => ({ value, label: `${value.padEnd(20)} ${t.about}` })),
     },
     {
