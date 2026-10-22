@@ -110,7 +110,9 @@ The only prerequisite is Node.js 20+; the entry script offers to install it
 (per-user with nvm on Linux/macOS, with winget on Windows). Before anything is installed,
 the setup shows one short screen: what you get, in a few plain lines, starting from the
 recommended picks (`./install.sh --list` shows them as `default: yes`). Press Enter to start:
-every question then takes its recommended answer. Type `c` to choose for yourself: you
+every question then takes its recommended answer. On Linux (and Linux inside Windows) your
+computer password is asked once, just before the install starts, and kept fresh until the
+end, so nothing stops halfway to ask for it again. Type `c` to choose for yourself: you
 pick modules and every question is asked up front (in a list, the arrow keys move, Space
 ticks or unticks, Enter confirms; typed numbers tick or untick those items; the CLI list
 starts with the tools already on your machine ticked). Your saved answers always win over
