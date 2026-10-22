@@ -16,16 +16,21 @@ const home = fs.mkdtempSync(path.join(os.tmpdir(), 'aiws-signin-'));
 process.env.HOME = home;
 process.env.USERPROFILE = home;
 process.env.NO_COLOR = '1';
+// Keys come from the environment first; none may leak in from the machine running the tests.
+for (const k of ['CLICKUP_TOKEN', 'OPENROUTER_API_KEY', 'CONTEXT7_API_KEY']) delete process.env[k];
 
 const { Context, detectPlatform } = await import('../lib/context.mjs');
-const { ENTER_CLAUDE, ENTER_OTHER, laterLines, runSignIns, signInLines } = await import('../lib/signin.mjs');
+const { ENTER_CLAUDE, ENTER_OTHER, KEYS_HEAD, laterLines, runKeys, runSignIns, signInLines } = await import('../lib/signin.mjs');
 const core = (await import('../modules/core/module.mjs')).default;
 const claudeCode = (await import('../modules/claude-code/module.mjs')).default;
 const agentClis = (await import('../modules/agent-clis/module.mjs')).default;
+const clickup = (await import('../modules/clickup/module.mjs')).default;
+const openrouter = (await import('../modules/openrouter/module.mjs')).default;
+const mcpServers = (await import('../modules/mcp-servers/module.mjs')).default;
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-function fakePrompter(replies = []) {
+function fakePrompter(replies = [], secrets = []) {
   const asked = [];
   return {
     asked,
@@ -38,7 +43,10 @@ function fakePrompter(replies = []) {
       return q.type === 'confirm' ? true : def;
     },
     multi: async (_m, _c, ticked) => ticked,
-    secret: async () => '',
+    secret: async (text) => {
+      asked.push(text);
+      return secrets.shift() ?? '';
+    },
     release() {},
   };
 }
@@ -139,4 +147,61 @@ test('--yes: no sign-in screen; every sign-in stays a to-do', () => {
   assert.doesNotMatch(r.stdout, /Almost done|Later, when you want them/);
   assert.match(r.stdout, /claude-code: run `claude` once and sign in/);
   assert.match(r.stdout, /core: gh auth login/);
+});
+
+// The parts that need a key, picked under customise: a dry run at a terminal on simulated macOS.
+async function runWithKeys({ interactive = true, secrets = [] } = {}) {
+  const prompter = fakePrompter([], secrets);
+  const answers = new Map(Object.entries({ MCP_SERVERS: 'context7', CLICKUP_DEFAULT_LIST: 'Inbox' }));
+  const ctx = new Context({ platform: detectPlatform('macos'), dryRun: true, interactive, answers, prompter, repoRoot });
+  ctx.acceptPlan = true;
+  const parts = [mcpServers, clickup, openrouter];
+  const recs = {};
+  const { out } = await quietly(async () => {
+    for (const m of parts) for (const q of m.questions) if (!q.when || q.when(ctx)) await ctx.ask(q);
+    assert.deepEqual(prompter.asked, [], 'no key is asked among the questions');
+    for (const m of parts) {
+      recs[m.name] = ctx.beginModule(m.name);
+      await m.install(ctx);
+    }
+    assert.deepEqual(prompter.asked, [], 'nothing is asked while the install runs');
+    await runKeys(ctx);
+  });
+  return { ctx, prompter, out, recs };
+}
+
+test('keys wait for the last screen: a pasted one is used, an empty one becomes a to-do', async () => {
+  const pasted = ['ctx7-test-value', 'cu-test-value', ''];
+  const { ctx, prompter, out, recs } = await runWithKeys({ secrets: [...pasted] });
+  assert.deepEqual(ctx.keys.map((k) => k.name), ['Context7', 'ClickUp', 'OpenRouter']);
+  assert.deepEqual(prompter.asked, [
+    '    Context7 key (on context7.com: Dashboard): ',
+    '    ClickUp key (in ClickUp: Settings, Apps): ',
+    '    OpenRouter key (on openrouter.ai: Keys): ',
+  ]);
+  assert.ok(out.includes(['  Almost done.', ...KEYS_HEAD].join('\n')));
+  assert.match(out, /would run: claude mcp add --scope user --header "Authorization: Bearer \*\*\*" --transport http context7/);
+  assert.match(out, /would run: clickup-axi auth login/);
+  assert.match(out, /would run: clickup-axi config set default_list "Inbox"/);
+  for (const v of pasted.filter(Boolean)) assert.ok(!out.includes(v), 'a key is never printed');
+  assert.match(recs.openrouter.todos.join('\n'), /put your OpenRouter key in/);
+  assert.deepEqual(recs.clickup.todos, []);
+  assert.deepEqual(recs['mcp-servers'].todos, []);
+});
+
+test('keys left for later: Context7 is added without one, ClickUp and its list become to-dos', async () => {
+  const { out, recs } = await runWithKeys();
+  assert.match(out, /would run: claude mcp add --scope user --transport http context7/);
+  assert.doesNotMatch(out, /clickup-axi auth login|default_list/);
+  assert.match(recs.clickup.todos.join('\n'), /clickup-axi auth login .*then: clickup-axi config set default_list "Inbox"/);
+});
+
+test('--yes: no key screen; missing keys stay to-dos as before', async () => {
+  const { ctx, prompter, out, recs } = await runWithKeys({ interactive: false });
+  assert.deepEqual(ctx.keys, []);
+  assert.deepEqual(prompter.asked, []);
+  assert.doesNotMatch(out, /These need a key/);
+  assert.match(out, /would run: claude mcp add --scope user --transport http context7/);
+  assert.match(recs.clickup.todos.join('\n'), /clickup-axi auth login/);
+  assert.match(recs.openrouter.todos.join('\n'), /put your OpenRouter key in/);
 });

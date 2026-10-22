@@ -12,7 +12,7 @@ A public, cross-platform installer template. `install.sh` (Linux, macOS, WSL) an
 - Always `--dry-run` first. `--platform linux|macos|wsl|windows` simulates another
   OS, only with `--dry-run`; that is how every platform's plan is tested on one machine.
 - Secrets come only from environment variables (`CLICKUP_TOKEN`, `CONTEXT7_API_KEY`, `OPENROUTER_API_KEY`)
-  or hidden prompts, never answers files.
+  or a hidden paste on the last screen at a terminal (`ctx.keyAtEnd`), never answers files.
 - Exit status: 0 ok, 1 a step failed (see the summary), 2 usage or config error.
 - Without `--answers`, `answers.env` (gitignored) is read and, on a real run, saved back
   merged: earlier answers kept, new questions added, keys no question uses dropped.
