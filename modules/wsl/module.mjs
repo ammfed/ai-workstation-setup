@@ -182,7 +182,7 @@ export default {
       const ask = ctx.terminal;
       if (ask) ctx.info(`Ubuntu asks for a password for your Linux user "${user}" (you type it twice; nothing shows while typing)`);
       const add = ask ? `adduser --gecos ${user} ${user}` : `adduser --disabled-password --gecos ${user} ${user}`;
-      ctx.run(inLinux(`id -u ${user} >/dev/null 2>&1 || ${add}; usermod -aG sudo ${user} && { grep -q '^default=' /etc/wsl.conf 2>/dev/null || printf '\\n[user]\\ndefault=${user}\\n' >> /etc/wsl.conf; }`, 'root'));
+      ctx.run(inLinux(`id -u ${user} >/dev/null 2>&1 || ${add}; usermod -aG sudo ${user} && { grep -q '^default=' /etc/wsl.conf 2>/dev/null || printf '\\n[user]\\ndefault=${user}\\n' >> /etc/wsl.conf; }`, 'root'), { show: ask });
       if (!ask) ctx.todo(`choose your Linux password: wsl.exe -u root passwd ${user}   (in PowerShell; sudo inside Ubuntu asks for it)`);
       ctx.run(`wsl.exe --terminate ${name}`); // the default user takes effect once the distribution restarts
       return passed(`Linux user ${user} is the default`);

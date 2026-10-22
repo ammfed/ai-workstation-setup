@@ -121,7 +121,10 @@ terminal no sign-in or key interrupts the install: they all wait for one screen 
 where Claude's sign-in opens your browser and any key a picked part needs (ClickUp,
 OpenRouter, Context7) is pasted hidden, or left for later with Enter. GitHub and Context7 are listed there under "Later,
 when you want them" (pick them under `c` to sign in at the end of the first run); running
-the setup again offers them. The install ends with a summary of what was done, skipped,
+the setup again offers them. While it installs, a terminal shows one line per group with a
+word for its state (done, now, did not work) and nothing to answer; the step-by-step detail
+and command output go to `setup-notes.md` in your home folder (a dry run writes it to a
+temporary folder and names it). The install ends with a summary of what was done, skipped,
 failed, and what is left for you (with `--yes`, every sign-in is listed there). When a tool
 lands in a folder your shell does not have on PATH yet (such as `~/.local/bin`), the setup
 adds one PATH line to your shell profile, so a new terminal finds it.
@@ -129,7 +132,8 @@ adds one PATH line to your shell profile, so a new terminal finds it.
 Re-running is safe: installed tools are detected and skipped (tools that can prove
 they work without a sign-in are also given a quick real check), config edits only
 happen when something differs, and a changed file you own is never replaced
-without asking (a timestamped `.bak-*` copy is kept when it is). With `--yes`, a
+without asking (a timestamped `.bak-*` copy is kept when it is). With `--yes`, and at a
+terminal while the install runs (it asks nothing then), a
 script or file the setup shipped is refreshed when your copy is an older version it
 shipped (known from a hash list in `~/.config/ai-workstation-setup/shipped.json` and
 from this clone's git history); a copy you edited is left alone. Your answers are

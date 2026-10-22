@@ -27,7 +27,7 @@ export function withKey(text, key) {
 function storeKey(ctx, file, current, key) {
   const next = withKey(current, key);
   if (current === next) return ctx.ok(`${file} already holds this key`);
-  if (ctx.dryRun) return console.log(`  ~ would store the key in ${file} (mode 600)`);
+  if (ctx.dryRun) return ctx.say(`  ~ would store the key in ${file} (mode 600)`);
   ctx.backup(file);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, next, { mode: 0o600 });
