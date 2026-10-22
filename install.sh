@@ -2,7 +2,7 @@
 # install.sh - entry point on Linux, macOS and WSL.
 #
 # The installer itself is lib/installer.mjs and needs Node.js 20+. This script
-# only makes sure Node exists (offering to install it per-user with nvm, so no
+# only makes sure Node exists (installing it per-user with nvm when missing, so no
 # sudo and no root-owned npm globals), then hands every argument over.
 # Run ./install.sh --help for the options.
 
@@ -55,9 +55,23 @@ if [ "$(node_major)" -lt "$node_min" ]; then
   load_nvm
 fi
 
+install_node() {
+  curl -o- "https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh" | bash && load_nvm && nvm install --lts
+}
+
+# Node.js is installed without a question when missing: nothing else can be shown without it,
+# and it is for this user only. At a terminal two plain lines say so and nvm's own output goes
+# to a log that is shown only when it fails; with --yes the output prints as it happens.
 if [ "$(node_major)" -lt "$node_min" ]; then
-  echo "The installer needs Node.js ${node_min}+ (found: $(node --version 2>/dev/null || echo none))."
   install_cmd="curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh | bash && nvm install --lts"
+  if [ "$assume_yes" -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then
+    echo "  Getting ready: installing Node.js, a small helper this setup runs on."
+    echo "  It is for your user only and takes a minute or two."
+    quiet=1
+  else
+    echo "The installer needs Node.js ${node_min}+ (found: $(node --version 2>/dev/null || echo none))."
+    quiet=0
+  fi
   if [ "$dry_run" -eq 1 ]; then
     echo "  ~ would run: $install_cmd"
     echo "The rest of the plan needs Node.js. Install it (or run without --dry-run) and try again."
@@ -67,17 +81,22 @@ if [ "$(node_major)" -lt "$node_min" ]; then
     echo "curl is needed to install Node.js. Install curl with your package manager, or install Node.js ${node_min}+ yourself, then re-run." >&2
     exit 1
   fi
-  if [ "$assume_yes" -eq 0 ]; then
-    if [ ! -t 0 ]; then
-      echo "No terminal to ask on. Re-run with --yes to install Node.js with nvm, or install Node.js ${node_min}+ first." >&2
+  if [ "$assume_yes" -eq 0 ] && [ ! -t 0 ]; then
+    echo "No terminal to ask on. Re-run with --yes to install Node.js with nvm, or install Node.js ${node_min}+ first." >&2
+    exit 1
+  fi
+  if [ "$quiet" -eq 1 ]; then
+    log=$(mktemp "${TMPDIR:-/tmp}/node-install.XXXXXX")
+    if ! install_node >"$log" 2>&1; then
+      tail -n 20 "$log" >&2
+      echo "Node.js did not install. The whole log is in $log" >&2
       exit 1
     fi
-    read -r -p "Install Node.js LTS for your user with nvm (https://github.com/nvm-sh/nvm)? [Y/n] " reply
-    case "$reply" in [nN]*) echo "Install Node.js ${node_min}+ and re-run."; exit 1 ;; esac
+    rm -f "$log"
+  else
+    install_node
   fi
-  curl -o- "https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh" | bash
   load_nvm
-  nvm install --lts
   if [ "$(node_major)" -lt "$node_min" ]; then
     echo "Node.js is still not available. Open a new terminal and re-run ./install.sh." >&2
     exit 1

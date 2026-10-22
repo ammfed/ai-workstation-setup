@@ -106,8 +106,9 @@ What runs inside WSL, what runs on Windows, and how the two sides connect (links
 pages, the vault, the browser tools, systemd, PATH, DNS, GPU) is in
 [docs/windows-wsl.md](docs/windows-wsl.md).
 
-The only prerequisite is Node.js 20+; the entry script offers to install it
-(per-user with nvm on Linux/macOS, with winget on Windows). Before anything is installed,
+The only prerequisite is Node.js 20+; when it is missing the entry script installs it
+without asking (per-user with nvm on Linux/macOS, with winget on Windows), saying so in two
+plain lines at a terminal. Before anything is installed,
 the setup shows one short screen: what you get, in a few plain lines, starting from the
 recommended picks (`./install.sh --list` shows them as `default: yes`). Press Enter to start:
 every question then takes its recommended answer. On Linux (and Linux inside Windows) your

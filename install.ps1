@@ -45,8 +45,16 @@ function Get-NodeMajor {
     try { return [int](& node -p "process.versions.node.split('.')[0]") } catch { return 0 }
 }
 
+# Node.js is installed without a question when missing: nothing else can be shown without it.
+# At a terminal two plain lines say so; with --yes (or the recommended choice above) the
+# technical line prints as before.
 if ((Get-NodeMajor) -lt $nodeMin) {
-    Write-Host "The installer needs Node.js $nodeMin+."
+    if ($assumeYes -or [Console]::IsInputRedirected) {
+        Write-Host "The installer needs Node.js $nodeMin+."
+    } else {
+        Write-Host '  Getting ready: installing Node.js, a small helper this setup runs on.'
+        Write-Host '  It takes a minute or two.'
+    }
     $installCmd = 'winget install --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements'
     if ($dryRun) {
         Write-Host "  ~ would run: $installCmd"
@@ -56,10 +64,6 @@ if ((Get-NodeMajor) -lt $nodeMin) {
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
         Write-Host 'winget is not available. Install Node.js LTS from https://nodejs.org and re-run.'
         exit 1
-    }
-    if (-not $assumeYes) {
-        $reply = Read-Host 'Install Node.js LTS with winget now? [Y/n]'
-        if ($reply -match '^(n|no)$') { Write-Host "Install Node.js $nodeMin+ and re-run."; exit 1 }
     }
     winget install --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements
     $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
