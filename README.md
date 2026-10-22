@@ -140,8 +140,10 @@ terminal while the install runs (it asks nothing then), a
 script or file the setup shipped is refreshed when your copy is an older version it
 shipped (known from a hash list in `~/.config/ai-workstation-setup/shipped.json` and
 from this clone's git history); a copy you edited is left alone. Your answers are
-saved to `answers.env` (gitignored), so a re-run asks only questions you have not
-answered yet.
+saved to `answers.env` (gitignored), so a re-run keeps them. At a terminal a re-run opens
+with "Welcome back! Your earlier choices are kept.", says how many new settings take their
+recommended answers, and Enter updates (type `c` to change your choices and answer the new
+questions yourself).
 
 ## Getting updates
 
@@ -155,7 +157,8 @@ answered yet.
 
 What the rerun does:
 
-- It reuses your answers in `answers.env` and asks only the questions that are new.
+- It reuses your answers in `answers.env`. New questions take their recommended answer when
+  you press Enter (or run with `--yes`); type `c` to answer them yourself.
 - It installs the skills that are new since your last run, and updates the skills you have to
   their latest upstream version (it asks once, `--yes` updates, and an update replaces local
   edits to those skills). A skill you removed from `SKILLS` in `answers.env` stays off.

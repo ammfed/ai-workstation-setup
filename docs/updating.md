@@ -26,8 +26,9 @@ look first), then `.\install.ps1`.
 not possible it stops, says why, and changes nothing. It never forces, never merges, never
 rebases, never stashes and never throws anything away.
 
-Running the installer again reuses your saved answers: it asks only questions that are new
-since your last run, drops answers to questions that no longer exist, and never asks again
+Running the installer again reuses your saved answers. At a terminal it says how many settings
+are new since your last run; Enter gives them their recommended answers, and `c` lets you
+answer them yourself. It drops answers to questions that no longer exist, and never asks again
 or resets something you already answered. One answer grows: skills added to the default set
 since your last run are added to `SKILLS` (the installer keeps the list it offered in
 `SKILLS_OFFERED`), while a skill you removed stays off. To change an answer, edit that line in

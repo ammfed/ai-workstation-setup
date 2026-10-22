@@ -12,7 +12,7 @@ import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Context, detectPlatform } from '../lib/context.mjs';
-import { GROUPS, START_LINE, confirmPlan, planLines, selectModules, youGetLines } from '../lib/plan.mjs';
+import { GROUPS, START_LINE, UPDATE_LINE, confirmPlan, newSettings, planLines, selectModules, youGetLines } from '../lib/plan.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -169,6 +169,78 @@ test('saved answers win over the recommended picks and answers', async () => {
   assert.deepEqual(value.map((m) => m.name), ['core', 'second-brain']);
   assert.match(out, /Welcome back! Your earlier choices are kept\./);
   assert.equal(await ctx.ask({ key: 'Q_SAVED', type: 'text', message: 'q', default: 'recommended' }), 'mine');
+});
+
+// Every question a part asks, each answered as a first run would (saved answers are what a run keeps).
+function firstRunAnswers(names) {
+  const ctx = ctxFor().ctx;
+  const answers = { MODULES: names.join(',') };
+  for (const m of modules.filter((x) => names.includes(x.name))) {
+    for (const q of typeof m.questions === 'function' ? m.questions(ctx) : m.questions) {
+      if (q.type === 'secret') continue;
+      const v = typeof q.default === 'function' ? q.default(ctx) : q.default;
+      answers[q.key] = Array.isArray(v) ? v.join(',') : typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v ?? '');
+    }
+  }
+  return answers;
+}
+
+test('running it again: welcome back, the count of new settings, and Enter to update', async () => {
+  const answers = firstRunAnswers(recommended);
+  delete answers.VAULT_APP;
+  delete answers.SKILLS;
+  const { ctx, prompter } = ctxFor({ replies: [''], answers });
+  const { value, out } = await quietly(() => selectModules(ctx, modules));
+  assert.deepEqual(value.map((m) => m.name), recommended);
+  const screen = out.trim().split('\n').map((l) => l.trimEnd());
+  assert.deepEqual(screen, ['Welcome back! Your earlier choices are kept.', '  2 new settings take their recommended answers.']);
+  assert.equal(prompter.asked.length, 1);
+  assert.equal(prompter.asked[0].trim(), UPDATE_LINE);
+  assert.equal(UPDATE_LINE, 'Press Enter to update, or type c to change your choices.');
+  assert.equal(ctx.acceptPlan, true);
+  assert.doesNotMatch(out, /You get|password/);
+});
+
+test('running it again counts one new setting in the singular, and none at all without a line', async () => {
+  const answers = firstRunAnswers(recommended);
+  const none = await quietly(() => selectModules(ctxFor({ replies: [''], answers }).ctx, modules));
+  assert.deepEqual(none.out.trim().split('\n'), ['Welcome back! Your earlier choices are kept.']);
+  delete answers.VAULT_APP;
+  const one = await quietly(() => selectModules(ctxFor({ replies: [''], answers }).ctx, modules));
+  assert.match(one.out, /^  1 new setting takes its recommended answer\.$/m);
+});
+
+test('a follow-up question counts only when the saved answer it follows brings it up', () => {
+  const picked = modules.filter((m) => m.name === 'agent-clis');
+  const answers = firstRunAnswers(['agent-clis']);
+  assert.match(answers.AGENT_CLIS, /herdr/);
+  assert.equal(newSettings(ctxFor({ answers }).ctx, picked), 0, 'every saved answer kept: nothing new');
+  // herdr left out of the saved tools: its two follow-ups are not brought up, so not counted.
+  const without = { ...answers, AGENT_CLIS: answers.AGENT_CLIS.split(',').filter((x) => x !== 'herdr').join(',') };
+  delete without.HERDR_CLAUDE_INTEGRATION;
+  delete without.HERDR_SETTINGS;
+  assert.equal(newSettings(ctxFor({ answers: without }).ctx, picked), 0);
+  // The tool list itself new: its default brings herdr in, so it and both follow-ups count.
+  const fresh = { ...answers };
+  for (const k of ['AGENT_CLIS', 'HERDR_CLAUDE_INTEGRATION', 'HERDR_SETTINGS']) delete fresh[k];
+  const ctx = ctxFor({ answers: fresh }).ctx;
+  assert.equal(newSettings(ctx, picked), 3);
+  assert.deepEqual(ctx.values, {}, 'counting leaves no answers behind');
+});
+
+test('running it again under --yes still lists what you get, for an assistant reading', async () => {
+  const answers = firstRunAnswers(recommended);
+  delete answers.VAULT_APP;
+  const { out } = await quietly(() => selectModules(ctxFor({ interactive: false, answers }).ctx, modules));
+  assert.match(out, /Welcome back! Your earlier choices are kept\.\n  1 new setting takes its recommended answer\.\n\n  You get:/);
+});
+
+test('running it again, c still opens the picker ticked with the saved picks', async () => {
+  const { ctx, prompter } = ctxFor({ replies: ['c'], answers: { MODULES: 'core,skills' }, picked: ['core'] });
+  const { value } = await quietly(() => selectModules(ctx, modules));
+  assert.deepEqual(prompter.asked[1].ticked, ['core', 'skills']);
+  assert.deepEqual(value.map((m) => m.name), ['core']);
+  assert.equal(ctx.acceptPlan, false);
 });
 
 test('the first screen hides the system line and the parts this system cannot run', async () => {
