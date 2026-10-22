@@ -360,6 +360,18 @@ test('the workflow-playbook skill is written to ~/.claude/skills with valid SKIL
   }
 });
 
+test('the playbook sets the review stakes once per project at capture: full run for public or stakeholder work, self-review for private and throwaway work', () => {
+  const text = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
+  const capture = text.split('\n').find((l) => l.startsWith('| 1. Capture |'));
+  assert.match(capture, /review stakes once \(rule 2\.8\)/, 'the capture phase points at the stakes rule');
+  const rule = text.slice(text.indexOf('8. **Set the review stakes once per project, at capture.**'), text.indexOf('## 3. Evidence and research'));
+  assert.ok(rule.length > 100, 'rule 2.8 is in section 2');
+  assert.match(rule, /\*\*Full review run:\*\* a public repository, or anything stakeholders/);
+  assert.match(rule, /\*\*Self-review:\*\* private notes and throwaway prototypes/);
+  assert.match(rule, /When unsure, pick the full run/);
+  assert.match(rule, /an agent never lowers them on its own/);
+});
+
 test('an OpenWhispr AppImage in ~/.local/opt or ~/Applications is found', () => {
   const home = tempHome();
   assert.equal(findOpenWhisprAppImage(home), null);

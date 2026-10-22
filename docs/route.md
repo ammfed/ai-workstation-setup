@@ -13,7 +13,9 @@ phases from an idea to shipped and improved, stage gates, a map that always show
 next step, evidence and research at every stage, four review points with checks that run
 before any page reaches you, when to ask or act, an improve step after every merge, and
 the steps for taking a weak prototype to a liked wireframe direction, an approved
-journey map and an aligned rules list. Its phase table splits these six steps into the
+journey map and an aligned rules list. At capture it sets the review stakes once per
+project: public repositories and anything stakeholders see get the full review run,
+private notes and throwaway prototypes get a self-review. Its phase table splits these six steps into the
 ten phases, with the early phases (requirements, whether it already exists, vision)
 before anything is built, and says which phases each kind of work needs. Its
 `principles/checks.md` lists the design and writing checks (attention, time, words,

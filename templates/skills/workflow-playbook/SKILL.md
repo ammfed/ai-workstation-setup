@@ -13,7 +13,7 @@ Every piece of work runs through some of these ten phases, in this order. Each p
 
 | Phase | Route step | Goal | Leads | Owner | Hands to | The next phase starts when |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1. Capture | Plan | Write the idea down, judge whether it fits and when, pick the phases from the table below | The coordinator | wayfinder | A map with every phase of the path queued as an item (rule 2.4) | The map is written. The first item has no blocker |
+| 1. Capture | Plan | Write the idea down, judge whether it fits and when, pick the phases from the table below and set the review stakes once (rule 2.8) | The coordinator | wayfinder | A map with every phase of the path queued as an item (rule 2.4) | The map is written. The first item has no blocker |
 | 2. Requirements | Decide | Turn a vague goal into requirements the owner agrees with | A skill, in rounds with the owner | grilling, with domain-modeling in a repo | Requirements, and a glossary in a repo | The owner agrees to the last round (gate) |
 | 3. Does it already exist | Decide | Find products, tools or people that already do this | A research worker, beside phase 2 | research | A report and one card: build, reuse or stop | The card is answered in the next requirements round |
 | 4. Vision | Decide | Fix the destination and the test for which later ideas to accept | A skill, with the owner | vision | A vision file, once per project | The owner approves it. This closes the early phases gate |
@@ -75,6 +75,12 @@ Phases 2 to 4 are the early phases. They run before anything is built, and the e
    Why: an item with neither stalls without anyone noticing, and a habit the owner never approved is work they did not choose.
 7. **Ask a few questions, then keep going.** Ask the owner only the few questions that set the direction, each with a recommendation. When a choice can be undone, go ahead on the recommendation and fold in the answer when it comes. When it cannot, hold only that branch and keep the rest moving. Decisions only the owner can make (dates, money, people, taste, anything hard to undo) and every merge never start on their own.
    Why: waiting on every answer stalls the work, and acting on an answer that cannot be undone takes a decision away from the owner.
+8. **Set the review stakes once per project, at capture.** The capture line says which of two review levels the project gets, and every later change in that project uses it without asking again:
+   - **Full review run:** a public repository, or anything stakeholders or other people will see. Every change goes through the full validation and review run before it reaches them.
+   - **Self-review:** private notes and throwaway prototypes. The worker checks its own change against the brief and the checks of section 4, and skips the full run.
+
+   When unsure, pick the full run. When a project moves up (a prototype becomes the product, private notes are shared), say so in the status and switch it to the full run before the next change ships. A prototype that becomes the product gets the full run in phase 7. The owner may change the stakes at any time; an agent never lowers them on its own.
+   Why: the full run costs time and usage limits that throwaway work does not repay, and a level set once stops each change from being argued again. Choosing it change by change is a guess an automatic router cannot make well.
 
 ## 3. Evidence and research
 
