@@ -288,6 +288,14 @@ test('the card template ships its fonts, colours, waiting strip and phone layout
   assert.match(html, /showModal\(\)/, 'a picture opens full size on tap');
 });
 
+test('the card template labels its note box and hides an empty waiting strip', () => {
+  const html = fs.readFileSync(path.join(repoRoot, 'templates/preferences/decision-cards.html'), 'utf8');
+  assert.match(html, /<label[^>]*for="note"[^>]*>Note<\/label>\s*<textarea id="note"/, 'a visible label sits above the note box');
+  // The strip is display:flex, which beats the hidden attribute unless hidden is forced.
+  assert.match(html, /\[hidden\]\{display:none!important\}/);
+  assert.match(html, /<div class="waiting" id="waiting" hidden>/);
+});
+
 test('the card template is light by default with a guarded dark switch', () => {
   const html = fs.readFileSync(path.join(repoRoot, 'templates/preferences/decision-cards.html'), 'utf8');
   assert.doesNotMatch(html, /prefers-color-scheme\s*:\s*dark/, 'the browser dark setting is not followed');

@@ -63,6 +63,7 @@
     --accent:#B68A35; --accent-ink:#D9B56A; --accent-deep:#E6C887; --accent-soft:#2B2618; --on-accent:#16171A;
     --ok:#7FD49A; --ok-soft:#1F3327; --warn:#F0A35E; --warn-soft:#3A3220; }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 var(--body);padding-block:32px}
 .wrap{max-width:1680px;margin:0 auto;padding-inline:clamp(16px,3vw,32px)}
 header{width:100%}
@@ -108,6 +109,8 @@ h1{font-size:clamp(34px,4vw,52px);font-weight:800;line-height:1.1;letter-spacing
 details{border-top:1px solid var(--line);padding-top:8px;color:var(--muted)}
 summary{cursor:pointer;color:var(--ink);font-weight:500}
 textarea{width:100%;font:inherit;font-size:14px;border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin-top:12px;background:var(--panel);color:var(--ink)}
+.note-label{display:block;margin-top:12px;color:var(--muted)}
+.note-label+textarea{margin-top:4px}
 button.primary{font:inherit;font-weight:500;background:var(--accent);color:var(--on-accent);border:0;border-radius:12px;padding:10px 18px;margin-top:12px;cursor:pointer}
 button.primary:disabled{opacity:.4;cursor:not-allowed}
 .recap li{margin:4px 0}
@@ -303,7 +306,8 @@ function drawCard() {
     <div class="opts">${c.options.map(([v, l]) => `<label><input type="radio" name="opt" value="${esc(v)}"><span>${esc(l)}</span>${v === c.rec ? '<span class="rec">Recommended</span>' : ''}</label>`).join('')}</div>
     ${c.evidence ? `<p class="evidence">${esc(c.evidence)}</p>` : ''}
     ${c.why ? `<details><summary>Why</summary><p>${c.why}</p></details>` : ''}
-    <textarea id="note" rows="2" placeholder="Note"></textarea>
+    <label class="label note-label" for="note">Note</label>
+    <textarea id="note" rows="2" placeholder="Optional"></textarea>
     <button type="button" class="primary" id="next" disabled>Next</button>`;
   $('card').querySelectorAll('input[type=radio]').forEach((r) => r.addEventListener('change', () => {
     $('next').disabled = false;
