@@ -40,7 +40,8 @@ packages their publishers ship.
 
 `lib/wsl.mjs` holds the same map (`WSL_SIDES`), and `test/wsl.test.mjs` checks that this
 table, the code and each module's declared platforms agree. Run inside WSL, the installer's
-summary lists the pieces that belong on the Windows side.
+summary (with `--yes`) or `setup-notes.md` (at a terminal) lists the pieces that belong on
+the Windows side.
 
 ## What the Windows side does (`.\install.ps1`, choice 1)
 

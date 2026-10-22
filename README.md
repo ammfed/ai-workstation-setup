@@ -124,8 +124,11 @@ when you want them" (pick them under `c` to sign in at the end of the first run)
 the setup again offers them. While it installs, a terminal shows one line per group with a
 word for its state (done, now, did not work) and nothing to answer; the step-by-step detail
 and command output go to `setup-notes.md` in your home folder (a dry run writes it to a
-temporary folder and names it). The install ends with a summary of what was done, skipped,
-failed, and what is left for you (with `--yes`, every sign-in is listed there). When a tool
+temporary folder and names it). At a terminal the last screen says "All set! Claude is
+ready." and how to start it, or "Nearly all set." naming what did not work; the summary and
+what is left for you go into `setup-notes.md`, worded so Claude can read it and help you
+finish. With `--yes` the install ends with a printed summary of what was done, skipped,
+failed, and what is left for you (every sign-in is listed there). When a tool
 lands in a folder your shell does not have on PATH yet (such as `~/.local/bin`), the setup
 adds one PATH line to your shell profile, so a new terminal finds it.
 
