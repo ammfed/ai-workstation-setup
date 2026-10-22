@@ -205,3 +205,42 @@ test('ingest: a past deadline starts no file, and a file cut off by the deadline
   removeVault(root);
   fs.rmSync(raw, { recursive: true, force: true });
 });
+
+// The Obsidian app comes with the notes folder by default, on every system that can run it.
+function dryRun(platform, ...args) {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'home-'));
+  const r = spawnSync(
+    process.execPath,
+    [path.join(repoRoot, 'lib/installer.mjs'), '--dry-run', '--yes', '--platform', platform, '--modules', 'second-brain', ...args],
+    { encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: home, NO_COLOR: '1' }, stdin: 'ignore' },
+  );
+  fs.rmSync(home, { recursive: true, force: true });
+  return { code: r.status, out: r.stdout + r.stderr };
+}
+
+test('the Obsidian app is installed with the notes folder on Linux, Mac and Windows by default', { skip: process.platform === 'win32' && 'simulates other systems' }, () => {
+  const want = {
+    linux: /would run: flatpak install -y flathub md\.obsidian\.Obsidian/,
+    macos: /would run: brew install --cask obsidian/,
+    windows: /would run: winget install --id Obsidian\.Obsidian -e/,
+    wsl: /to do: install Obsidian on the Windows side/,
+  };
+  for (const [platform, re] of Object.entries(want)) {
+    const { code, out } = dryRun(platform);
+    assert.equal(code, 0, out);
+    assert.match(out, re, platform);
+  }
+  const { out } = dryRun('macos', '--answers', path.join(repoRoot, 'answers.example.env'));
+  assert.match(out, /brew install --cask obsidian/, 'the example answers keep it on');
+});
+
+test('a saved "no" for the Obsidian app still wins', { skip: process.platform === 'win32' && 'simulates other systems' }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'answers-'));
+  const file = path.join(dir, 'answers.env');
+  fs.writeFileSync(file, 'VAULT_APP=no\n');
+  const { code, out } = dryRun('macos', '--answers', file);
+  fs.rmSync(dir, { recursive: true, force: true });
+  assert.equal(code, 0, out);
+  assert.doesNotMatch(out, /cask obsidian/);
+  assert.doesNotMatch(out, /with the Obsidian app/);
+});

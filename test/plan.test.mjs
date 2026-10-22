@@ -88,7 +88,7 @@ const HELLO = `  Hi! This sets up an AI assistant on your computer.
     ✓ The tools it needs to do real work for you
     ✓ Skills that help it plan with you and check its own work
     ✓ Good habits: plain words, and it checks with you before big steps
-    ✓ A notes folder it can read and keep tidy
+    ✓ A notes folder it can read and keep tidy, with the Obsidian app
     ✓ A helper that runs several AI workers for you
 
   Your computer asks for your password once. You sign in at the end.
