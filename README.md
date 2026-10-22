@@ -113,9 +113,12 @@ recommended picks (`./install.sh --list` shows them as `default: yes`). Press En
 every question then takes its recommended answer. On Linux (and Linux inside Windows) your
 computer password is asked once, just before the install starts, and kept fresh until the
 end, so nothing stops halfway to ask for it again. Type `c` to choose for yourself: you
-pick modules and every question is asked up front (in a list, the arrow keys move, Space
-ticks or unticks, Enter confirms; typed numbers tick or untick those items; the CLI list
-starts with the tools already on your machine ticked). Your saved answers always win over
+tick the parts you want in a plain list, the recommended ones first and "More you can add"
+below (the arrow keys move, Space ticks or unticks, Enter goes on). Then "Keep the
+recommended settings for what you picked?": Enter keeps them, so nothing more is asked
+(except which outside connections, when you ticked those), and `d` asks every question of
+the picked parts up front (in a list, Space ticks; typed numbers tick or untick those items;
+the CLI list starts with the tools already on your machine ticked). Your saved answers always win over
 the recommended ones. With `--yes` the lines still print and the install goes ahead. At a
 terminal no sign-in or key interrupts the install: they all wait for one screen at the end,
 where Claude's sign-in opens your browser and any key a picked part needs (ClickUp,
@@ -142,7 +145,7 @@ shipped (known from a hash list in `~/.config/ai-workstation-setup/shipped.json`
 from this clone's git history); a copy you edited is left alone. Your answers are
 saved to `answers.env` (gitignored), so a re-run keeps them. At a terminal a re-run opens
 with "Welcome back! Your earlier choices are kept.", says how many new settings take their
-recommended answers, and Enter updates (type `c` to change your choices and answer the new
+recommended answers, and Enter updates (type `c` to change your picks, then `d` to answer the new
 questions yourself).
 
 ## Getting updates

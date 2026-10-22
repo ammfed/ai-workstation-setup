@@ -1,7 +1,7 @@
 // Tests for the first screen shown before anything is installed: the recommended picks are
 // selected by default, the screen lists what you get in plain words before any install step,
-// Enter goes ahead (every question takes its recommended answer), "c" opens the module picker
-// and the questions, and saved answers win.
+// Enter goes ahead (every question takes its recommended answer), "c" opens the picker of parts
+// and the second gate (Enter keeps the recommended settings, "d" asks each), and saved answers win.
 // Run: node --test test/plan.test.mjs
 
 import assert from 'node:assert/strict';
@@ -12,7 +12,8 @@ import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Context, detectPlatform } from '../lib/context.mjs';
-import { GROUPS, START_LINE, UPDATE_LINE, confirmPlan, newSettings, planLines, selectModules, youGetLines } from '../lib/plan.mjs';
+import { GROUPS, KEEP_LINES, PICKER_LINE, START_LINE, UPDATE_LINE, confirmKeep, confirmPlan, newSettings, pickerParts, planLines, selectModules, youGetLines } from '../lib/plan.mjs';
+import { pickerLines, pickerStart } from '../lib/prompt.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -37,12 +38,12 @@ function fakePrompter(replies, picked) {
       return replies.shift() ?? '';
     },
     multi: async (message, choices, ticked) => {
-      asked.push({ message, ticked });
+      asked.push({ message, choices, ticked });
       return picked ?? ticked;
     },
     ask: async (q) => {
       asked.push(q.key);
-      return 'asked';
+      return q.type === 'multi' ? [] : 'asked';
     },
   };
 }
@@ -144,17 +145,90 @@ test('Enter goes ahead: no module picker, and questions take their recommended a
   assert.deepEqual(prompter.asked.slice(1), ['Q_NONE'], 'only the question with no recommended answer is asked');
 });
 
-test('typing c opens the module picker, ticked with the recommended picks, then the questions', async () => {
-  const { ctx, prompter } = ctxFor({ replies: ['c'], picked: ['core', 'skills'] });
-  const { value, out } = await quietly(() => selectModules(ctx, modules));
+test('typing c opens the picker of parts in plain words, ticked with the recommended ones', async () => {
+  const { ctx, prompter } = ctxFor({ replies: ['c', ''] });
+  const { value } = await quietly(() => selectModules(ctx, modules));
   const picker = prompter.asked[1];
-  assert.equal(picker.message, 'Which modules should be set up?');
-  assert.deepEqual(picker.ticked, recommended);
-  assert.deepEqual(value.map((m) => m.name), ['core', 'skills']);
-  assert.deepEqual(ctx.values.MODULES, ['core', 'skills']);
-  assert.match(out, /Your picks:/);
+  assert.equal(picker.message, PICKER_LINE);
+  assert.equal(PICKER_LINE, 'Choose what to set up. Space ticks or unticks. Enter goes on.');
+  assert.deepEqual(picker.ticked, ['claude', 'tools', 'skills', 'habits', 'notes', 'helper']);
+  assert.deepEqual(value.map((m) => m.name), recommended, 'keeping the ticks keeps the recommended set');
+});
+
+test('the picker shows the design parts, recommended first, each heading once', () => {
+  const supported = modules.filter((m) => m.platforms.includes('linux'));
+  const parts = pickerParts(supported, 'linux');
+  const lines = pickerLines(PICKER_LINE, parts, pickerStart(parts, parts.filter((p) => p.recommended).map((p) => p.value)), { friend: true });
+  assert.deepEqual(lines.map((l) => l.replace(/^ >/, '  ')), [
+    '  Choose what to set up. Space ticks or unticks. Enter goes on.',
+    '',
+    '  Recommended',
+    '   [x] Claude and its settings',
+    '   [x] The tools it works with',
+    '   [x] Skills',
+    '   [x] Good habits',
+    '   [x] A notes folder',
+    '   [x] The helper for several workers',
+    '  More you can add',
+    '   [ ] Talk to it by voice',
+    '   [ ] ClickUp tasks',
+    '   [ ] A daily check of your work',
+    '   [ ] A running record with a live page',
+    '   [ ] A news digest every few hours',
+    '   [ ] The WezTerm terminal',
+    '   [ ] Extra desktop tools',
+    '   [ ] Learning from past sessions',
+    '   [ ] One OpenRouter key for the tools that use it',
+    '   [ ] Outside connections for Claude',
+  ]);
+  const covered = new Set(parts.flatMap((p) => p.modules));
+  for (const m of supported) assert.ok(covered.has(m.name), `${m.name} is reachable from the picker`);
+  // On Windows the helper is not offered, and Linux inside Windows shows its own summary.
+  const win = pickerParts(modules.filter((m) => m.platforms.includes('windows')), 'windows');
+  assert.ok(!win.some((p) => p.value === 'helper'));
+  assert.ok(win.some((p) => p.label === 'Linux inside Windows with all of this inside it' && !p.recommended));
+});
+
+test('customise, then Enter at the second gate: the picked parts take their recommended settings', async () => {
+  const { ctx, prompter } = ctxFor({ replies: ['c', ''], picked: ['claude', 'tools', 'voice'] });
+  const { value, out } = await quietly(() => selectModules(ctx, modules));
+  assert.deepEqual(value.map((m) => m.name), ['core', 'claude-code', 'agent-clis', 'mcp-servers', 'voice-mode']);
+  assert.match(out, /^  Keep the recommended settings for what you picked\?$/m);
+  assert.equal(prompter.asked[2].trim(), KEEP_LINES[1]);
+  assert.equal(KEEP_LINES[1], 'Press Enter to keep them, or type d to go through each one.');
+  assert.equal(ctx.acceptPlan, true);
+  assert.equal(await ctx.ask({ key: 'Q_PLAIN', type: 'text', message: 'q', default: 'recommended' }), 'recommended');
+  assert.equal(prompter.asked.length, 3, 'Enter, the picker and the gate: nothing else');
+});
+
+test('customise, then d: every question of the picked parts is asked', async () => {
+  const { ctx, prompter } = ctxFor({ replies: ['c', 'd'], picked: ['tools', 'skills'] });
+  const { value } = await quietly(() => selectModules(ctx, modules));
+  assert.deepEqual(value.map((m) => m.name), ['core', 'claude-code', 'agent-clis', 'mcp-servers', 'skills'], 'Claude comes along: the others need it');
+  assert.deepEqual(ctx.values.MODULES, value.map((m) => m.name));
   assert.equal(ctx.acceptPlan, false);
   assert.equal(await ctx.ask({ key: 'Q_PLAIN', type: 'text', message: 'q', default: 'recommended' }), 'asked');
+});
+
+test('ticking outside connections asks which ones, even with the recommended settings kept', async () => {
+  const { ctx, prompter } = ctxFor({ replies: ['c', ''], picked: ['claude', 'connections'] });
+  const { value } = await quietly(() => selectModules(ctx, modules));
+  assert.deepEqual(value.map((m) => m.name), ['core', 'claude-code', 'mcp-servers']);
+  assert.equal(ctx.acceptPlan, true);
+  const mcp = modules.find((m) => m.name === 'mcp-servers').questions[0];
+  await ctx.ask(mcp);
+  assert.deepEqual(prompter.asked.slice(3), ['MCP_SERVERS']);
+  // Not ticked: the tools part still brings the connections part along, silently with none.
+  const plain = ctxFor({ replies: ['c', ''], picked: ['claude', 'tools'] }).ctx;
+  await quietly(() => selectModules(plain, modules));
+  await plain.ask(mcp);
+  assert.equal(plain.prompter.asked.length, 3, 'which connections is not asked');
+});
+
+test('the second gate asks again on any other reply', async () => {
+  const prompter = fakePrompter(['what', 'D']);
+  assert.equal((await quietly(() => confirmKeep(prompter))).value, 'each');
+  assert.equal(prompter.asked.length, 2);
 });
 
 test('a reply that is neither Enter nor c is asked again', async () => {
@@ -235,12 +309,16 @@ test('running it again under --yes still lists what you get, for an assistant re
   assert.match(out, /Welcome back! Your earlier choices are kept\.\n  1 new setting takes its recommended answer\.\n\n  You get:/);
 });
 
-test('running it again, c still opens the picker ticked with the saved picks', async () => {
-  const { ctx, prompter } = ctxFor({ replies: ['c'], answers: { MODULES: 'core,skills' }, picked: ['core'] });
+test('running it again, c opens the picker ticked with the saved picks, and a saved answer still wins', async () => {
+  const { ctx, prompter } = ctxFor({ replies: ['c', 'd'], answers: { MODULES: 'core,skills', MCP_SERVERS: 'context7', Q_SAVED: 'mine' }, picked: ['tools'] });
   const { value } = await quietly(() => selectModules(ctx, modules));
-  assert.deepEqual(prompter.asked[1].ticked, ['core', 'skills']);
-  assert.deepEqual(value.map((m) => m.name), ['core']);
+  assert.deepEqual(prompter.asked[1].ticked, ['tools', 'skills']);
+  assert.deepEqual(value.map((m) => m.name), ['core', 'claude-code', 'agent-clis', 'mcp-servers']);
   assert.equal(ctx.acceptPlan, false);
+  assert.equal(await ctx.ask({ key: 'Q_SAVED', type: 'text', message: 'q', default: 'recommended' }), 'mine');
+  const ticked = ctxFor({ replies: ['c', ''], answers: { MODULES: 'core,mcp-servers', MCP_SERVERS: 'context7' } });
+  await quietly(() => selectModules(ticked.ctx, modules));
+  assert.deepEqual(ticked.prompter.asked[1].ticked, ['claude', 'tools', 'connections'], 'saved connections start ticked');
 });
 
 test('the first screen hides the system line and the parts this system cannot run', async () => {
