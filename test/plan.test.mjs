@@ -350,3 +350,34 @@ test('a dry run prints the first screen before any install step, also under --ye
   assert.ok(plan > 0 && firstStep > plan, r.stdout.slice(0, 2000));
   for (const name of recommended) assert.match(r.stdout, new RegExp(`\\n\\[${name}\\]`), name);
 });
+
+test('customise reaches every question: with every part ticked and d, nothing is settled for you', async () => {
+  const supported = modules.filter((m) => m.platforms.includes('linux'));
+  const all = pickerParts(supported, 'linux').map((p) => p.value);
+  const asked = [];
+  const prompter = {
+    ...fakePrompter(['c', 'd'], all),
+    // Answer with the default, but say yes to going through each preference.
+    ask: async (q, def) => {
+      asked.push(q.key);
+      return q.key === 'PREFS_REVIEW_EACH' ? true : def;
+    },
+  };
+  const ctx = new Context({ platform: detectPlatform('linux'), dryRun: true, interactive: true, answers: new Map(), prompter, repoRoot });
+  const { value } = await quietly(() => selectModules(ctx, modules));
+  assert.deepEqual(value.map((m) => m.name).sort(), supported.map((m) => m.name).sort(), 'every Linux part is picked');
+  assert.equal(ctx.acceptPlan, false);
+  const settled = [];
+  for (const m of value) {
+    const qs = typeof m.questions === 'function' ? m.questions(ctx) : m.questions;
+    for (const q of qs) {
+      if (q.type === 'secret' || (q.when && !q.when(ctx))) continue; // keys wait for the last screen
+      const before = asked.length;
+      await ctx.ask(q);
+      if (asked.length === before) settled.push(q.key);
+    }
+  }
+  // The one never asked is the installer's own record of which skills were on offer.
+  assert.deepEqual(settled, ['SKILLS_OFFERED']);
+  assert.ok(asked.length > 150, `${asked.length} questions asked`);
+});
