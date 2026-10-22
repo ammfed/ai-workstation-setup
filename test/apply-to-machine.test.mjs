@@ -57,14 +57,28 @@ test('the reminder command keeps its threshold and text and gains --user', () =>
 
 test('the settings plan adds hooks and missing keys and keeps everything else', () => {
   const home = sampleHome;
-  const settings = { theme: 'dark', modelSettings: { 'claude-opus-5-5': { effortLevel: 'xhigh' } }, statusLine: { command: 'mine' } };
+  const settings = { theme: 'dark', model: 'sonnet', modelSettings: { 'claude-opus-5-5': { effortLevel: 'xhigh' } }, statusLine: { command: 'mine' } };
   const { data, changes } = planSettings(settings, { home, statusLine: 'keep', gitClone: false });
   assert.equal(data.theme, 'dark');
+  assert.equal(data.model, 'sonnet');
+  assert.equal(data.effortLevel, 'medium');
+  assert.ok(changes.includes('set the default effort to medium'));
   assert.deepEqual(data.modelSettings, settings.modelSettings);
   assert.deepEqual(data.statusLine, { command: 'mine' });
   assert.deepEqual(Object.keys(data.hooks), ['UserPromptSubmit', 'PostToolUse', 'SessionStart']);
-  assert.equal(changes.length, 3);
+  assert.equal(changes.length, 4);
   assert.deepEqual(planSettings(data, { home, statusLine: 'keep', gitClone: false }).changes, []);
+});
+
+test('the settings plan sets the default model and effort only when you have not set them', () => {
+  const { data, changes } = planSettings({}, { home: sampleHome, statusLine: 'keep', gitClone: false });
+  assert.equal(data.model, 'opus');
+  assert.equal(data.effortLevel, 'medium');
+  assert.deepEqual(data.modelSettings, { 'claude-opus-5-5': { effortLevel: 'medium' } });
+  assert.ok(changes.includes('set the default model to opus'));
+  const own = planSettings({ model: 'haiku', effortLevel: 'low' }, { home: sampleHome, statusLine: 'keep', gitClone: false }).data;
+  assert.equal(own.model, 'haiku');
+  assert.equal(own.effortLevel, 'low');
 });
 
 test('a reminder hook of your own keeps its registered command', () => {

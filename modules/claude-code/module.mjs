@@ -95,10 +95,11 @@ export default {
       key: 'CLAUDE_MODEL',
       type: 'choice',
       message: 'Default model',
-      default: 'keep',
+      // docs/model-map.md: the most capable model at medium effort for everyday work.
+      default: 'opus',
       choices: [
         keep,
-        { value: 'opus', label: 'opus - most capable' },
+        { value: 'opus', label: 'opus - most capable (recommended)' },
         { value: 'opus[1m]', label: 'opus[1m] - most capable, with the 1M-token context window' },
         { value: 'sonnet', label: 'sonnet - balanced' },
         { value: 'haiku', label: 'haiku - fastest' },
@@ -119,8 +120,10 @@ export default {
     {
       key: 'CLAUDE_EFFORT',
       type: 'choice',
-      message: 'Default effort level',
-      default: 'keep',
+      // In the user settings the top-level effortLevel reaches Opus 5, Fable 5.1 and older
+      // models only; newer ones take their level from CLAUDE_MODEL_EFFORTS (modelSettings).
+      message: 'Default effort level (reaches older models; Opus 5.5 has its own level, asked later)',
+      default: 'medium',
       choices: [keep, ...EFFORTS.map((value) => ({ value }))],
     },
     {

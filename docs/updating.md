@@ -37,7 +37,8 @@ the installer lists modules you have not selected, and you add one by putting it
 
 To update only the Claude Code part (shipped hooks, status line, reader subagent, hook
 registrations and the default agent tools), run `scripts/apply-to-machine.sh --dry-run` to
-see the plan, then `scripts/apply-to-machine.sh` yourself (Linux, macOS, WSL). It leaves your
+see the plan, then `scripts/apply-to-machine.sh` yourself (Linux, macOS, WSL). It sets the
+default model and effort from `docs/model-map.md` only where you have not set them, leaves your
 other settings alone, asks y/N before it replaces a file you edited, changes a status line you
 set or installs a tool, and keeps one backup set per run in
 `~/.config/ai-workstation-setup/apply-backups/`. `--undo` restores the latest set (tools it

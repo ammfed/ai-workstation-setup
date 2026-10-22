@@ -6,8 +6,8 @@
 //     (a file you edited yourself is replaced only when you say yes),
 //   - the hook registrations in settings.json: the context reminder on UserPromptSubmit,
 //     PostToolUse and SessionStart (keeping your threshold and text), and the update reminder,
-//   - settings keys the defaults set and you have not set: the status line, and the effort
-//     per model from the model map (docs/model-map.md).
+//   - settings keys the defaults set and you have not set: the status line, the default model
+//     and effort, and the effort per model from the model map (docs/model-map.md).
 // Every other key in settings.json stays as it is. Missing default tools (agent-clis) and
 // the diagram-design plugin are installed only after a y/N question for each one.
 // Before it changes a file it copies it into one backup set,
@@ -67,6 +67,12 @@ export function planSettings(settings, { home, statusLine, gitClone, reminderCur
   if (gitClone) {
     const check = path.join(claude, 'hooks', 'update-check.mjs');
     if (setHook(shim, 'SessionStart', 'update-check.mjs', `node "${check}" "${repoRoot}"`)) changes.push('register the update reminder on SessionStart');
+  }
+
+  for (const [key, answer, label] of [['model', 'CLAUDE_MODEL', 'default model'], ['effortLevel', 'CLAUDE_EFFORT', 'default effort']]) {
+    if (data[key] !== undefined) continue;
+    data[key] = defaultOf(answer);
+    changes.push(`set the ${label} to ${data[key]}`);
   }
 
   for (const [model, effortLevel] of Object.entries(parseModelEfforts(defaultOf('CLAUDE_MODEL_EFFORTS')))) {

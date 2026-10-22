@@ -1,6 +1,7 @@
 // Tests for the model defaults the template writes: the per-model effort in Claude Code
 // settings, the read-only reader subagent, the no-mistakes review model, the example
-// Firstmate dispatch profiles, and the research model in the working preferences.
+// Firstmate dispatch profiles and second mates, backpass, and the research model in the
+// working preferences.
 // Invented values only; a temporary folder stands in for the home.
 // Run: node --test test/models.test.mjs
 
@@ -13,7 +14,8 @@ import { fileURLToPath } from 'node:url';
 import { Context, detectPlatform } from '../lib/context.mjs';
 import agentClis, { NO_MISTAKES_REVIEW, REVIEW_RULE_PATHS, REVIEW_RULES, noMistakesConfigPath, parseReviewModel, reviewRulesBlock, withClaudeReviewModel, withReviewRules, writeReviewRules } from '../modules/agent-clis/module.mjs';
 import claudeCode, { installReaderAgent, parseModelEfforts } from '../modules/claude-code/module.mjs';
-import firstmate, { dispatchProfiles } from '../modules/firstmate/module.mjs';
+import backpass, { claudeModelId } from '../modules/backpass/module.mjs';
+import firstmate, { dispatchProfiles, secondmateDefault } from '../modules/firstmate/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
 import { renderPreferences } from '../modules/preferences/render.mjs';
 
@@ -32,6 +34,17 @@ test('Claude Code settings default Opus 5.5 to medium effort, and the question s
   assert.equal(q.default, 'claude-opus-5-5=medium');
   assert.deepEqual(parseModelEfforts(q.default), { 'claude-opus-5-5': 'medium' });
   assert.deepEqual(parseModelEfforts(''), {});
+});
+
+test('Claude Code starts on Opus at medium effort, and a saved keep still wins', async () => {
+  const ask = async (answers) => {
+    const ctx = context(os.tmpdir(), { answers, dryRun: true });
+    for (const key of ['CLAUDE_MODEL', 'CLAUDE_EFFORT', 'CLAUDE_MODEL_EFFORTS']) await ctx.ask(question(claudeCode, key));
+    return ['CLAUDE_MODEL', 'CLAUDE_EFFORT', 'CLAUDE_MODEL_EFFORTS'].map((key) => ctx.get(key));
+  };
+  assert.deepEqual(await ask({}), ['opus', 'medium', 'claude-opus-5-5=medium']);
+  assert.deepEqual(await ask({ CLAUDE_MODEL: 'keep', CLAUDE_EFFORT: 'keep', CLAUDE_MODEL_EFFORTS: '' }), ['keep', 'keep', '']);
+  assert.match(question(claudeCode, 'CLAUDE_EFFORT').message, /older models; Opus 5\.5 has its own level/);
 });
 
 test('the reader subagent runs on Haiku, read-only, and lands in the Claude agents folder', async () => {
@@ -216,4 +229,49 @@ test('agy research runs on gemini-3.8-flash-high by default', async () => {
   assert.equal(other.get('PREFS_DELEGATE_FALLBACK_MODEL'), undefined);
   assert.doesNotMatch(renderPreferences((key) => other.get(key), { cardsPath: path.join(os.tmpdir(), 'cards.html') }), /quota error/);
   assert.match(renderPreferences((key) => other.get(key), { cardsPath: path.join(os.tmpdir(), 'cards.html') }), /to `other-cli`/);
+});
+
+test('second mates run on Opus 5.5 at medium with the capable profiles on Claude, else the harness default', async () => {
+  assert.equal(secondmateDefault('capable', 'claude'), 'claude claude-opus-5-5 medium');
+  assert.equal(secondmateDefault('capable', 'codex'), 'default');
+  assert.equal(secondmateDefault('starter', 'claude'), 'default');
+  assert.equal(secondmateDefault('none', undefined), 'default');
+  // Asked after the dispatch questions, so its default can follow them.
+  const keys = firstmate.questions.map((q) => q.key);
+  assert.ok(keys.indexOf('FIRSTMATE_SECONDMATE_HARNESS') > keys.indexOf('FIRSTMATE_DISPATCH_HARNESS'));
+  const ask = async (answers) => {
+    const ctx = context(os.tmpdir(), { answers, dryRun: true });
+    for (const key of ['FIRSTMATE_DISPATCH', 'FIRSTMATE_DISPATCH_HARNESS', 'FIRSTMATE_SECONDMATE_HARNESS']) {
+      const q = question(firstmate, key);
+      if (!q.when || q.when(ctx)) await ctx.ask(q);
+    }
+    return ctx.get('FIRSTMATE_SECONDMATE_HARNESS');
+  };
+  assert.equal(await ask({}), 'claude claude-opus-5-5 medium');
+  assert.equal(await ask({ FIRSTMATE_DISPATCH: 'none' }), 'default');
+  assert.equal(await ask({ FIRSTMATE_SECONDMATE_HARNESS: 'default' }), 'default');
+});
+
+test('backpass defaults to Opus 5.5 and reads a dotted Claude id as the dashed one', async () => {
+  const ask = async (answers) => {
+    const ctx = context(os.tmpdir(), { answers, dryRun: true });
+    for (const key of ['BACKPASS_AGENT', 'BACKPASS_MODEL']) await ctx.ask(question(backpass, key));
+    return ctx.get('BACKPASS_MODEL');
+  };
+  assert.equal(await ask({}), 'claude-opus-5-5');
+  assert.equal(await ask({ BACKPASS_AGENT: 'codex' }), 'gpt-5.5');
+  assert.equal(claudeModelId('claude-opus-5.5'), 'claude-opus-5-5');
+  assert.equal(claudeModelId(' claude-sonnet-4.6 '), 'claude-sonnet-4-6');
+  assert.equal(claudeModelId('claude-opus-5-5'), 'claude-opus-5-5');
+  assert.equal(claudeModelId('gpt-5.5'), 'gpt-5.5');
+});
+
+test('the model map lists the installer defaults and sends small tasks to Sonnet 5.5 at high only', () => {
+  const map = fs.readFileSync(path.join(repoRoot, 'docs', 'model-map.md'), 'utf8');
+  assert.match(map, /\| claude-code \| `CLAUDE_MODEL` \| `opus` \(Opus 5\.5\) \|/);
+  assert.match(map, /\| claude-code \| `CLAUDE_EFFORT` \| `medium` \|/);
+  assert.match(map, /\| firstmate \| `FIRSTMATE_SECONDMATE_HARNESS` \| `claude claude-opus-5-5 medium`/);
+  assert.match(map, /\| backpass \| `BACKPASS_MODEL` \| `claude-opus-5-5`/);
+  assert.doesNotMatch(map, /\| Sonnet 5\.5 \| medium \|/);
+  assert.match(map, /version bump, config value\) \| Sonnet 5\.5 \| high \|/);
 });
