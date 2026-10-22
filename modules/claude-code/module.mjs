@@ -78,6 +78,8 @@ export default {
   title: 'Claude Code',
   description: 'Claude Code CLI plus settings: model, effort, theme, status line, plugins',
   order: 20,
+  group: 'assistant',
+  summary: 'Claude Code with sensible settings',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],
   default: true,

@@ -23,6 +23,8 @@ export default {
   title: 'backpass (learn from past sessions)',
   description: 'Opt-in: backpass proposes instruction-file fixes from past sessions, behind a privacy gate',
   order: 55,
+  group: 'assistant',
+  summary: 'fixes learned from past sessions',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],
   default: false,

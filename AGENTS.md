@@ -40,11 +40,14 @@ never make a module write into the repo or read personal data from a tracked fil
 ## Module contract
 
 Each `modules/<name>/module.mjs` default-exports `{ name, title, description, order,
-platforms, unsupported?, requires?, default?, questions?, install(ctx) }`;
-`lib/installer.mjs` `loadModules` validates it. `platforms` lists supported OSes;
+group, summary, platforms, unsupported?, requires?, default?, questions?, install(ctx) }`;
+`lib/installer.mjs` `loadModules` validates it. `group` and `summary` (a short plain phrase,
+no flags or jargon) make the plan printed before anything installs (`lib/plan.mjs`);
+`default: true` puts the module in the recommended picks. `platforms` lists supported OSes;
 `unsupported[os]` is the reason printed when skipped. Questions are asked up front
 (`type`: text, confirm, choice, multi, secret; `when(ctx)` for conditions; `useDefault(ctx)`
-takes the saved answer or default without asking). Never just delete a `multi` choice: a saved
+takes the saved answer or default without asking). When the person goes ahead with the
+plan, every question takes its default; mark one with no recommended answer `alwaysAsk`. Never just delete a `multi` choice: a saved
 answer naming it would exit 2. List it in the question's `retired: { old: 'replacement' }`.
 
 `install(ctx)` must go through `lib/context.mjs` for every side effect, so dry-run,
@@ -73,7 +76,7 @@ run on the user's machine, not here, so keep them free of dependencies and cross
 ```sh
 shellcheck install.sh update.sh scripts/*.sh templates/*/*.sh
 for f in lib/*.mjs modules/*/*.mjs scripts/*.mjs templates/*/bin/*.mjs; do node --check "$f"; done
-node --test test/update.test.mjs test/update-check.test.mjs test/answers.test.mjs test/tools.test.mjs test/privacy.test.mjs test/daily-sync.test.mjs test/voice-mode.test.mjs test/ledger.test.mjs test/sync.test.mjs test/windows.test.mjs test/news-digest.test.mjs test/refresh.test.mjs test/second-brain.test.mjs test/optional-pieces.test.mjs test/preferences.test.mjs test/models.test.mjs test/wsl.test.mjs test/apply-to-machine.test.mjs test/principles.test.mjs test/prompt.test.mjs
+node --test test/update.test.mjs test/update-check.test.mjs test/answers.test.mjs test/tools.test.mjs test/privacy.test.mjs test/daily-sync.test.mjs test/voice-mode.test.mjs test/ledger.test.mjs test/sync.test.mjs test/windows.test.mjs test/news-digest.test.mjs test/refresh.test.mjs test/second-brain.test.mjs test/optional-pieces.test.mjs test/preferences.test.mjs test/models.test.mjs test/wsl.test.mjs test/apply-to-machine.test.mjs test/principles.test.mjs test/prompt.test.mjs test/plan.test.mjs
 for os in linux macos wsl windows; do node lib/installer.mjs --dry-run --yes --modules all --answers answers.example.env --platform "$os"; done
 scripts/privacy-scan.sh --denylist <local denylist>
 ```

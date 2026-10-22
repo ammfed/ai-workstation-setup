@@ -136,6 +136,8 @@ export default {
   title: 'Second brain (Obsidian vault)',
   description: 'Markdown vault with a note contract, provenance rules, note templates and the scripts that keep them true',
   order: 70,
+  group: 'notes',
+  summary: 'a notes vault for Obsidian',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],
   default: true,

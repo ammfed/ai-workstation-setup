@@ -30,6 +30,8 @@ export default {
   description: 'Opt-in: one OpenRouter key and decision model (Jev by default) for the tools that support it, kept in a local env file',
   // Before voice-mode, which reads the key file and model from these answers.
   order: 85,
+  group: 'tools',
+  summary: 'one OpenRouter key for the tools that use it',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   default: false,
   questions: [

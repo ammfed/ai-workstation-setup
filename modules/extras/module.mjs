@@ -250,6 +250,8 @@ export default {
   title: 'Extra tools',
   description: 'Optional: docling document converter, OpenWhispr voice dictation, llama.cpp local models, Lavish Library',
   order: 90,
+  group: 'tools',
+  summary: 'extra desktop tools you pick',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],
   default: false,

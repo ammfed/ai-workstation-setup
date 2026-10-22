@@ -249,6 +249,8 @@ export default {
   title: 'Agent CLIs',
   description: 'Agent-ergonomic CLIs (gh-axi, chrome-devtools-axi, ctx7, no-mistakes, treehouse, ...)',
   order: 30,
+  group: 'tools',
+  summary: 'helper commands for GitHub and the browser',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],
   default: true,

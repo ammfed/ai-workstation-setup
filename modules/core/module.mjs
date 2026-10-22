@@ -109,6 +109,8 @@ export default {
   title: 'Core prerequisites',
   description: 'git, Node.js, GitHub CLI (signed in) and jq',
   order: 10,
+  group: 'tools',
+  summary: 'the basics it needs (git, Node.js, GitHub)',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: [],
   default: true,

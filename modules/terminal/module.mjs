@@ -80,6 +80,8 @@ export default {
   title: 'Terminal (WezTerm)',
   description: 'Optional: WezTerm with a translucent dark theme',
   order: 90,
+  group: 'tools',
+  summary: 'the WezTerm terminal',
   platforms: ['linux', 'macos', 'windows'],
   unsupported: {
     wsl: 'WezTerm and its font are Windows apps that read the Windows home folder; .\\install.ps1 --modules wsl (from Windows) installs them and writes the config there',

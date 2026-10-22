@@ -86,6 +86,8 @@ export default {
   title: 'Linux inside Windows (WSL)',
   description: 'Installs WSL with Ubuntu, then runs the whole setup inside it, firstmate included',
   order: 100,
+  group: 'tools',
+  summary: 'Linux inside Windows with all of this inside it',
   platforms: ['windows'],
   unsupported: {
     linux: 'this is already Linux',

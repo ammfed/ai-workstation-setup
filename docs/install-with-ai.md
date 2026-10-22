@@ -15,7 +15,9 @@ The person pastes something like this to their assistant:
 - Your shell has no terminal, so never start the installer without `--yes`: it would wait
   for answers no one can type. `install.ps1` with no options stops and names the commands.
 - Always run with `--dry-run` first, show the person the plan in a few lines (what gets
-  installed, which steps need them), and wait for their go-ahead before the real run.
+  installed, which steps need them), and wait for their go-ahead before the real run. The
+  output starts with **What will be set up**: a few grouped lines in plain words. Relay
+  those lines as the plan; with `--yes` the install goes ahead after them.
 - Defaults are the recommended setup. To change answers, copy `answers.example.env` to
   `answers.env` (gitignored, next to `install.sh`), edit it, and the installer reads it.
   Ask the person only about what they mention or what the plan shows as unusual.

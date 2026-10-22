@@ -47,6 +47,8 @@ export default {
   title: 'MCP servers',
   description: 'MCP servers for Claude Code (context7, chrome-devtools, ticktick, rea)',
   order: 40,
+  group: 'assistant',
+  summary: 'any outside connections you pick',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['claude-code'],
   default: true,

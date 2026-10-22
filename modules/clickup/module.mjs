@@ -56,6 +56,8 @@ export default {
   title: 'ClickUp',
   description: 'clickup-axi CLI, its agent skill and session hook, plus a workspace structure guide',
   order: 80,
+  group: 'notes',
+  summary: 'ClickUp tasks for your agents',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],
   default: false,

@@ -118,6 +118,8 @@ export default {
   title: 'Agent skills',
   description: 'Claude Code skills, downloaded from their upstreams: kun, vision, grilling, teach, tdd, codebase-design, to-spec, to-tickets, to-questionnaire, wayfinder, find-docs, no-mistakes, workflow-playbook, composio-cli',
   order: 50,
+  group: 'assistant',
+  summary: 'skills for planning and test-first coding',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],
   default: true,

@@ -85,7 +85,7 @@ cd ai-workstation-setup
 
 ```sh
 ./install.sh --dry-run   # see the plan, change nothing
-./install.sh             # pick modules, answer questions, install
+./install.sh             # see what will be set up, Enter to go ahead, install
 ```
 
 **Windows (PowerShell)** (no Git yet? download the ZIP from GitHub and unpack it)
@@ -107,11 +107,16 @@ pages, the vault, the browser tools, systemd, PATH, DNS, GPU) is in
 [docs/windows-wsl.md](docs/windows-wsl.md).
 
 The only prerequisite is Node.js 20+; the entry script offers to install it
-(per-user with nvm on Linux/macOS, with winget on Windows). You pick modules, every
-question is asked up front (in a list, the arrow keys move, Space ticks or unticks, Enter
-confirms; typed numbers tick or untick those items; the CLI list starts with the tools
-already on your machine ticked), then the install runs and ends with a summary of what
-was done, skipped, failed, and what is left for you (such as signing in). When a tool
+(per-user with nvm on Linux/macOS, with winget on Windows). Before anything is installed,
+the setup shows a few plain lines on what it will set up and what each part gives you,
+starting from the recommended picks (`./install.sh --list` shows them as `default: yes`). Press Enter to go
+ahead: every question then takes its recommended answer. Type `c` to change the picks: you
+pick modules and every question is asked up front (in a list, the arrow keys move, Space
+ticks or unticks, Enter confirms; typed numbers tick or untick those items; the CLI list
+starts with the tools already on your machine ticked). Your saved answers always win over
+the recommended ones. With `--yes` the lines still print and the install goes ahead. The
+install ends with a summary of what was done, skipped, failed, and what is left for you
+(such as signing in). When a tool
 lands in a folder your shell does not have on PATH yet (such as `~/.local/bin`), the setup
 adds one PATH line to your shell profile, so a new terminal finds it.
 
