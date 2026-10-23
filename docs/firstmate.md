@@ -12,13 +12,23 @@ Firstmate keeps its code in the clone (`FIRSTMATE_DIR`, default `~/firstmate`) a
 private files (`config/`, `state/`, `data/`, `projects/`) in an operational home. By default
 the home is the clone itself. Set `FIRSTMATE_HOME` (for example `~/.firstmate`) to keep them
 apart: the clone then stays a clean checkout that updates with a fast-forward, and the module
-exports `FM_HOME` for new shells and writes the config there.
+writes the config there. It also adds a default to your shell startup file,
+`: "${FM_HOME:=<home>}"`, which never overrides an `FM_HOME` a shell or a per-directory rule
+already set. Older runs added an unconditional `export FM_HOME=...` line (marked
+`# ai-workstation-setup`); a re-run removes it.
 
-With `FIRSTMATE_PIN_HOME=yes` the module also writes `env.FM_HOME` into the home's
-`.claude/settings.local.json` (gitignored). A Claude Code session does not always inherit
-`FM_HOME`, and scripts such as `fm-send.sh` refuse to guess a home, so a session without it
-fails its first steer to a worker (upstream issue
+With `FIRSTMATE_PIN_HOME=yes` the module writes `env.FM_HOME` into the
+`.claude/settings.local.json` (gitignored) of each standalone second-mate home. A Claude Code
+session does not always inherit `FM_HOME`, and scripts such as `fm-send.sh` refuse to guess a
+home, so a session without it fails its first steer to a worker (upstream issue
 [#5713](https://github.com/kunchenguid/firstmate/issues/5713)).
+
+The module never pins the clone, and never pins a second-mate home that is a git worktree.
+In a worktree, Claude Code applies the `env` of the main worktree root's
+`settings.local.json` over the worktree's own settings and over the launch environment, so a
+pin on the clone would send every worktree home back to the main home. Those homes rely on
+the `FM_HOME` they are launched with. A re-run removes the `FM_HOME` key an older run wrote
+into the clone and leaves every other setting alone.
 
 ## Choices the module writes
 
@@ -59,8 +69,9 @@ on anyone reading its chat. The working pattern:
 - Configuration flows down from the main home (`bin/fm-config-push.sh`); preferences you want
   everywhere go in the main home's `data/captain-shared.md`, which the preferences module writes
   from your private rules file.
-- Each home gets its own `FM_HOME` pin. The module reads the registry on every run and pins
-  every local second-mate home it finds, so re-run it after adding one:
+- Each standalone home gets its own `FM_HOME` pin (a home that is a git worktree gets none, see
+  above). The module reads the registry on every run and pins every local standalone second-mate
+  home it finds, so re-run it after adding one:
   `./install.sh --modules firstmate`.
 
 ## Updating

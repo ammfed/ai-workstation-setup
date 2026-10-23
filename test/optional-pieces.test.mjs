@@ -19,7 +19,7 @@ import { createHash } from 'node:crypto';
 import { PATCH_MARKER, PRISTINE_SHA256, earlierOfficeNamesHelper, mergePixelSettings, patchPixelAgents, patchPixelCli, planPixelPatch } from '../modules/agent-clis/pixel-agents.mjs';
 import { PR_MERGE_RULES, registerContextReminder, reminderTokens } from '../modules/claude-code/module.mjs';
 import { findOpenWhisprAppImage, openGuardSeconds } from '../modules/extras/module.mjs';
-import { stowTokens } from '../modules/firstmate/module.mjs';
+import firstmate, { isLinkedWorktree, stowTokens } from '../modules/firstmate/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
 import { renderBriefInclude } from '../modules/preferences/render.mjs';
 import skills, { writeBundledSkill } from '../modules/skills/module.mjs';
@@ -750,4 +750,132 @@ test('a skill whose download fails is reported as failed, and the others still i
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
   }
+});
+
+// ---- firstmate: FM_HOME is never pinned on the clone or exported from the shell startup file
+
+const gitq = (cwd, ...args) => {
+  const r = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+};
+
+// A temporary home with a firstmate clone, a separate operational home, and two second-mate
+// homes in the registry: one standalone folder, one linked git worktree of the clone.
+function firstmateFixture() {
+  const home = tempHome();
+  const dir = path.join(home, 'fm-clone');
+  const ops = path.join(home, 'fm-ops');
+  fs.mkdirSync(dir, { recursive: true });
+  gitq(dir, 'init', '-q');
+  gitq(dir, '-c', 'user.name=t', '-c', `user.email=${['t', 'example.invalid'].join('@')}`, '-c', 'commit.gpgsign=false', 'commit', '-q', '--allow-empty', '-m', 'seed');
+  const standalone = path.join(home, 'mate-standalone');
+  const linked = path.join(home, 'mate-linked');
+  fs.mkdirSync(standalone, { recursive: true });
+  gitq(dir, 'worktree', 'add', '-q', '-b', 'mate', linked);
+  for (const m of [standalone, linked]) fs.writeFileSync(path.join(m, '.fm-secondmate-home'), '');
+  fs.mkdirSync(path.join(ops, 'data'), { recursive: true });
+  fs.writeFileSync(path.join(ops, 'data', 'secondmates.md'), [`- standalone (home: ${standalone}; role: a)`, `- linked (home: ${linked}; role: b)`, ''].join('\n'));
+  return { home, dir, ops, standalone, linked };
+}
+
+async function runFirstmate(f) {
+  const answers = {
+    FIRSTMATE_DIR: f.dir,
+    FIRSTMATE_HOME: f.ops,
+    FIRSTMATE_PIN_HOME: 'yes',
+    FIRSTMATE_DISPATCH: 'none',
+    FIRSTMATE_STOW_REMINDER: 'no',
+    FIRSTMATE_WATCH_UPDATES: 'no',
+  };
+  const ctx = new Context({
+    platform: { ...detectPlatform(), os: 'linux', shell: 'bash', home: f.home },
+    dryRun: false,
+    interactive: false,
+    answers: new Map(Object.entries(answers)),
+    prompter: null,
+    repoRoot,
+  });
+  ctx.beginModule('firstmate');
+  ctx.ensureTool = async () => {};
+  ctx.run = () => {};
+  for (const q of firstmate.questions) if (!q.when || q.when(ctx)) await ctx.ask(q);
+  await capture(() => firstmate.install(ctx));
+  return ctx;
+}
+
+const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
+const settingsOf = (where) => path.join(where, '.claude', 'settings.local.json');
+
+test('isLinkedWorktree tells a git worktree from a main checkout and a plain folder', { skip: !unix }, () => {
+  const f = firstmateFixture();
+  assert.equal(isLinkedWorktree(f.linked), true);
+  assert.equal(isLinkedWorktree(f.dir), false);
+  assert.equal(isLinkedWorktree(f.standalone), false);
+});
+
+test('a fresh firstmate run pins no FM_HOME on the clone or a worktree home, and exports none', { skip: !unix }, async () => {
+  const f = firstmateFixture();
+  const ctx = await runFirstmate(f);
+  assert.deepEqual(ctx.record.failures, []);
+  assert.equal(fs.existsSync(settingsOf(f.dir)), false);
+  assert.equal(fs.existsSync(settingsOf(f.linked)), false);
+  assert.equal(readJson(settingsOf(f.standalone)).env.FM_HOME, f.standalone);
+  const rc = fs.readFileSync(path.join(f.home, '.bashrc'), 'utf8');
+  assert.doesNotMatch(rc, /export FM_HOME/);
+  assert.match(rc, new RegExp(`^: "\\$\\{FM_HOME:=${f.ops}\\}"  # ai-workstation-setup$`, 'm'));
+  // A second run changes nothing.
+  const before = fs.readFileSync(path.join(f.home, '.bashrc'), 'utf8');
+  await runFirstmate(f);
+  assert.equal(fs.readFileSync(path.join(f.home, '.bashrc'), 'utf8'), before);
+});
+
+test('the FM_HOME default never overrides an FM_HOME set earlier in the shell', { skip: !unix }, async () => {
+  const f = firstmateFixture();
+  await runFirstmate(f);
+  const rc = path.join(f.home, '.bashrc');
+  const run = (pre) => spawnSync('bash', ['-c', `${pre}\n. "${rc}"\nprintf %s "$FM_HOME"`], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: f.home } }).stdout;
+  assert.equal(run(''), f.ops);
+  assert.equal(run('export FM_HOME=/per/directory/home'), '/per/directory/home');
+});
+
+test('a re-run over an older install removes the clone pin and the rc export, and keeps everything else', { skip: !unix }, async () => {
+  const f = firstmateFixture();
+  fs.mkdirSync(path.join(f.dir, '.claude'), { recursive: true });
+  fs.writeFileSync(settingsOf(f.dir), JSON.stringify({ env: { FM_HOME: f.ops, KEEP: '1' }, permissions: { allow: ['Bash(ls)'] } }));
+  const rc = path.join(f.home, '.bashrc');
+  fs.writeFileSync(rc, ['alias ll="ls -l"', `export FM_HOME="${f.ops}"  # ai-workstation-setup`, 'export OTHER=1  # ai-workstation-setup', 'export FM_HOME_NOTE=mine', ''].join('\n'));
+  await runFirstmate(f);
+  assert.deepEqual(readJson(settingsOf(f.dir)), { env: { KEEP: '1' }, permissions: { allow: ['Bash(ls)'] } });
+  assert.ok(fs.readdirSync(path.join(f.dir, '.claude')).some((n) => n.startsWith('settings.local.json.bak-')));
+  const text = fs.readFileSync(rc, 'utf8');
+  assert.doesNotMatch(text, /^export FM_HOME=/m);
+  assert.match(text, /alias ll="ls -l"/);
+  assert.match(text, /export OTHER=1/);
+  assert.match(text, /export FM_HOME_NOTE=mine/);
+  assert.ok(fs.readdirSync(f.home).some((n) => n.startsWith('.bashrc.bak-')));
+
+  // A pin that was the only setting leaves no empty env behind.
+  fs.writeFileSync(settingsOf(f.dir), JSON.stringify({ env: { FM_HOME: f.ops } }));
+  await runFirstmate(f);
+  assert.deepEqual(readJson(settingsOf(f.dir)), {});
+});
+
+test('without an operational home the firstmate run removes an older export and adds none', { skip: !unix }, async () => {
+  const f = firstmateFixture();
+  const rc = path.join(f.home, '.bashrc');
+  fs.writeFileSync(rc, `export FM_HOME="${f.dir}"  # ai-workstation-setup\nexport FM_HOME=/mine\n`);
+  const ctx = new Context({
+    platform: { ...detectPlatform(), os: 'linux', shell: 'bash', home: f.home },
+    dryRun: false,
+    interactive: false,
+    answers: new Map(Object.entries({ FIRSTMATE_DIR: f.dir, FIRSTMATE_HOME: '', FIRSTMATE_DISPATCH: 'none', FIRSTMATE_STOW_REMINDER: 'no', FIRSTMATE_WATCH_UPDATES: 'no' })),
+    prompter: null,
+    repoRoot,
+  });
+  ctx.beginModule('firstmate');
+  ctx.ensureTool = async () => {};
+  ctx.run = () => {};
+  for (const q of firstmate.questions) if (!q.when || q.when(ctx)) await ctx.ask(q);
+  await capture(() => firstmate.install(ctx));
+  assert.equal(fs.readFileSync(rc, 'utf8'), 'export FM_HOME=/mine\n');
 });

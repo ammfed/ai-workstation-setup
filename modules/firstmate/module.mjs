@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { Skip } from '../../lib/context.mjs';
 import { claudeDir, setHook } from '../../lib/claude.mjs';
 import { TOOLS, versionCheck } from '../agent-clis/tools.mjs';
@@ -141,6 +142,33 @@ function pinHome(ctx, where, value) {
   );
 }
 
+// Claude Code applies the main worktree root's settings.local.json env over a linked
+// worktree's own settings and over the launch environment. A pin on the clone would
+// therefore override every second-mate home that is a worktree of it. Earlier runs wrote one.
+function unpinHome(ctx, where) {
+  return ctx.updateJson(
+    path.join(where, '.claude', 'settings.local.json'),
+    (s) => {
+      if (!s.env || !('FM_HOME' in s.env)) return;
+      delete s.env.FM_HOME;
+      if (!Object.keys(s.env).length) delete s.env;
+    },
+    `FM_HOME pin removed from ${where}`,
+  );
+}
+
+// A linked worktree has its own git dir apart from the common one. A folder that is not a
+// git checkout is not a worktree.
+export function isLinkedWorktree(dir) {
+  const git = (arg) => {
+    const r = spawnSync('git', ['-C', dir, 'rev-parse', arg], { encoding: 'utf8' });
+    return r.status === 0 ? fs.realpathSync(path.resolve(dir, r.stdout.trim())) : null;
+  };
+  const gitDir = git('--git-dir');
+  const common = git('--git-common-dir');
+  return Boolean(gitDir && common && gitDir !== common);
+}
+
 export default {
   name: 'firstmate',
   title: 'Firstmate',
@@ -164,7 +192,7 @@ export default {
     {
       key: 'FIRSTMATE_PIN_HOME',
       type: 'confirm',
-      message: 'Pin FM_HOME in each Firstmate home\'s Claude Code settings, so every session and second mate acts on its own home?',
+      message: 'Pin FM_HOME in the Claude Code settings of each standalone second-mate home, so its sessions act on that home?',
       default: true,
     },
     {
@@ -298,8 +326,11 @@ export default {
     const config = (name) => path.join(opsHome, 'config', name);
     if (home) {
       // firstmate's docs/configuration.md "FM_HOME": scripts run from the clone, state, data,
-      // config and projects come from $FM_HOME.
-      await ctx.step('FM_HOME', () => ctx.setUserEnv('FM_HOME', home));
+      // config and projects come from $FM_HOME. Only a default, at the end of the startup file:
+      // an export would override the per-directory FM_HOME of a second-mate home.
+      await ctx.step('FM_HOME', () => ctx.setUserEnvDefault('FM_HOME', home));
+    } else {
+      await ctx.step('FM_HOME', () => ctx.removeUserEnv('FM_HOME'));
     }
     // Second mates are found in the registry, so a re-run after adding one covers it too.
     const registry = path.join(opsHome, 'data', 'secondmates.md');
@@ -312,10 +343,17 @@ export default {
     if (ctx.get('FIRSTMATE_PIN_HOME')) {
       // A Claude Code session started in a home does not always get FM_HOME in its tool
       // environment, and scripts such as fm-send refuse to guess (firstmate issue 5713). The
-      // pin goes in each home's gitignored .claude/settings.local.json.
-      await ctx.step('FM_HOME pin', () => pinHome(ctx, dir, opsHome));
-      for (const mate of mates) await mateStep('FM_HOME pin', mate, () => pinHome(ctx, mate, mate));
+      // pin goes in a standalone second-mate home's gitignored .claude/settings.local.json.
+      // Never on the clone, and never on a mate home that is a git worktree: see unpinHome.
+      for (const mate of mates) {
+        await mateStep('FM_HOME pin', mate, () => {
+          if (isLinkedWorktree(mate)) throw new Skip(`${mate} is a git worktree; its launch environment carries FM_HOME`);
+          return pinHome(ctx, mate, mate);
+        });
+      }
     }
+    // An older run pinned the clone itself.
+    await ctx.step('FM_HOME pin on the clone', () => unpinHome(ctx, dir));
     const secondmate = ctx.get('FIRSTMATE_SECONDMATE_HARNESS').trim() || 'default';
     const head = secondmate.split(/\s+/)[0];
     if (head !== 'default' && !HARNESSES.includes(head)) ctx.warn(`secondmate harness "${head}" is not one of ${HARNESSES.join(', ')}`);
