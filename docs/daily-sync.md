@@ -40,11 +40,12 @@ When something changed, something new needs you, or anything failed, the same re
 piped to your `notify` command (for example Firstmate's inbox: `fm-inbox.sh note -`). Drift
 that was already reported is listed as `(still)` and sent again only every `remindDays`.
 
-A report starts with `FAILED` when a step failed, when the previous run never finished, or
-when no run succeeded for `staleHours` (26 by default, so a machine that was off or a timer
-that stopped is noticed at the next run). The run then exits non-zero. The optional Claude
-Code session-start check, `daily-sync.mjs --status`, prints one `FAILED` line in that case
-and when no run has happened for a day at all, and nothing otherwise. The first run that
+A report starts with `FAILED` when a step failed or when the previous run never finished. The
+run then exits non-zero. When no run succeeded for `staleHours` (26 by default, so a machine
+that was off or a timer that stopped is noticed at the next run), the report lists that under
+"Needs you" once. If this run's own steps pass, it still counts as a success. The optional
+Claude Code session-start check, `daily-sync.mjs --status`, prints one `FAILED` line after a
+failed run and when no run has happened for a day at all, and nothing otherwise. The first run that
 passes after a FAILED one sends a short `recovered` note, so the failure does not look ongoing.
 
 ## Scheduling

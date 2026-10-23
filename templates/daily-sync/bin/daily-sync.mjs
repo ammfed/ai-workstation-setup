@@ -10,8 +10,9 @@
 //
 // Each run writes one short report to reports/ next to config.json: a quiet run is one line.
 // When something changed, needs you, or failed, the report is also piped to your notify
-// command. A failed step, a previous run that never finished, or no successful run for
-// staleHours makes the report start with FAILED, so the job cannot go quiet unnoticed.
+// command. A failed step or a previous run that never finished makes the report start with
+// FAILED, and no successful run for staleHours is listed under "Needs you", so the job cannot
+// go quiet unnoticed.
 // `--status` prints that FAILED line and nothing otherwise, for a session-start hook, which
 // also catches a schedule that stopped running altogether.
 //
@@ -604,7 +605,8 @@ function run() {
   }
   if (state.lastSuccess && !state.paused && startedAt - state.lastSuccess > staleHours * HOUR) {
     const hours = Math.round((startedAt - state.lastSuccess) / HOUR);
-    add('failed', 'run:stale', `no successful run since ${stamp(state.lastSuccess)} (${hours}h ago): the schedule missed runs (machine off, timer stopped) or they failed`, { run: true });
+    // A notice, not a failed step: this run's own checks decide whether it is FAILED, and a pass records the success.
+    add('attention', 'run:stale', `no successful run since ${stamp(state.lastSuccess)} (${hours}h ago): the schedule missed runs (machine off, timer stopped) or they failed`);
   }
 
   for (const r of config.pull || []) check('pull', () => pull(r));
