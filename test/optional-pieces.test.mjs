@@ -372,6 +372,23 @@ test('the playbook sets the review stakes once per project at capture: full run 
   assert.match(rule, /an agent never lowers them on its own/);
 });
 
+test('the playbook names every skill the installer offers, once: as a phase owner or in its table of skills that own no phase', () => {
+  const text = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
+  const section = text.slice(text.indexOf('## Phases'), text.indexOf('## 1. Stage gates'));
+  const cells = (l) => l.split('|').slice(1, -1).map((c) => c.trim());
+  const owners = section.split('\n').filter((l) => /^\| \d+\. /.test(l)).map((l) => cells(l)[4]).join(' ');
+  const rest = section.slice(section.indexOf('**Skills that own no phase.**'));
+  assert.ok(rest.length > 0 && section.includes('**Skills that own no phase.**'), 'the phases section has a table of skills that own no phase');
+  const table = rest.slice(rest.indexOf('\n| Skill |'), rest.indexOf('\n\n', rest.indexOf('\n| Skill |')));
+  const noPhase = table.split('\n').filter((l) => l.startsWith('| ') && !l.startsWith('| Skill |') && !l.startsWith('| ---')).map((l) => cells(l)[0]);
+  const named = (name, where) => new RegExp(`(^|[^\\w-])${name}([^\\w-]|$)`).test(where);
+  const offered = skills.questions.find((q) => q.key === 'SKILLS').choices.flatMap((c) => [c.value, ...(c.helpers ?? [])]).filter((n) => n !== 'workflow-playbook');
+  for (const name of offered) {
+    assert.ok(named(name, owners) !== noPhase.includes(name), `${name} is named exactly once: as a phase owner or as a skill that owns no phase`);
+  }
+  for (const name of noPhase) assert.ok(offered.includes(name), `${name} in the playbook is a skill the installer offers`);
+});
+
 test('an OpenWhispr AppImage in ~/.local/opt or ~/Applications is found', () => {
   const home = tempHome();
   assert.equal(findOpenWhisprAppImage(home), null);

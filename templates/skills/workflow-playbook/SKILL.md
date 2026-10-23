@@ -26,6 +26,16 @@ Every piece of work runs through some of these ten phases, in this order. Each p
 
 Phases 2 to 4 are the early phases. They run before anything is built, and the early phases gate blocks phase 5 (rule 1.1).
 
+**Skills that own no phase.** This setup installs five more skills. Each one helps inside a phase when its moment comes. None of them starts a phase or takes over from its owner.
+
+| Skill | Use it when |
+| --- | --- |
+| find-docs | A plan or code names a library, framework or service: fetch its current docs first, never work from memory (phases 3, 5 and 7) |
+| to-questionnaire | A gap only someone else can fill, such as a colleague, a vendor or real users: turn it into a short questionnaire for that person, including the real-user try-out (rule 1.6) |
+| teach | The owner asks to learn a new skill or concept |
+| kun | The owner asks how a builder of long autonomous work would think about a problem |
+| composio-cli | The work needs an outside app the owner has connected, such as email, a calendar or a tracker |
+
 **Which phases a piece of work needs.** Pick by the kind of work, never by a guess of how long it takes.
 
 | Kind of work | Phases it runs | Test |
