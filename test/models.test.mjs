@@ -275,3 +275,25 @@ test('the model map lists the installer defaults and sends small tasks to Sonnet
   assert.doesNotMatch(map, /\| Sonnet 5\.5 \| medium \|/);
   assert.match(map, /version bump, config value\) \| Sonnet 5\.5 \| high \|/);
 });
+
+test('the workflow-playbook skill routes models and waits at a review page the way the shipped preferences do', () => {
+  const skill = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
+  const routing = skill.slice(skill.indexOf('**Match the model to the job.**'), skill.indexOf('2. **One complete brief.**'));
+  const row = (job) => routing.split('\n').map((l) => l.trim()).find((l) => l.startsWith(`| ${job}`)) || '';
+  assert.match(row('Building'), /strongest model at medium effort/);
+  assert.match(row('Research, investigations'), /strongest model at high effort.*highest effort when the result is weak/);
+  assert.match(row('A new look'), /highest effort/);
+  assert.match(row('Polish'), /strongest model at high effort/);
+  assert.match(row('Small, clear tasks'), /faster model at high effort.*failed check, re-run it on the strongest model at medium effort/);
+  assert.match(routing, /above these only when the owner names it/);
+
+  const rules = renderPreferences((k) => ({ PREFS_MODEL_ROUTING: 'capable' })[k]);
+  assert.match(rules, /polish of a prototype whose look is already settled[^\n]*high effort/);
+  assert.match(rules, /small, clear tasks[^\n]*faster model at high effort, and re-run it on the most capable model at medium effort after a failed check/);
+
+  const wait = skill.slice(skill.indexOf('2. **Never leave the next step empty'), skill.indexOf('3. **End every reply'));
+  assert.match(wait, /stands by quietly for that answer: it does not prepare the next stage/);
+  assert.match(wait, /owner's preference[^.]*, and the recommended answer is no/);
+  const prepare = preferences.questions.find((q) => q.key === 'PREFS_PAGE_PREPARE_NEXT');
+  assert.equal(prepare.default, false, 'the setup also waits by default');
+});

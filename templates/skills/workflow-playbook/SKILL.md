@@ -63,8 +63,8 @@ Phases 2 to 4 are the early phases. They run before anything is built, and the e
 
 1. **Start the map yourself.** When a new goal takes more than one session, start a map at once. Do not wait for the owner to ask. The map names the goal, the stages from here to the goal, where the work is now and the next step. If the goal is vague, the first stage is to define the requirements. Show the map to the owner, then lead the work one step at a time. Update the map when a stage ends or the plan changes.
    Why: without a clear view of the whole project, the owner faces a blank page at every step and cannot see where the work is going.
-2. **Never leave the next step empty.** While the owner reviews a stage, prepare the next one. Gather its inputs, draft its plan and list its open questions. Keep the stage gates: prepare a stage that needs approval, but never start it before approval. If the owner changes an input, update the preparation first. The preparation is its own item and no gate blocks it.
-   Why: an empty next step stalls the work, and a stage started before approval may have to be done again.
+2. **Never leave the next step empty, and wait at a review page.** The next step is always named on the map and queued with what blocks it. While a review page waits for the owner's answer, the agent stands by quietly for that answer: it does not prepare the next stage or ask the question anywhere else, and other items that nothing blocks keep moving. Preparing the next stage while a page waits is the owner's preference, set once with their working preferences, and the recommended answer is no. When the owner chose to have it prepared: gather its inputs, draft its plan and list its open questions, but never start it before approval. If the owner changes an input, update the preparation first. That preparation is its own item and no gate blocks it.
+   Why: an empty next step stalls the work, preparation made before the answer is often redone when the answer changes it, and a stage started before approval may have to be done again.
 3. **End every reply with where the work is.** End each project reply with one plain line that says where the work is on the map, the next step, who takes it and when. For example: "Where we are: concepts are on the review page. Next: you answer the cards, then I offer the layout options." Name the step in words, not as a count such as "step 3 of 6". Say when as an event or a day, not a clock time. When the owner takes the next step, say exactly what they need to do and link to it.
    Why: the owner always knows what comes next without asking, and a step count gives a number but does not say what to do.
 4. **Queue the whole path at the start.** When the map is drawn (phase 1), write every phase of the chosen path as an item in the work queue, each with what blocks it, not only the first one. Add the research items of rule 3.6 and the fixed items of rule 1.6 as soon as they are known.
@@ -117,7 +117,7 @@ Phases 2 to 4 are the early phases. They run before anything is built, and the e
    - Reuse comes first. Every study starts from earlier research and names what it reuses.
    - One question per study for a card. The study ends when the question is answered.
    - The number of tracks is set at the start and said in the capture line. Another track is a new item the owner can see in the status.
-   - Gates still hold. Research for a later stage may be prepared, but its findings wait for the gate, and replaced work is never an input (rule 1.3).
+   - Gates still hold. Research for a later stage starts after its gate, unless the owner chose to have the next stage prepared (rule 2.2). Even then its findings wait for the gate, and replaced work is never an input (rule 1.3).
    - Check the usage limits before a parallel fan-out starts, and pause near a limit.
 
    Why: research that waits to be requested comes too late, a stage that does not name its research rests on a guess, and research with no bound grows until it buries the decision it was for.
@@ -183,7 +183,18 @@ Phases 2 to 4 are the early phases. They run before anything is built, and the e
 
 ## 7. Models and briefs
 
-1. **Match the model to the job.** Use the strongest model at high effort for research, investigations and plans. Raise the effort to the highest setting only for a new visual design or when the result is weak. Use the strong model at medium effort for building. Use a smaller model for small, clear tasks, and cheap helpers for bulk work: use a fetcher to find information and a reader to summarize it. Give each helper one task, and check its work yourself. A coordinator running at low or medium effort never writes the plan itself. It hands planning to a worker at the right effort and checks the effort that actually started.
+1. **Match the model to the job.** Pick by the kind of job:
+
+   | Job | Model and effort |
+   | --- | --- |
+   | Building, and anything not named below | The strongest model at medium effort |
+   | Research, investigations, diagnosis and plans | The strongest model at high effort. Re-run at the highest effort when the result is weak or the cause is hard to find, then build at medium once the cause is proven or the plan is settled |
+   | A new look that is not settled yet (screens, layout, clickable journeys) | The strongest model at the highest effort |
+   | Polish of a look that is already settled (spacing, copy, states, small layout fixes) | The strongest model at high effort |
+   | Small, clear tasks (a bug with a clear reproduction, a docs or copy edit, a version bump, a config tweak) | A faster model at high effort. After a failed check, re-run it on the strongest model at medium effort |
+   | Bulk fetching, reading and summaries | Cheap helpers: a fetcher finds the information, a reader on the fastest model summarizes it, and a faster model at high effort drafts |
+
+   Give each helper one task, and check its work yourself. Use a model above these only when the owner names it for a task. A coordinator running at a lower effort than this table picks never writes the plan itself. It hands planning to a worker at the right effort and checks the effort that actually started.
    Why: quota is limited, and planning at the wrong effort quietly lowers the quality of everything built on it.
 2. **One complete brief.** Each worker gets one brief: the owner's exact words, the whole goal, every earlier report and version (not a chosen subset), the current rulings, the tools ruled out, and the finish line. Never drip steps.
    Why: step-by-step prompts make a builder loop on details and miss the main idea, and a partial inventory hides earlier work.
