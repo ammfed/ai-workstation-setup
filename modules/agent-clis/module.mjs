@@ -4,7 +4,7 @@ import { Skip, which } from '../../lib/context.mjs';
 import { addSessionStartHook, claudeDir } from '../../lib/claude.mjs';
 import { PRIVATE_RULES_DEFAULT, parsePrivateRules } from '../preferences/private-rules.mjs';
 import { TOOLS, warnPathOrder } from './tools.mjs';
-import { mergePixelSettings, patchPixelAgents } from './pixel-agents.mjs';
+import { earlierOfficeNamesHelper, mergePixelSettings, patchPixelAgents } from './pixel-agents.mjs';
 
 export const DEFAULTS = ['gh-axi', 'chrome-devtools-axi', 'lavish-axi', 'tasks-axi', 'quota-axi', 'ctx7', 'no-mistakes', 'treehouse'];
 
@@ -451,12 +451,14 @@ export default {
         await ctx.step('pixel-office-names', () => {
           const prefix = String(ctx.get('PIXEL_AGENTS_TAB_PREFIX') ?? '').trim();
           if (!/^[\w.-]*$/.test(prefix)) throw new Error('PIXEL_AGENTS_TAB_PREFIX may hold only letters, digits, dot, dash and underscore');
-          return ctx.writeFile('~/.local/bin/pixel-office-names', ctx.template('pixel-agents/bin/pixel-office-names.mjs', { TAB_PREFIX: prefix }), {
-            onConflict: 'ask',
-            mode: 0o755,
-          });
+          const content = ctx.template('pixel-agents/bin/pixel-office-names.mjs', { TAB_PREFIX: prefix });
+          // The patched office runs this helper with --print, so an earlier office-names helper
+          // of your own under this name is replaced (a backup is kept); any other file is kept.
+          const earlier = earlierOfficeNamesHelper(path.join(ctx.home, '.local', 'bin', 'pixel-office-names'), content);
+          if (earlier) ctx.info('an earlier office-names helper is at ~/.local/bin/pixel-office-names; replacing it with this one');
+          return ctx.writeFile('~/.local/bin/pixel-office-names', content, { onConflict: earlier ? 'replace' : 'ask', mode: 0o755 });
         });
-        ctx.info('office names: run `pixel-office-names --watch` next to Pixel Agents (it needs herdr); see docs/pixel-agents.md');
+        ctx.info('office names: the office asks pixel-office-names for names by itself (it needs herdr); see docs/pixel-agents.md');
       }
       ctx.info('start Pixel Agents with `pixel-agents` and open the address it prints; see docs/pixel-agents.md');
     }
