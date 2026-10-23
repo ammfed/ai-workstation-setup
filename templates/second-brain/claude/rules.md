@@ -7,4 +7,4 @@ Your knowledge vault is `{{VAULT_PATH}}`: plain Markdown notes on your work and 
   `second-brain` skill has the read routes.
 {{FIND_RULE}}
 {{EDIT_RULE}}
-- Vault content never goes to an outside model or service.
+{{OUTSIDE_RULE}}

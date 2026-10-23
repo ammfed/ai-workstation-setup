@@ -137,6 +137,26 @@ async function scheduleVaultJob(ctx, vault, name, script, env = {}) {
   ctx.info(`${unit}: logs with journalctl --user -u ${unit}; stop it with: systemctl --user disable --now ${unit}.timer`);
 }
 
+// What the rules file and skill say about sending vault content to an outside model. The
+// default is the strict rule; the other is for a person who has removed sensitive content.
+const OUTSIDE_STRICT = {
+  rule: '- Vault content never goes to an outside model or service.',
+  note: 'It is private: never send its content to an\noutside model or service. Read it; do not edit notes by hand.',
+};
+const OUTSIDE_ALLOWED = {
+  rule: [
+    '- Vault content and raw source files may go to an outside model through an agent CLI you',
+    '  chose, because you have removed sensitive content from them. Private chats and captures of',
+    '  your own agent sessions never go to an outside model or service.',
+  ].join('\n'),
+  note: [
+    'It is private. Its content and the raw source files may go to an outside',
+    'model through an agent CLI you chose, because you have removed sensitive content from them.',
+    'Private chats and captures of your own agent sessions never go to an outside model or',
+    'service. Read it; do not edit notes by hand.',
+  ].join('\n'),
+};
+
 /**
  * A Claude Code user rules file and a `second-brain` skill, so every session knows the vault
  * exists, is private, and how to read it. Both name only the scripts this run installs.
@@ -157,8 +177,11 @@ export async function writeClaudeFiles(ctx, vault, pillars) {
   ].filter(Boolean);
   const writers = ['ingest.mjs', ...(tools.includes('capture') ? ['capture.mjs'] : [])].map((f) => `\`bin/${f}\``).join(', ');
   const contract = `\`${path.join(vault, 'AGENTS.md')}\``;
+  const outside = ctx.get('VAULT_OUTSIDE_MODELS') ? OUTSIDE_ALLOWED : OUTSIDE_STRICT;
   const vars = {
     VAULT_PATH: vault,
+    OUTSIDE_RULE: outside.rule,
+    OUTSIDE_NOTE: outside.note,
     PILLARS: pillars.map((p) => `\`${p}/\``).join(', '),
     FIND_RULE: scripts
       ? `- Read \`${path.join(vault, 'MAP.md')}\` to find a note, then ${tools.includes('search') ? '`bin/search.mjs` in that folder, or ' : ''}\`rg\`.`
@@ -234,6 +257,13 @@ export default {
     },
     { key: 'VAULT_GIT', type: 'confirm', message: 'Track the vault with git?', default: true },
     { key: 'VAULT_AGENT_ACCESS', type: 'confirm', message: 'Give agents access (obsidian-axi, OBSIDIAN_VAULT, a Claude Code session hook, and a Claude Code rules file and skill that point to the vault)?', default: true },
+    {
+      key: 'VAULT_OUTSIDE_MODELS',
+      type: 'confirm',
+      message: 'Your notes and raw files have had sensitive content removed, so agents may send them to an outside model through an agent CLI you chose? (Private chats and captures of your own agent sessions never go out.)',
+      default: false,
+      when: (ctx) => ctx.get('VAULT_AGENT_ACCESS'),
+    },
     { key: 'VAULT_APP', type: 'confirm', message: 'Install the Obsidian app?', default: true },
   ],
 
