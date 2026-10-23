@@ -16,6 +16,8 @@ import { versionCheck, warnPathOrder } from '../agent-clis/tools.mjs';
 
 const LAVISH_LIBRARY_REPO = 'https://github.com/ammfed/lavish-library';
 const unitQuote = (s) => `"${String(s).replace(/%/g, '%%').replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+// WorkingDirectory= takes a bare path: systemd rejects quotes there, and spaces need no escaping.
+const unitPath = (s) => String(s).replace(/%/g, '%%');
 
 function lavishUnit(dir, { description, exec, extra = [], requires }) {
   return [
@@ -25,7 +27,7 @@ function lavishUnit(dir, { description, exec, extra = [], requires }) {
     '',
     '[Service]',
     'Type=simple',
-    `WorkingDirectory=${unitQuote(dir)}`,
+    `WorkingDirectory=${unitPath(dir)}`,
     `Environment=${unitQuote(`PATH=${process.env.PATH}`)}`,
     'Environment=NODE_ENV=production',
     ...extra,
@@ -37,6 +39,25 @@ function lavishUnit(dir, { description, exec, extra = [], requires }) {
     'WantedBy=default.target',
     '',
   ].join('\n');
+}
+
+/** The two systemd user services for Lavish Library: its filesystem companion and its web UI. */
+export function lavishUnits(dir, lavishBin) {
+  const node = unitQuote(process.execPath);
+  return {
+    api: lavishUnit(dir, {
+      description: 'Lavish Library filesystem companion (127.0.0.1:4318)',
+      exec: `${node} ${unitQuote(path.join(dir, 'scripts', 'local-api.mjs'))}`,
+      // Its Open button opens a browser tab, even where agents keep LAVISH_AXI_NO_OPEN set. It
+      // also calls lavish-axi by its npm path, so a no-open wrapper earlier on PATH is skipped.
+      extra: [...(lavishBin ? [`Environment=${unitQuote(`LAVISH_AXI_BIN=${lavishBin}`)}`] : []), 'UnsetEnvironment=LAVISH_AXI_NO_OPEN'],
+    }),
+    ui: lavishUnit(dir, {
+      description: 'Lavish Library web UI (127.0.0.1:3000)',
+      exec: `${node} ${unitQuote(path.join(dir, 'node_modules', '.bin', 'vinext'))} start -H 127.0.0.1 -p 3000`,
+      requires: 'lavish-library-api.service',
+    }),
+  };
 }
 
 async function installLavishLibrary(ctx) {
@@ -57,29 +78,11 @@ async function installLavishLibrary(ctx) {
     throw new Skip(`no systemd user session found${hint}; start it yourself: cd "${dir}" && npm run start`);
   }
   const units = path.join(ctx.home, '.config', 'systemd', 'user');
-  const node = unitQuote(process.execPath);
   const prefix = ctx.capture('npm prefix -g');
   const lavishBin = prefix && fs.existsSync(path.join(prefix, 'bin', 'lavish-axi')) ? path.join(prefix, 'bin', 'lavish-axi') : null;
-  const api = await ctx.writeFile(
-    path.join(units, 'lavish-library-api.service'),
-    lavishUnit(dir, {
-      description: 'Lavish Library filesystem companion (127.0.0.1:4318)',
-      exec: `${node} ${unitQuote(path.join(dir, 'scripts', 'local-api.mjs'))}`,
-      // Its Open button opens a browser tab, even where agents keep LAVISH_AXI_NO_OPEN set. It
-      // also calls lavish-axi by its npm path, so a no-open wrapper earlier on PATH is skipped.
-      extra: [...(lavishBin ? [`Environment=${unitQuote(`LAVISH_AXI_BIN=${lavishBin}`)}`] : []), 'UnsetEnvironment=LAVISH_AXI_NO_OPEN'],
-    }),
-    { onConflict: 'ask' },
-  );
-  const ui = await ctx.writeFile(
-    path.join(units, 'lavish-library.service'),
-    lavishUnit(dir, {
-      description: 'Lavish Library web UI (127.0.0.1:3000)',
-      exec: `${node} ${unitQuote(path.join(dir, 'node_modules', '.bin', 'vinext'))} start -H 127.0.0.1 -p 3000`,
-      requires: 'lavish-library-api.service',
-    }),
-    { onConflict: 'ask' },
-  );
+  const rendered = lavishUnits(dir, lavishBin);
+  const api = await ctx.writeFile(path.join(units, 'lavish-library-api.service'), rendered.api, { onConflict: 'ask' });
+  const ui = await ctx.writeFile(path.join(units, 'lavish-library.service'), rendered.ui, { onConflict: 'ask' });
   const running = ctx.capture('systemctl --user is-active lavish-library.service') === 'active';
   if (api || ui || !running) ctx.run('systemctl --user daemon-reload && systemctl --user enable --now lavish-library-api.service lavish-library.service');
   else ctx.ok('lavish-library.service is enabled and running');
