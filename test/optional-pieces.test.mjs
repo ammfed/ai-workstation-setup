@@ -15,7 +15,8 @@ import { fileURLToPath } from 'node:url';
 import { Context, Skip, detectPlatform } from '../lib/context.mjs';
 import { installSkill, setHook, settingsPath } from '../lib/claude.mjs';
 import { cswapThreshold, researchBrowserPort } from '../modules/agent-clis/module.mjs';
-import { PATCH_MARKER, mergePixelSettings, patchPixelCli } from '../modules/agent-clis/pixel-agents.mjs';
+import { createHash } from 'node:crypto';
+import { PATCH_MARKER, PRISTINE_SHA256, earlierOfficeNamesHelper, mergePixelSettings, patchPixelAgents, patchPixelCli, planPixelPatch } from '../modules/agent-clis/pixel-agents.mjs';
 import { PR_MERGE_RULES, registerContextReminder, reminderTokens } from '../modules/claude-code/module.mjs';
 import { findOpenWhisprAppImage, openGuardSeconds } from '../modules/extras/module.mjs';
 import { stowTokens } from '../modules/firstmate/module.mjs';
@@ -75,6 +76,154 @@ test('patched code takes a name from the names file and falls back to the folder
   const r = spawnSync(process.execPath, [file], { encoding: 'utf8', env: { ...process.env, HOME: home } });
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(JSON.parse(r.stdout), ['Planner', 'repo-b', 'Builder']);
+});
+
+// What an earlier, different office-names patch leaves behind: its own lookup, and none of the
+// three places the shipped patch looks for.
+const HAND_PATCHED = FAKE_CLI.replace('folderName:n.folderName,', 'folderName:__other(n),')
+  .replace('S.folderName&&(d[g]=S.folderName)', '__other(S)&&(d[g]=__other(S))')
+  .replace('folderName:f.folderName,x', 'folderName:__other(f),x');
+const hash = (text) => createHash('sha256').update(text).digest('hex');
+
+test('a pristine file is patched as it is, and copies beside it are not needed', () => {
+  const plan = planPixelPatch(FAKE_CLI, '1.4.1', [], hash(FAKE_CLI));
+  assert.deepEqual(plan, { patched: patchPixelCli(FAKE_CLI, '1.4.1'), from: null });
+  const done = planPixelPatch(plan.patched, '1.4.1', [], hash(FAKE_CLI));
+  assert.equal(done.patched, plan.patched);
+});
+
+test('a file another patch changed is patched from the untouched copy beside it, proved by its hash', () => {
+  const siblings = [
+    { name: 'cli.js.bak-20260101', text: HAND_PATCHED },
+    { name: 'cli.js.orig', text: FAKE_CLI },
+  ];
+  const plan = planPixelPatch(HAND_PATCHED, '1.4.1', siblings, hash(FAKE_CLI));
+  assert.equal(plan.from, 'cli.js.orig');
+  assert.equal(plan.patched, patchPixelCli(FAKE_CLI, '1.4.1'));
+  assert.ok(!plan.patched.includes('__other'));
+});
+
+test('a file another patch changed, with no untouched copy, is refused with the way out', () => {
+  const edited = [{ name: 'cli.js.orig', text: `${FAKE_CLI}\n// edited` }];
+  for (const siblings of [[], edited]) {
+    assert.throws(
+      () => planPixelPatch(HAND_PATCHED, '1.4.1', siblings, hash(FAKE_CLI)),
+      (e) => e instanceof Skip && /already changed by another patch/.test(e.message) && /npm install -g pixel-agents@1\.4\.1/.test(e.message) && !/anchor/.test(e.message),
+    );
+  }
+  const older = HAND_PATCHED.replace('"use strict";', '"use strict";\n/* ai-workstation-setup: office names */');
+  assert.throws(() => planPixelPatch(older, '1.4.1', [], hash(FAKE_CLI)), (e) => e instanceof Skip && /older version of this office-names patch/.test(e.message));
+});
+
+test('an unknown version is refused before anything else, even with an untouched copy beside it', () => {
+  const siblings = [{ name: 'cli.js.orig', text: FAKE_CLI }];
+  for (const source of [FAKE_CLI, HAND_PATCHED]) {
+    assert.throws(() => planPixelPatch(source, '9.9.9', siblings, hash(FAKE_CLI)), (e) => e instanceof Skip && /not a version this patch was written for/.test(e.message));
+  }
+});
+
+test('the installer step restores a hand-patched cli.js from its untouched copy and keeps a backup', { skip: !unix }, async () => {
+  const home = tempHome();
+  const root = path.join(home, 'npm-root');
+  const dist = path.join(root, 'pixel-agents', 'dist');
+  fs.mkdirSync(dist, { recursive: true });
+  fs.writeFileSync(path.join(root, 'pixel-agents', 'package.json'), JSON.stringify({ name: 'pixel-agents', version: '1.4.1' }));
+  fs.writeFileSync(path.join(dist, 'cli.js'), HAND_PATCHED);
+  fs.writeFileSync(path.join(dist, 'cli.js.orig'), FAKE_CLI);
+  const ctx = context(home);
+  ctx.capture = (cmd) => (cmd === 'npm root -g' ? root : null);
+  const saved = PRISTINE_SHA256['1.4.1'];
+  PRISTINE_SHA256['1.4.1'] = hash(FAKE_CLI);
+  try {
+    await patchPixelAgents(ctx);
+    assert.equal(fs.readFileSync(path.join(dist, 'cli.js'), 'utf8'), patchPixelCli(FAKE_CLI, '1.4.1'));
+    const backups = fs.readdirSync(dist).filter((n) => n.startsWith('cli.js.bak-'));
+    assert.equal(backups.length, 1);
+    assert.equal(fs.readFileSync(path.join(dist, backups[0]), 'utf8'), HAND_PATCHED);
+    assert.equal(fs.readFileSync(path.join(dist, 'cli.js.orig'), 'utf8'), FAKE_CLI);
+    await patchPixelAgents(ctx);
+    assert.equal(fs.readdirSync(dist).filter((n) => n.startsWith('cli.js.bak-')).length, 1);
+  } finally {
+    PRISTINE_SHA256['1.4.1'] = saved;
+  }
+});
+
+// A stand-in for herdr 0.9: `herdr <noun> list` prints { id, result: { type, <nouns>: [...] } },
+// and an agent has no name of its own (`agent` is its kind).
+const HERDR_09 = {
+  agent: { id: 'r1', result: { type: 'agent_list', agents: [
+    { agent: 'claude', agent_session: { agent: 'claude', kind: 'id', source: 'herdr:claude', value: 's-1' }, agent_status: 'idle', pane_id: 'p1', tab_id: 't1', workspace_id: 'w1' },
+    { agent: 'claude', agent_session: { agent: 'claude', kind: 'id', source: 'herdr:claude', value: 's-2' }, agent_status: 'working', pane_id: 'p2', tab_id: 't2', workspace_id: 'w1' },
+    { agent: 'claude', agent_session: { agent: 'claude', kind: 'id', source: 'herdr:claude', value: 's-3' }, agent_status: 'idle', pane_id: 'p3', tab_id: 't3', workspace_id: 'w2' },
+    { agent: 'claude', agent_status: 'idle', pane_id: 'p4', tab_id: 't3', workspace_id: 'w2' },
+  ] } },
+  tab: { id: 'r2', result: { type: 'tab_list', tabs: [
+    { tab_id: 't1', label: 'xy-planner', number: 1, workspace_id: 'w1' },
+    { tab_id: 't2', label: 'Docs site', number: 2, workspace_id: 'w1' },
+    { tab_id: 't3', label: '1', number: 1, workspace_id: 'w2' },
+  ] } },
+  workspace: { id: 'r3', result: { type: 'workspace_list', workspaces: [
+    { workspace_id: 'w1', label: 'Alpha', number: 1 },
+    { workspace_id: 'w2', label: 'Beta', number: 2 },
+  ] } },
+};
+const HERDR_09_NAMES = { 's-1': 'planner', 's-2': 'Docs site', 's-3': 'Beta' };
+
+test('office names with herdr 0.9 output, where an agent has no name, come from tab then workspace labels', () => {
+  const r = (noun, key) => HERDR_09[noun].result[key];
+  assert.deepEqual(officeNames(r('agent', 'agents'), r('tab', 'tabs'), r('workspace', 'workspaces'), 'xy-'), HERDR_09_NAMES);
+});
+
+// Installs the shipped helper (prefix xy-) and a fake herdr 0.9 into a temporary home.
+function helperHome() {
+  const home = tempHome();
+  const bin = path.join(home, '.local', 'bin');
+  fs.mkdirSync(bin, { recursive: true });
+  const helper = context(home).template('pixel-agents/bin/pixel-office-names.mjs', { TAB_PREFIX: 'xy-' });
+  fs.writeFileSync(path.join(bin, 'pixel-office-names'), helper, { mode: 0o755 });
+  const fake = path.join(home, 'fake-bin');
+  fs.mkdirSync(fake);
+  fs.writeFileSync(path.join(fake, 'herdr.json'), JSON.stringify(HERDR_09));
+  fs.writeFileSync(
+    path.join(fake, 'herdr'),
+    `#!${process.execPath}\nconst all=require(${JSON.stringify(path.join(fake, 'herdr.json'))});\nprocess.stdout.write(JSON.stringify(all[process.argv[2]]));\n`,
+    { mode: 0o755 },
+  );
+  const env = { ...process.env, HOME: home, PATH: `${fake}${path.delimiter}${process.env.PATH}` };
+  return { home, helper: path.join(bin, 'pixel-office-names'), env };
+}
+
+test('pixel-office-names --print reads herdr 0.9 and prints the names without writing a file', { skip: !unix }, () => {
+  const { home, helper, env } = helperHome();
+  const r = spawnSync(process.execPath, [helper, '--print'], { encoding: 'utf8', env });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout), HERDR_09_NAMES);
+  assert.equal(fs.existsSync(path.join(home, '.pixel-agents')), false);
+});
+
+test('patched code asks the helper for names, with no names file and nothing running', { skip: !unix }, () => {
+  const { home, env } = helperHome();
+  const body = patchPixelCli(FAKE_CLI, '1.4.1').replace(/^#!.*\n/, '');
+  const file = path.join(home, 'probe.js');
+  fs.writeFileSync(file, `const l=1;${body.replace('"use strict";', '')}\nconsole.log(JSON.stringify([a.folderName,d.k,c.folderName]));`);
+  const r = spawnSync(process.execPath, [file], { encoding: 'utf8', env });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout), ['planner', 'Docs site', 'Beta']);
+});
+
+test('only an earlier office-names helper is taken for one the installer may replace', () => {
+  const home = tempHome();
+  const file = path.join(home, 'pixel-office-names');
+  const shipped = '#!/usr/bin/env node\n// writes .pixel-agents/agent-names.json; --print prints it\n';
+  assert.equal(earlierOfficeNamesHelper(file, shipped), false);
+  fs.writeFileSync(file, '#!/bin/bash\n# writes ~/.pixel-agents/agent-names.json from herdr\n');
+  assert.equal(earlierOfficeNamesHelper(file, shipped), true);
+  fs.writeFileSync(file, shipped);
+  assert.equal(earlierOfficeNamesHelper(file, shipped), false);
+  fs.writeFileSync(file, '#!/bin/bash\n# my own tool that shares the name\n');
+  assert.equal(earlierOfficeNamesHelper(file, shipped), false);
+  fs.writeFileSync(file, '#!/bin/bash\n# agent-names.json, and answers --print too\n');
+  assert.equal(earlierOfficeNamesHelper(file, shipped), false);
 });
 
 test('Pixel Agents settings fill in what is missing and keep what you set', () => {
