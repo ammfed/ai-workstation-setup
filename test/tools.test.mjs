@@ -123,6 +123,29 @@ test('the shared version check fails when the tool prints no version', async () 
   assert.match(rec.failures[0], /quota-axi: installed, but its check failed \(reports its version\)/);
 });
 
+// Some CLIs (llama-cli) print their version to stderr, so a check reads stdout and stderr
+// together. A nonzero exit still fails, even when the text matches.
+const stderrTool = (script) => ({
+  name: 'node',
+  install: { default: 'true' },
+  check: { about: 'reports its version', files: { 'out.js': script }, cmd: 'node "{tmp}/out.js"', expect: /version: \d/ },
+});
+
+test('a check passes when the tool prints its version to stderr', async () => {
+  const { ctx, rec } = context();
+  const tool = stderrTool('console.error("version: 0.3.0-dev (build 1)")');
+  assert.equal(await ctx.step('node', () => ctx.ensureTool(tool)), 'present');
+  assert.deepEqual(rec.failures, []);
+});
+
+test('a check still fails on a nonzero exit when the text matches', async () => {
+  const { ctx, rec } = context();
+  const tool = stderrTool('console.error("version: 0.3.0-dev (build 1)"); process.exit(1)');
+  assert.equal(await ctx.step('node', () => ctx.ensureTool(tool)), undefined);
+  assert.equal(rec.failures.length, 1);
+  assert.match(rec.failures[0], /node: installed, but its check failed \(reports its version\)/);
+});
+
 // The tasks-axi check has to prove the listing, not only the add: `add` echoes the id it was
 // given, so an expectation that only looks for the id passes even when the queued list comes
 // back empty — the regression (add filing the task elsewhere, or --state filtering breaking)
