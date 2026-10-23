@@ -18,7 +18,7 @@ import { cswapThreshold, researchBrowserPort } from '../modules/agent-clis/modul
 import { createHash } from 'node:crypto';
 import { PATCH_MARKER, PRISTINE_SHA256, earlierOfficeNamesHelper, mergePixelSettings, patchPixelAgents, patchPixelCli, planPixelPatch } from '../modules/agent-clis/pixel-agents.mjs';
 import { PR_MERGE_RULES, registerContextReminder, reminderTokens } from '../modules/claude-code/module.mjs';
-import { findOpenWhisprAppImage, openGuardSeconds } from '../modules/extras/module.mjs';
+import { findOpenWhisprAppImage, lavishUnits, openGuardSeconds } from '../modules/extras/module.mjs';
 import firstmate, { isLinkedWorktree, stowTokens } from '../modules/firstmate/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
 import { renderBriefInclude } from '../modules/preferences/render.mjs';
@@ -878,4 +878,24 @@ test('without an operational home the firstmate run removes an older export and 
   for (const q of firstmate.questions) if (!q.when || q.when(ctx)) await ctx.ask(q);
   await capture(() => firstmate.install(ctx));
   assert.equal(fs.readFileSync(rc, 'utf8'), 'export FM_HOME=/mine\n');
+});
+
+const hasAnalyze = spawnSync('systemd-analyze', ['--version'], { stdio: 'ignore' }).status === 0;
+
+test('the Lavish Library units write WorkingDirectory as a bare path that systemd accepts', { skip: !hasAnalyze && 'systemd-analyze is not available here' }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'unit-'));
+  const app = path.join(dir, 'my apps', 'lavish-library');
+  fs.mkdirSync(path.join(app, 'scripts'), { recursive: true });
+  fs.mkdirSync(path.join(app, 'node_modules', '.bin'), { recursive: true });
+  fs.writeFileSync(path.join(app, 'scripts', 'local-api.mjs'), '');
+  fs.writeFileSync(path.join(app, 'node_modules', '.bin', 'vinext'), '');
+  const { api, ui } = lavishUnits(app, null);
+  for (const unit of [api, ui]) assert.match(unit, new RegExp(`^WorkingDirectory=${app}$`, 'm'));
+  const files = [path.join(dir, 'lavish-library-api.service'), path.join(dir, 'lavish-library.service')];
+  fs.writeFileSync(files[0], api);
+  fs.writeFileSync(files[1], ui);
+  const r = spawnSync('systemd-analyze', ['--user', 'verify', ...files], { encoding: 'utf8' });
+  fs.rmSync(dir, { recursive: true, force: true });
+  assert.doesNotMatch(r.stdout + r.stderr, /WorkingDirectory|not absolute|fatal/i, r.stdout + r.stderr);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
 });
