@@ -3,8 +3,7 @@ name: second-brain
 description: Read routes into your private knowledge vault at {{VAULT_PATH}}. Use when a task needs past decisions, project history or stage, people, meetings, earlier findings, or what was agreed before, or when asked what the vault says about something.
 ---
 
-The vault at `{{VAULT_PATH}}` is plain Markdown. It is private: never send its content to an
-outside model or service. Read it; do not edit notes by hand.
+The vault at `{{VAULT_PATH}}` is plain Markdown. {{OUTSIDE_NOTE}}
 
 {{SCRIPTS_NOTE}}## Find a note
 

@@ -150,10 +150,19 @@ your vault path filled in:
 
 - `~/.claude/rules/second-brain.md`, a user rules file loaded in every session. It says the
   vault exists and is private, to look there first for past decisions and history, to find
-  notes through `MAP.md` and search, not to edit notes by hand, and that vault content never
-  goes to an outside model or service.
+  notes through `MAP.md` and search, not to edit notes by hand, and what may leave the machine
+  (see below).
 - `~/.claude/skills/second-brain/SKILL.md`, a `second-brain` skill with the read routes: how
   to find a note, how to read provenance and superseded lines, and how new material gets in.
+
+By default both say vault content never goes to an outside model or service. Answer
+`VAULT_OUTSIDE_MODELS=yes` (default `no`) if you have removed sensitive content from your notes
+and raw files and want agents to send them to an outside model through an agent CLI you chose.
+Both files then say so, and still say that private chats and captures of your own agent
+sessions never go to an outside model or service. The question is only asked when
+`VAULT_AGENT_ACCESS` is on. On a rerun, a copy of either file that an earlier version of this
+setup shipped is replaced with the new wording (the old one is backed up); an edited copy is
+left alone.
 
 Both name only the scripts and tools you installed. Like every other file the installer
 writes, a copy you have edited is left alone on a rerun, and a replaced one is backed up first.
