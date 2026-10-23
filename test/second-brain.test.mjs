@@ -207,12 +207,17 @@ test('ingest: a past deadline starts no file, and a file cut off by the deadline
 });
 
 // The Obsidian app comes with the notes folder by default, on every system that can run it.
+// A real Linux run only plans the flatpak install when flatpak is there, and a CI runner has none,
+// so the run gets a stand-in that is not installed Obsidian.
 function dryRun(platform, ...args) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'home-'));
+  const bin = path.join(home, 'stub-bin');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, 'flatpak'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
   const r = spawnSync(
     process.execPath,
     [path.join(repoRoot, 'lib/installer.mjs'), '--dry-run', '--yes', '--platform', platform, '--modules', 'second-brain', ...args],
-    { encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: home, NO_COLOR: '1' }, stdin: 'ignore' },
+    { encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: home, NO_COLOR: '1', PATH: `${bin}${path.delimiter}${process.env.PATH}` }, stdin: 'ignore' },
   );
   fs.rmSync(home, { recursive: true, force: true });
   return { code: r.status, out: r.stdout + r.stderr };

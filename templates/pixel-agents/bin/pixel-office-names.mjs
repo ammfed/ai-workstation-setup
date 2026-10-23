@@ -92,4 +92,14 @@ function main() {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+// Run directly, not imported by a test. Real paths on both sides: a symlinked folder (such as
+// macOS's /var -> /private/var) would otherwise make the two differ and the script do nothing.
+function runAsScript() {
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (runAsScript()) main();

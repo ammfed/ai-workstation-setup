@@ -48,7 +48,9 @@ function fakePrompter(replies, picked) {
   };
 }
 
-function ctxFor({ interactive = true, answers = {}, replies = [], picked, os: system = 'linux' } = {}) {
+// `installed`, when given, is the only set of commands this machine counts as having, so a test
+// does not depend on which tools the machine running it happens to carry.
+function ctxFor({ interactive = true, answers = {}, replies = [], picked, os: system = 'linux', installed } = {}) {
   const prompter = fakePrompter(replies, picked);
   const ctx = new Context({
     platform: detectPlatform(system),
@@ -58,6 +60,7 @@ function ctxFor({ interactive = true, answers = {}, replies = [], picked, os: sy
     prompter,
     repoRoot,
   });
+  if (installed) ctx.has = (bin) => installed.includes(bin);
   return { ctx, prompter };
 }
 
@@ -246,8 +249,8 @@ test('saved answers win over the recommended picks and answers', async () => {
 });
 
 // Every question a part asks, each answered as a first run would (saved answers are what a run keeps).
-function firstRunAnswers(names) {
-  const ctx = ctxFor().ctx;
+function firstRunAnswers(names, installed) {
+  const ctx = ctxFor({ installed }).ctx;
   const answers = { MODULES: names.join(',') };
   for (const m of modules.filter((x) => names.includes(x.name))) {
     for (const q of typeof m.questions === 'function' ? m.questions(ctx) : m.questions) {
@@ -286,18 +289,18 @@ test('running it again counts one new setting in the singular, and none at all w
 
 test('a follow-up question counts only when the saved answer it follows brings it up', () => {
   const picked = modules.filter((m) => m.name === 'agent-clis');
-  const answers = firstRunAnswers(['agent-clis']);
+  const answers = firstRunAnswers(['agent-clis'], ['herdr']);
   assert.match(answers.AGENT_CLIS, /herdr/);
-  assert.equal(newSettings(ctxFor({ answers }).ctx, picked), 0, 'every saved answer kept: nothing new');
+  assert.equal(newSettings(ctxFor({ answers, installed: ['herdr'] }).ctx, picked), 0, 'every saved answer kept: nothing new');
   // herdr left out of the saved tools: its two follow-ups are not brought up, so not counted.
   const without = { ...answers, AGENT_CLIS: answers.AGENT_CLIS.split(',').filter((x) => x !== 'herdr').join(',') };
   delete without.HERDR_CLAUDE_INTEGRATION;
   delete without.HERDR_SETTINGS;
-  assert.equal(newSettings(ctxFor({ answers: without }).ctx, picked), 0);
+  assert.equal(newSettings(ctxFor({ answers: without, installed: ['herdr'] }).ctx, picked), 0);
   // The tool list itself new: its default brings herdr in, so it and both follow-ups count.
   const fresh = { ...answers };
   for (const k of ['AGENT_CLIS', 'HERDR_CLAUDE_INTEGRATION', 'HERDR_SETTINGS']) delete fresh[k];
-  const ctx = ctxFor({ answers: fresh }).ctx;
+  const ctx = ctxFor({ answers: fresh, installed: ['herdr'] }).ctx;
   assert.equal(newSettings(ctx, picked), 3);
   assert.deepEqual(ctx.values, {}, 'counting leaves no answers behind');
 });
