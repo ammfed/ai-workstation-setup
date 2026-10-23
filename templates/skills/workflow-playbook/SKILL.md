@@ -150,7 +150,7 @@ Phases 2 to 4 are the early phases. They run before anything is built, and the e
    Why: anything without a reason makes the owner read instead of see.
 4. **Present stakeholder pages live.** When the owner needs to align other people, build a page they can present live in the meeting. Give each item one card with Approve, Change or Discard and a note. End with a summary the owner can copy.
    Why: answers given in the room are recorded at once, and the summary goes straight into the meeting notes.
-5. **Check the page before sharing it.** Open it at the owner's target screen size first (step 18), then at laptop width and phone width. Check that font sizes and column positions stay the same on every card and tab. Use plain names, not internal codes such as Q1 or K1. Then open the hosted page itself. Check that it loads, has no answers yet and includes every source it cites. Only then tell the owner it is ready.
+5. **Check the page before sharing it.** Open it at the owner's target screen size first (step 18), then at laptop width and phone width. Check that font sizes and column positions stay the same on every card and tab. Use plain names, never internal codes made of a letter and a number. Then open the hosted page itself. Check that it loads, has no answers yet and includes every source it cites. Only then tell the owner it is ready.
    Why: the owner notices changes in font size or column position before the content, codes force them to look things up, and a page marked ready that is broken or already answered wastes a round.
 6. **Four review points.** The owner reviews at four points, each on a page built from the same card template:
 

@@ -15,9 +15,13 @@ before any page reaches you, when to ask or act, an improve step after every mer
 the steps for taking a weak prototype to a liked wireframe direction, an approved
 journey map and an aligned rules list. At capture it sets the review stakes once per
 project: public repositories and anything stakeholders see get the full review run,
-private notes and throwaway prototypes get a self-review. Its phase table splits these six steps into the
-ten phases, with the early phases (requirements, whether it already exists, vision)
-before anything is built, and says which phases each kind of work needs. Its
+private notes and throwaway prototypes get a self-review. While a review page waits for
+your answer, the agent stands by quietly and does not prepare the next stage, unless you
+chose that with `PREFS_PAGE_PREPARE_NEXT`. Its phase table splits these six steps into ten
+phases: capture, requirements, whether it already exists, vision, prototype, breakdown,
+build, review, ship and hand over, and improve. The early phases (requirements, whether
+it already exists, vision) run before anything is built, and the table says which phases
+each kind of work needs. Its
 `principles/checks.md` lists the design and writing checks (attention, time, words,
 layout, colour, charts, AI) that every screen and page meets, who runs each one and what
 a failure blocks. `node principles/bin/principle-check.mjs <files or folder>` runs the
