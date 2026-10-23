@@ -1596,6 +1596,56 @@ test('lookout: what waits on you and workers that stopped or failed; a question 
   );
 });
 
+test('lookout: every kind of event reaches the voice by project and topic, with no task name, id or lane in it', () => {
+  const titled = (task, name, over) => row(task, { name, project: 'demo-app', ...over });
+  const b = board({
+    needs: [{ ...need('blue-header', 'fm-hold-v1:' + Buffer.from('Blue logo or grey?').toString('base64')), name: 'Header colour (small)' }],
+    rows: [
+      titled('blue-header', 'Header colour (small)', { state: 'needs-decision' }),
+      titled('docs-update', 'Docs for the new search', { asks: 'Which page first? See https://example.com/docs/plan' }),
+      titled('parser-fix', 'Faster parser', { state: 'failed', text: 'failed [at=1792742085]: tests failing in src/parser.test.mjs' }),
+      titled('cache-move', 'Move the cache', { state: 'blocked', text: 'needs the staging password' }),
+      titled('import-job', 'Nightly import', { dot: 'stopped', text: 'halfway through the import' }),
+    ],
+  });
+  const ev = boardEvents(b, { 'main/import-job': { dot: 'working' } });
+  assert.deepEqual(ev.map((e) => e.kind), ['needs', 'asks', 'failed', 'blocked', 'stopped']);
+  const line = lookoutLine(ev, 5);
+  const slug = /blue.header|docs.update|parser.fix|cache.move|import.job|main\/|fm-hold|https?:|\.mjs|\[at=|Name to tell/;
+  for (const said of [line, ...ev.map((e) => e.text)]) assert.doesNotMatch(said, slug);
+  assert.equal(ev[0].text, 'In demo app, the work on Header colour is waiting on you: Blue logo or grey?');
+  assert.equal(
+    line,
+    [
+      'What is new on the board:',
+      '- Project: demo app. Work: Header colour. What happened: it is waiting on the user for a decision. What was said: "Blue logo or grey?". What the user needs to do: make the call.',
+      '- Project: demo app. Work: Docs for the new search. What happened: the worker on it asked the user a question. What was said: "Which page first? See a link". What the user needs to do: answer the question.',
+      '- Project: demo app. Work: Faster parser. What happened: the work failed. What was said: "failed: tests failing in a file". What the user needs to do: look at what went wrong when they can.',
+      '- Project: demo app. Work: Move the cache. What happened: the worker on it is stuck. What was said: "needs the staging password". What the user needs to do: help it get unstuck.',
+      '- Project: demo app. Work: Nightly import. What happened: the worker on it stopped before finishing. What was said: "halfway through the import". What the user needs to do: check whether it should be picked up again.',
+      SAY,
+    ].join('\n'),
+  );
+});
+
+test('lookout: two items with the same title in one line are told apart by name; the same title in another project is not', () => {
+  const b = board({
+    rows: [
+      row('parser-a', { name: 'Parser rewrite', state: 'failed', text: 'tests failing' }),
+      row('parser-b', { name: 'Parser rewrite', asks: 'Keep the old flags?' }),
+      row('parser-c', { name: 'Parser rewrite', project: 'other-app', state: 'blocked', text: 'waiting on review' }),
+    ],
+  });
+  const line = lookoutLine(boardEvents(b));
+  assert.match(line, /Work: Parser rewrite\. Name to tell it apart: parser a\. What happened: the work failed/);
+  assert.match(line, /Work: Parser rewrite\. Name to tell it apart: parser b\. What happened: the worker on it asked/);
+  assert.match(line, /Project: other app\. Work: Parser rewrite\. What happened: the worker on it is stuck/);
+  assert.doesNotMatch(line, /parser c/);
+  assert.ok(line.endsWith(`${SAY} Some items share a topic: only for those, say the name given to tell them apart, naturally, for example "the one called ...".`));
+  // Without a twin in the line, no name at all.
+  assert.doesNotMatch(lookoutLine(boardEvents(board({ rows: [b.rows[0]] }))), /parser a|tell them apart/);
+});
+
 test('lookout: the first read is a silent baseline; each event is said once; bursts become one line, at most one line per gap', async () => {
   const c = config({ lookout: { enabled: true, url: '', command: ['ledger'], stateFile: path.join(tmp, 'lookout-a.json'), batchSec: 30, gapSec: 120 } });
   fs.rmSync(c.lookout.stateFile, { force: true });

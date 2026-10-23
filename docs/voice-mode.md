@@ -226,6 +226,12 @@ blocks, emphasis and emoji go.
 
 `voice-mode briefing` prints exactly what the model would get, redacted, with its size.
 
+**Talking about your work.** The model's instructions tell it to talk about work the way a
+colleague would, by project and what it is about, and never to read task ids, slugs, codes,
+file names or links aloud. It says a name only when two items would otherwise be confused,
+and then naturally. The same rule goes with every hand-off question and every answer that
+comes back, so an answer full of ids is still said by project and topic.
+
 **What a big briefing costs.** Gemini Live takes up to its whole context, 131,072 tokens, as
 instructions (measured: an instruction of 131,014 tokens was accepted and a word planted at
 each end was recalled; about 133,000 closed the connection as an invalid argument). English
@@ -258,13 +264,13 @@ done, the voice says one short line ("Let me check; I'll tell you here as soon a
 back") and calls `hand_off`. That sends your assistant one note through `queue`:
 
 ```
-Voice question vq-3f9a2c: "<your request>" -- the user is waiting in voice mode; answer in one to three short spoken sentences with: voice-mode reply vq-3f9a2c "<answer>"
+Voice question vq-3f9a2c: "<your request>" -- the user is waiting in voice mode; answer in one to three short spoken sentences that name work by its project and what it is about, as a colleague would, not by task ids or slugs (give one only when two items would otherwise be confused), with: voice-mode reply vq-3f9a2c "<answer>"
 ```
 
 (`Voice request` for work.) Your assistant answers by running the command in the note:
 
 ```sh
-voice-mode reply vq-3f9a2c "It merged this morning; CI is green."
+voice-mode reply vq-3f9a2c "The search docs merged this morning; the checks are green."
 ```
 
 The answer lands in a file-based reply queue (`handoff/replies/`, no server). A running
@@ -297,14 +303,24 @@ failed**. It reads the [ledger](ledger.md) module's live board (`/api/board` on 
 own rule, the one Firstmate's `/bearings` uses. It never reads the Firstmate homes itself and
 never steers anything: running the work stays with your assistant.
 
-| It says (task names as the board has them) | When the board shows |
+| It might say | When the board shows |
 | --- | --- |
-| "blue header is waiting on you: Blue logo or grey?" | a new item in *Needs you now* |
-| "docs update is asking you something: Which page first?" | a worker's open question that is not a hold yet |
-| "parser fix failed: tests failing on the parser." | a task whose last status is `failed` (or `blocked`: "is stuck") |
-| "import job stopped before finishing. Its last words: halfway through the import" | a task whose agent was working and is gone, with no `done` or `paused` |
+| "In the demo app, the header colour needs your call: blue logo or grey?" | a new item in *Needs you now* |
+| "The docs for the new search have a question for you: which page first?" | a worker's open question that is not a hold yet |
+| "The faster parser failed; the tests are failing." | a task whose last status is `failed` (or `blocked`: it is stuck) |
+| "The nightly import stopped halfway through." | a task whose agent was working and is gone, with no `done` or `paused` |
 
 It does not announce pull requests, landings or anything else.
+
+**Talking like a colleague.** The lookout does not hand the voice a sentence to read out. For
+each event it gives the facts: the project in plain words, what the work is about (its title
+on the board), what happened, what was said, and what you need to do. The voice then says it
+in its own words, by project and topic, the way a colleague catching you up would. Task names,
+ids, codes and links are never read aloud: links become "a link", file paths "a file", status
+tags go, and an encoded hold reason is decoded first. Work with no title is described in a few
+words from what was said. Only when two items in the same line share a project and a title
+does the voice get each one's name, to say naturally ("the one called parser b") so you can
+tell them apart.
 
 - **No nagging.** The first read ever is a silent baseline: what is already on the board is
   never announced. Each event is said once. Events found within `batchSec` (30 s) become one
@@ -314,7 +330,7 @@ It does not announce pull requests, landings or anything else.
   not said yet live in `lookout.json` next to the config (mode 600). The next conversation
   compares the board with it and says, once, what is new and still true: a question answered
   meanwhile is not said late.
-- **What leaves the machine**: only the line, to the realtime voice provider, through the
+- **What leaves the machine**: only those facts, redacted, to the realtime voice provider, through the
   conversation that is running. Inside a conversation each line is one more model turn, billed
   for the whole context (see What a big briefing costs).
 

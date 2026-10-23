@@ -67,7 +67,7 @@ const heard = (s, n) =>
     holdText(s)
       .replace(/<?https?:\/\/[^\s<>"]+>?/g, 'a link')
       .replace(/(^|[\s(])[~.\w-]*\/[\w./-]*\.[A-Za-z]\w*/g, '$1a file')
-      .replace(/\[[\w-]+=[^\]]*\]/g, '')
+      .replace(/\s*\[[\w-]+=[^\]]*\]/g, '')
       .replace(/(^|\s)[\w-]+=\S+/g, '$1'),
     n,
   );
