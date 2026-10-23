@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { cronCommand, ensureCronLine, shellQuote } from '../../lib/cron.mjs';
 import { Skip } from '../../lib/context.mjs';
 import { windowsPathOf } from '../../lib/wsl.mjs';
@@ -174,6 +175,12 @@ export async function writeClaudeFiles(ctx, vault, pillars) {
   await ctx.writeFile(path.join(dir, 'skills', 'second-brain', 'SKILL.md'), ctx.template('second-brain/claude/SKILL.md', vars), { onConflict: 'ask' });
 }
 
+/** A vault that is already a git repository with at least one commit keeps its own tooling and notes. */
+export function isExistingVault(vault) {
+  return fs.existsSync(path.join(vault, '.git'))
+    && spawnSync('git', ['-C', vault, 'rev-parse', '--verify', 'HEAD'], { stdio: 'ignore' }).status === 0;
+}
+
 const list = (s) => [...new Set(String(s).split(',').map((x) => x.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')).filter(Boolean))];
 
 export default {
@@ -218,6 +225,13 @@ export default {
       default: '',
       when: (ctx) => ctx.get('VAULT_SCRIPTS') && ctx.get('VAULT_TIMERS').includes('garden'),
     },
+    {
+      key: 'VAULT_REFRESH',
+      type: 'confirm',
+      message: 'This folder is already a git vault with commits. Add any missing starter files (folder readmes, note templates, scripts, tools)?',
+      default: false,
+      when: (ctx) => isExistingVault(ctx.get('VAULT_PATH')),
+    },
     { key: 'VAULT_GIT', type: 'confirm', message: 'Track the vault with git?', default: true },
     { key: 'VAULT_AGENT_ACCESS', type: 'confirm', message: 'Give agents access (obsidian-axi, OBSIDIAN_VAULT, a Claude Code session hook, and a Claude Code rules file and skill that point to the vault)?', default: true },
     { key: 'VAULT_APP', type: 'confirm', message: 'Install the Obsidian app?', default: true },
@@ -243,6 +257,12 @@ export default {
       TODAY: today,
     };
     const folders = [...pillars, ...Object.keys(ENTITY_FOLDERS)];
+    // An existing vault has its own readmes, templates and scripts. Writing the missing starter
+    // files into it leaves untracked files behind, which blocks any job that needs a clean vault.
+    const keepStarterFiles = isExistingVault(vault) && !ctx.get('VAULT_REFRESH');
+    const starterSkip = () => {
+      if (keepStarterFiles) throw new Skip(`${vault} is an existing vault; starter files left out (answer VAULT_REFRESH=yes to add the missing ones)`);
+    };
 
     await ctx.step('folders', () => {
       const created = [...folders, 'templates', 'prompts'].filter((f) => ctx.mkdir(path.join(vault, f)));
@@ -261,6 +281,7 @@ export default {
     // Every folder ships empty apart from a README that says what belongs in it, which also
     // keeps the folder present in a fresh clone.
     await ctx.step('folder readmes', async () => {
+      starterSkip();
       for (const folder of folders) {
         const blurb = ENTITY_FOLDERS[folder]
           ?? `A life area. Topic notes about ${folder}, one note per topic. Rename or drop this folder if it is not one of yours.`;
@@ -269,6 +290,7 @@ export default {
     });
 
     await ctx.step('note templates', async () => {
+      starterSkip();
       for (const type of NOTE_TYPES) {
         await ctx.writeFile(path.join(vault, 'templates', `${type}.md`), ctx.template(`second-brain/note-templates/${type}.md`, vars));
       }
@@ -276,6 +298,7 @@ export default {
 
     if (scripts) {
       await ctx.step('vault scripts', async () => {
+        starterSkip();
         for (const file of SCRIPTS) {
           await ctx.writeFile(path.join(vault, 'bin', file), ctx.template(`second-brain/bin/${file}`, vars), { mode: 0o755 });
         }
@@ -285,6 +308,7 @@ export default {
       const tools = TOOLS.filter((t) => ctx.get('VAULT_TOOLS').includes(t.value));
       if (tools.length) {
         await ctx.step('vault tools', async () => {
+          starterSkip();
           for (const t of tools) await ctx.writeFile(path.join(vault, 'bin', t.file), ctx.template(`second-brain/bin/${t.file}`, vars), { mode: 0o755 });
           if (tools.some((t) => t.value === 'garden')) await ctx.writeFile(path.join(vault, 'prompts', 'garden.md'), ctx.template('second-brain/prompts/garden.md', vars));
         });
@@ -295,6 +319,7 @@ export default {
       // one is left alone like every other existing file: it is the vault's, not ours.
       await ctx.step('initial map', () => {
         if (fs.existsSync(path.join(vault, 'MAP.md'))) return ctx.ok('MAP.md exists; regenerate it with bin/index.mjs');
+        if (keepStarterFiles && !fs.existsSync(path.join(vault, 'bin', 'index.mjs'))) throw new Skip('the vault has no bin/index.mjs of ours to run');
         return ctx.run(`node "${path.join(vault, 'bin', 'index.mjs')}" "${vault}"`);
       });
 
