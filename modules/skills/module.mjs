@@ -2,24 +2,35 @@ import path from 'node:path';
 import { Skip } from '../../lib/context.mjs';
 import { claudeDir, installSkill, skillInstalled } from '../../lib/claude.mjs';
 
+// Files a bundled skill gets beside its SKILL.md: [template under templates/, path inside the skill folder].
+// The playbook's principles/ folder holds the principle check list its review steps run (rule 4.7)
+// and the checker for its script rows.
+const BUNDLED_EXTRAS = {
+  'workflow-playbook': [
+    ['principles/checks.md', 'principles/checks.md'],
+    ['principles/bin/principle-check.mjs', 'principles/bin/principle-check.mjs'],
+  ],
+};
+
 /**
- * Write a skill this repo ships in templates/skills/<name> to ~/.claude/skills/<name>.
+ * Write a skill this repo ships in templates/skills/<name> to ~/.claude/skills/<name>, with its extra files.
  * A copy this setup shipped earlier is refreshed; a local edit is left alone.
  */
-export function writeBundledSkill(ctx, name) {
-  return ctx.writeFile(path.join(claudeDir(ctx), 'skills', name, 'SKILL.md'), ctx.template(`skills/${name}/SKILL.md`), { onConflict: 'ask' });
+export async function writeBundledSkill(ctx, name) {
+  const dir = path.join(claudeDir(ctx), 'skills', name);
+  const wrote = await ctx.writeFile(path.join(dir, 'SKILL.md'), ctx.template(`skills/${name}/SKILL.md`), { onConflict: 'ask' });
+  for (const [from, to] of BUNDLED_EXTRAS[name] ?? []) await ctx.writeFile(path.join(dir, to), ctx.template(from), { onConflict: 'ask' });
+  return wrote;
 }
 
 // Installed user-wide for Claude Code with the skills CLI (github.com/vercel-labs/skills).
 const SKILLS = [
   { value: 'kun', repo: 'kunchenguid/kun', label: 'kun - how Kun thinks, builds and solves problems' },
   { value: 'vision', repo: 'kunchenguid/vision', label: 'vision - draft and stress-test a VISION.md for a repository, then refine it with you on a review board' },
-  { value: 'grill-me', repo: 'mattpocock/skills', label: 'grill-me - a relentless interview to sharpen a plan' },
   { value: 'grilling', repo: 'mattpocock/skills', label: 'grilling - stress-test a plan, decision or idea' },
   { value: 'teach', repo: 'mattpocock/skills', label: 'teach - learn a new skill or concept in your workspace' },
   { value: 'tdd', repo: 'mattpocock/skills', label: 'tdd - build features and fix bugs test-first, red-green-refactor' },
   { value: 'codebase-design', repo: 'mattpocock/skills', label: 'codebase-design - shared vocabulary for deep modules, seams and testable interfaces' },
-  { value: 'grill-with-docs', repo: 'mattpocock/skills', label: 'grill-with-docs - grilling that also writes GLOSSARY.md and docs/adr as it goes' },
   { value: 'to-spec', repo: 'mattpocock/skills', label: 'to-spec - turn the current conversation into a spec in your issue tracker' },
   { value: 'to-tickets', repo: 'mattpocock/skills', label: 'to-tickets - break a plan or spec into tickets with their blocking edges' },
   { value: 'to-questionnaire', repo: 'mattpocock/skills', label: 'to-questionnaire - turn an open decision into a questionnaire' },
@@ -45,9 +56,9 @@ const SKILLS = [
   {
     value: 'workflow-playbook',
     label:
-      'workflow-playbook - a working method for long projects run with AI agents. Covers stage gates, ' +
-      'a map that always shows the next step, evidence and research at every stage, review pages, when to ask or act, wording, briefs, ' +
-      'memory and status, and the steps from a weak prototype to a liked direction, an approved journey map and an aligned rules list. Included with this setup.',
+      'workflow-playbook - a working method for long projects run with AI agents. Covers ten phases from an idea to shipped and improved, stage gates, ' +
+      'a map that always shows the next step, evidence and research at every stage, four review points with checks before every page, when to ask or act, wording, briefs, ' +
+      'memory and status, a standing improve step, and the steps from a weak prototype to a liked direction, an approved journey map and an aligned rules list. Included with this setup.',
     install: (ctx) => writeBundledSkill(ctx, 'workflow-playbook'),
   },
   {
@@ -60,6 +71,9 @@ const SKILLS = [
 // The default is the full set, so a fresh clone works like the setup it came from; untick
 // what you do not want. docs/route.md shows where each skill fits in a software project.
 const DEFAULTS = SKILLS.map((s) => s.value);
+// Choices no longer offered, and the choice that covers each, so a saved answer naming one still runs.
+// grill-me and grill-with-docs only called grilling (and domain-modeling, which wayfinder installs).
+const RETIRED = { 'grill-me': 'grilling', 'grill-with-docs': 'grilling' };
 
 // Every skill a choice installs, helpers included.
 const skillNames = (s) => (s.repo ? [s.value, ...(s.helpers ?? [])] : []);
@@ -102,8 +116,10 @@ async function tallied(ctx, tally, label, fn) {
 export default {
   name: 'skills',
   title: 'Agent skills',
-  description: 'Claude Code skills, downloaded from their upstreams: kun, vision, grill-me, grilling, teach, tdd, codebase-design, grill-with-docs, to-spec, to-tickets, to-questionnaire, wayfinder, find-docs, no-mistakes, workflow-playbook, composio-cli',
+  description: 'Claude Code skills, downloaded from their upstreams: kun, vision, grilling, teach, tdd, codebase-design, to-spec, to-tickets, to-questionnaire, wayfinder, find-docs, no-mistakes, workflow-playbook, composio-cli',
   order: 50,
+  group: 'assistant',
+  summary: 'skills for planning and test-first coding',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],
   default: true,
@@ -114,6 +130,7 @@ export default {
       message: 'Skills to install for Claude Code',
       default: DEFAULTS,
       choices: SKILLS,
+      retired: RETIRED,
       refresh: withNewSkills,
     },
     {

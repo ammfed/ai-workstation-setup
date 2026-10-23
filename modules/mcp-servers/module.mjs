@@ -8,8 +8,7 @@ const SERVERS = [
     value: 'context7',
     label: 'context7 - up-to-date library docs (hosted; API key optional, raises rate limits)',
     // github.com/upstash/context7 docs/resources/all-clients.mdx
-    command: (ctx) => {
-      const key = ctx.get('CONTEXT7_API_KEY');
+    command: (ctx, key = ctx.get('CONTEXT7_API_KEY')) => {
       const header = key ? ` --header "Authorization: Bearer ${key}"` : '';
       return { cmd: `claude mcp add --scope user${header} --transport http context7 https://mcp.context7.com/mcp`, redact: [key] };
     },
@@ -47,6 +46,8 @@ export default {
   title: 'MCP servers',
   description: 'MCP servers for Claude Code (context7, chrome-devtools, ticktick, rea)',
   order: 40,
+  group: 'assistant',
+  summary: 'any outside connections you pick',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['claude-code'],
   default: true,
@@ -73,6 +74,15 @@ export default {
       await ctx.step(server.value, () => {
         if (!ctx.dryRun && !ctx.has('claude')) throw new Skip('`claude` is not on PATH yet; open a new terminal and re-run');
         if (ctx.capture(`claude mcp get ${server.value}`) !== null) return ctx.ok(`${server.value} already configured`);
+        // At a terminal Context7's optional key is asked for on the last screen; the server is added then.
+        if (server.value === 'context7' && !ctx.get('CONTEXT7_API_KEY') && ctx.interactive) {
+          return ctx.keyAtEnd({
+            name: 'Context7',
+            label: 'Context7 key (on context7.com: Dashboard)',
+            apply: (key) => ctx.run(server.command(ctx, key).cmd, { redact: [key] }),
+            none: () => ctx.run(server.command(ctx).cmd),
+          });
+        }
         const { cmd, redact } = server.command(ctx);
         ctx.run(cmd, { redact });
         if (server.signIn) ctx.todo(server.signIn);

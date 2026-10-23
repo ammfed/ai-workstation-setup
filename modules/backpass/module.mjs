@@ -18,11 +18,20 @@ const DENYLIST_STARTER = `# One word or phrase per line, matched case-insensitiv
 # projects you never want to leave this machine. An empty list blocks every run.
 `;
 
+// Claude model ids use dashes (claude-opus-5-5); a version written with a dot, as people say
+// it (claude-opus-5.5), is read as the dashed id. Other models are left as written.
+export function claudeModelId(model) {
+  const id = String(model ?? '').trim();
+  return id.startsWith('claude-') ? id.replace(/(\d)\.(?=\d)/g, '$1-') : id;
+}
+
 export default {
   name: 'backpass',
   title: 'backpass (learn from past sessions)',
   description: 'Opt-in: backpass proposes instruction-file fixes from past sessions, behind a privacy gate',
   order: 55,
+  group: 'assistant',
+  summary: 'fixes learned from past sessions',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],
   default: false,
@@ -54,7 +63,7 @@ export default {
       key: 'BACKPASS_MODEL',
       type: 'text',
       message: 'The one model backpass may use for both passes',
-      default: (ctx) => (ctx.values.BACKPASS_AGENT === 'codex' ? 'gpt-5.5' : 'claude-sonnet-5'),
+      default: (ctx) => (ctx.values.BACKPASS_AGENT === 'codex' ? 'gpt-5.5' : 'claude-opus-5-5'),
     },
     {
       key: 'BACKPASS_SCHEDULE',
@@ -79,6 +88,8 @@ export default {
     const base = dir(ctx);
     const runner = path.join(base, 'backpass-gate.mjs');
     const denylist = ctx.get('BACKPASS_DENYLIST');
+    const model = claudeModelId(ctx.get('BACKPASS_MODEL'));
+    if (model !== String(ctx.get('BACKPASS_MODEL')).trim()) ctx.info(`backpass model ${ctx.get('BACKPASS_MODEL')} read as ${model}`);
 
     await ctx.step('privacy gate', async () => {
       await ctx.writeFile(runner, ctx.template('backpass/bin/backpass-gate.mjs'), { onConflict: 'ask' });
@@ -90,7 +101,7 @@ export default {
             projects: projects.map((p) => ctx.path(p)),
             denylist,
             agent: ctx.get('BACKPASS_AGENT'),
-            model: ctx.get('BACKPASS_MODEL'),
+            model,
             cooldownDays: 7,
           },
           null,

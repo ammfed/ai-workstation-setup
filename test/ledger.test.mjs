@@ -439,6 +439,18 @@ test('needs you now versus parked follows the /bearings hold buckets exactly', (
   assert.equal(title, 'Waits on open work');
 });
 
+test('ledger: an encoded hold reason is read as its words; anything else stays as written', () => {
+  const enc = (t) => `fm-hold-v1:${Buffer.from(t, 'utf8').toString('base64')}`;
+  const text = [
+    '## In flight',
+    `- [ ] coded - A coded reason (since 2026-09-26) (hold: ${enc('Pick (a) or (b): ship on Friday?')}) (hold-kind: captain)`,
+    '- [ ] broken - A mark that does not decode (since 2026-09-26) (hold: fm-hold-v1:not*base64) (hold-kind: captain)',
+    '- [ ] plain - A plain reason (since 2026-09-26) (hold: Blue or grey?) (hold-kind: captain)',
+  ].join('\n');
+  const reason = Object.fromEntries(backlogRows(text, { now: Date.parse('2026-09-28T00:00:00Z') }).map((r) => [r.id, r.holdReason]));
+  assert.deepEqual(reason, { coded: 'Pick (a) or (b): ship on Friday?', broken: 'fm-hold-v1:not*base64', plain: 'Blue or grey?' });
+});
+
 /** A world for the board: holds of each kind, a landed row, and agents from a stand-in herdr. */
 function boardWorld(extra = {}) {
   const today = new Date();

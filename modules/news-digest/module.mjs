@@ -114,6 +114,8 @@ export default {
   title: 'News digest (a scheduled collector)',
   description: 'Opt-in: every few hours, gather new items from sources you list into one Markdown digest; a model only if you give one',
   order: 92,
+  group: 'notes',
+  summary: 'a news digest every few hours',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   default: false,
   questions: [

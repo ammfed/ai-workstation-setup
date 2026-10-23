@@ -1,7 +1,9 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { Skip } from '../../lib/context.mjs';
 import { claudeDir } from '../../lib/claude.mjs';
-import { renderBriefInclude, renderPreferences } from './render.mjs';
+import { PRIVATE_HEADINGS, PRIVATE_RULES_DEFAULT, parsePrivateRules } from './private-rules.mjs';
+import { renderBriefInclude, renderCaptainShared, renderPreferences } from './render.mjs';
 
 // Writes how you want your agents to work (status format, tone, decisions, review
 // pages, building, ideas, away mode, merges, research, quota) as a plain rules file your agents load.
@@ -20,16 +22,49 @@ function grillDefault(ctx) {
 }
 
 // Every question after the first three takes its recommended answer (its default, or a saved
-// answer) unless the person chose to go through them one by one. PREFS_PAGE_PREPARE_NEXT has
-// no recommended answer, so it is always asked.
+// answer) unless the person chose to go through them one by one. PREFS_PAGE_PREPARE_NEXT is
+// recommended no (a review page waits for your answer) and asked only when you choose for yourself.
 const GATE = ['PREFS_TARGETS', 'PREFS_REVIEW_EACH', 'PREFS_PAGE_PREPARE_NEXT'];
 function withRecommended(questions) {
   return questions.map((q) => (GATE.includes(q.key) ? q : { ...q, useDefault: (ctx) => !ctx.get('PREFS_REVIEW_EACH') }));
 }
 
+// Your own extra rules, kept outside the clone (PREFS_PRIVATE_RULES). Null when there is no file.
+function readPrivateRules(ctx) {
+  const file = ctx.get('PREFS_PRIVATE_RULES');
+  if (!file) return null;
+  if (!fs.existsSync(file)) {
+    ctx.info(`no private rules file at ${file}; nothing extra written`);
+    return null;
+  }
+  const { rules, unknown } = parsePrivateRules(fs.readFileSync(file, 'utf8'));
+  for (const h of unknown) ctx.warn(`${file}: unknown heading "${h}"; its lines are not used (headings: ${Object.values(PRIVATE_HEADINGS).join(', ')})`);
+  ctx.info(`private rules from ${file}: ${Object.entries(rules).map(([k, l]) => `${PRIVATE_HEADINGS[k]} ${l.length}`).join(', ')}`);
+  return rules;
+}
+
+// The taste preset's lines when PREFS_TASTE_PRESET is on, in the private rules format. Null when off.
+function readTastePreset(ctx) {
+  if (!ctx.get('PREFS_TASTE_PRESET')) return null;
+  const { rules } = parsePrivateRules(ctx.template('preferences/taste-preset.md'));
+  ctx.info(`taste preset: ${rules.everywhere.length + rules.sessions.length} rules added`);
+  return rules;
+}
+
+// The principle checker the workflow-playbook skill installs, when it is chosen now or already there.
+function checkerPath(ctx) {
+  const file = path.join(claudeDir(ctx), 'skills', 'workflow-playbook', 'principles', 'bin', 'principle-check.mjs');
+  return (ctx.values.SKILLS || []).includes('workflow-playbook') || fs.existsSync(file) ? file : null;
+}
+
 function cardsPath(ctx) {
   return path.join(ctx.home, '.config', 'ai-workstation-setup', 'decision-cards.html');
 }
+
+// The Firstmate home: this run's answer when the firstmate module runs too, else the saved one,
+// so `--modules preferences` alone still writes into the home Firstmate reads, not ~/firstmate.
+const firstmateHome = (ctx) =>
+  ctx.path(['FIRSTMATE_HOME', 'FIRSTMATE_DIR'].map((key) => ctx.get(key) ?? ctx.answers.get(key)).find(Boolean) || '~/firstmate');
 
 const TARGETS = {
   claude: {
@@ -38,7 +73,7 @@ const TARGETS = {
   },
   firstmate: {
     label: "firstmate - seed firstmate's local preferences file (data/captain.md in your Firstmate home)",
-    file: (ctx) => ctx.path(ctx.get('FIRSTMATE_HOME') || ctx.get('FIRSTMATE_DIR') || '~/firstmate', 'data/captain.md'),
+    file: (ctx) => path.join(firstmateHome(ctx), 'data', 'captain.md'),
     unsupported: { windows: 'firstmate runs in WSL; .\\install.ps1 --modules wsl sets it up there with this target' },
   },
 };
@@ -49,6 +84,8 @@ export default {
   description: 'How your agents work: language and tone, reporting, decisions, review pages, building, ideas, model use, research, safety',
   // After firstmate, so its clone directory is known and exists.
   order: 65,
+  group: 'assistant',
+  summary: 'your working preferences in every session',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   default: true,
   questions: withRecommended([
@@ -104,8 +141,9 @@ export default {
       key: 'PREFS_STATUS',
       type: 'choice',
       message: 'Reporting: how status replies open',
-      default: 'board',
+      default: 'needs-you',
       choices: [
+        { value: 'needs-you', label: 'needs-you - headline counts, then what needs you, what is at risk, a To do, Doing and Done table, and one line of links' },
         { value: 'actions', label: 'actions - a very short list of action items, then where the full report is' },
         { value: 'board', label: 'board - one table with TODO, DOING and DONE as three side-by-side columns, then what is left grouped by who acts, your block labelled YOU' },
         { value: 'brief', label: 'brief - the answer in a sentence or two, then brief action items' },
@@ -175,7 +213,7 @@ export default {
     yes('PREFS_PAGE_SIDE_BY_SIDE', 'Review pages: decision card on one side and a canvas of the current decision on the other, never stacked?', { when: cardsOn }),
     yes('PREFS_PAGE_FLIP_PREVIEWS', "Review pages: let you flip between every option's preview, not only the recommended one?", { when: cardsOn }),
     yes('PREFS_PAGE_MINIMAL_TEXT', 'Review pages: minimal text, no fluff or helper text, visuals carry the meaning?'),
-    yes('PREFS_PAGE_PHONE', 'Review pages: also read well on a phone (390 px wide), checked by a phone-size screenshot before the link is sent?'),
+    yes('PREFS_PAGE_PHONE', 'Review pages: also read well on a phone (390 px wide), checked by a phone-size screenshot before the link is sent (the prototype check follows this answer)?'),
     yes('PREFS_PAGE_WIDE_HEADER', 'Review pages: a large title and intro spread across the full page width?'),
     yes('PREFS_PAGE_CHECK_BEFORE_SEND', 'Review pages: check the page by screenshot before its link is sent, and always send the link?'),
     yes('PREFS_PAGE_FIRST', 'Review pages: when a decision waits on a page, build and check the page first, send the link, then stand by until you answer?'),
@@ -189,7 +227,10 @@ export default {
     yes('PREFS_ROUTE', 'Building: take software projects through six steps (plan, decide, prototype, breakdown, build, ship), each with its skill (docs/route.md)?', { default: false }),
     yes('PREFS_TEST_FIRST', 'Building: build product code test-first at the seams the spec names (not prototypes, docs or config)?', { default: false }),
     yes('PREFS_GLOSSARY_ADR', 'Building: read GLOSSARY.md and docs/adr before building, and add new terms and decision records with the change?', { default: false }),
-    yes('PREFS_PROTOTYPE_CHECK', 'Building: check every prototype at your target screen size, then at laptop and phone width, keep font sizes and column positions the same on every tab, and fix broken layout, unclear labels and dead ends before you see it?', { default: false }),
+    yes('PREFS_PROTOTYPE_CHECK', 'Building: check every prototype at your target screen size, then at laptop width (and phone width when review pages are checked on a phone), keep font sizes and column positions the same on every tab, and fix broken layout, unclear labels and dead ends before you see it?', { default: false }),
+    yes('PREFS_PRINCIPLE_CHECKS', 'Building: tell every Firstmate worker to run the principle checker (installed with workflow-playbook) before reporting done on anything with a screen?', {
+      when: (ctx) => ctx.get('PREFS_TARGETS').includes('firstmate'),
+    }),
     yes('PREFS_MODEL_GUIDE', 'Models: when a model is named for a task, read its vendor\'s prompting guide first?'),
 
     // Ideas and priorities
@@ -271,6 +312,19 @@ export default {
     yes('PREFS_BLOCKED_COMMANDS', 'Safety: when a permission check blocks an install, schedule, service or push, never work around it; give you the exact command to run?'),
     yes('PREFS_PRIVATE_STAYS_LOCAL', 'Safety: private chats and anything captured from your own sessions never go to an outside model?'),
     yes('PREFS_PUBLIC_REPOS', 'Safety: in public repositories, a no-reply commit identity, no email trailers, pull request text naming nothing private, and a privacy scan before each push?'),
+
+    // The optional taste preset (templates/preferences/taste-preset.md), off unless you turn it on
+    yes('PREFS_TASTE_PRESET', "Taste: add the template author's taste preset (screen taste and review habits, written as generic rules)?", { default: false }),
+
+    // Your private layer
+    {
+      key: 'PREFS_PRIVATE_RULES',
+      type: 'text',
+      path: true,
+      message:
+        'Private rules: a Markdown file outside this clone with your own extra rules under the headings Everywhere, Sessions, Workers, Second mates and Reviewer, read when it exists (empty for none)',
+      default: PRIVATE_RULES_DEFAULT,
+    },
   ]),
 
   async install(ctx) {
@@ -283,7 +337,9 @@ export default {
     }
 
     const log = ctx.get('PREFS_DECISIONS_LOG');
-    const text = renderPreferences((key) => ctx.get(key), { cardsPath: cards, decisionsPath: log ? ctx.path(log) : null });
+    const privateRules = readPrivateRules(ctx);
+    const tastePreset = readTastePreset(ctx);
+    const text = renderPreferences((key) => ctx.get(key), { cardsPath: cards, decisionsPath: log ? ctx.path(log) : null, privateRules, tastePreset });
     for (const name of targets) {
       const target = TARGETS[name];
       await ctx.step(name, () => {
@@ -292,12 +348,15 @@ export default {
         return ctx.writeFile(target.file(ctx), text, { onConflict: 'ask' });
       });
     }
-    // Firstmate's config/brief-include.md (its docs/configuration.md "Home brief include") is
-    // appended to every worker brief, so workers write to firstmate in the same house style.
-    const brief = renderBriefInclude((key) => ctx.get(key));
-    if (brief && targets.includes('firstmate') && !ctx.forOs(TARGETS.firstmate.unsupported)) {
-      const home = ctx.path(ctx.get('FIRSTMATE_HOME') || ctx.get('FIRSTMATE_DIR') || '~/firstmate');
-      await ctx.step('firstmate worker briefs', () => ctx.writeFile(path.join(home, 'config', 'brief-include.md'), brief, { onConflict: 'ask' }));
+    if (targets.includes('firstmate') && !ctx.forOs(TARGETS.firstmate.unsupported)) {
+      const home = firstmateHome(ctx);
+      // config/brief-include.md (Firstmate's docs/configuration.md "Home brief include") is appended
+      // to every worker brief: house style, helper model, build rules, principle checker, taste preset, private lines.
+      const brief = renderBriefInclude((key) => ctx.get(key), { checkerPath: checkerPath(ctx), privateRules, tastePreset });
+      if (brief) await ctx.step('firstmate worker briefs', () => ctx.writeFile(path.join(home, 'config', 'brief-include.md'), brief, { onConflict: 'ask' }));
+      // data/captain-shared.md in the main home is copied read-only into every second-mate home.
+      const shared = renderCaptainShared(privateRules);
+      if (shared) await ctx.step('firstmate second mates', () => ctx.writeFile(path.join(home, 'data', 'captain-shared.md'), shared, { onConflict: 'ask' }));
     }
     ctx.info('edit the written file any time; re-running asks before replacing your edits (and keeps a backup)');
   },

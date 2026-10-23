@@ -136,6 +136,8 @@ export default {
   title: 'Second brain (Obsidian vault)',
   description: 'Markdown vault with a note contract, provenance rules, note templates and the scripts that keep them true',
   order: 70,
+  group: 'notes',
+  summary: 'a notes vault for Obsidian',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],
   default: true,
@@ -173,7 +175,7 @@ export default {
     },
     { key: 'VAULT_GIT', type: 'confirm', message: 'Track the vault with git?', default: true },
     { key: 'VAULT_AGENT_ACCESS', type: 'confirm', message: 'Give agents access (obsidian-axi, OBSIDIAN_VAULT, a Claude Code session hook)?', default: true },
-    { key: 'VAULT_APP', type: 'confirm', message: 'Install the Obsidian app?', default: false },
+    { key: 'VAULT_APP', type: 'confirm', message: 'Install the Obsidian app?', default: true },
   ],
 
   async install(ctx) {
@@ -302,8 +304,20 @@ export default {
           if (ctx.capture('flatpak info md.obsidian.Obsidian') !== null) return ctx.ok('Obsidian (flatpak) already installed');
           return ctx.run('flatpak install -y flathub md.obsidian.Obsidian');
         }
-        if (ctx.os === 'wsl') return ctx.todo('install Obsidian on the Windows side: .\\install.ps1 --modules wsl offers it, or https://obsidian.md/download');
-        ctx.todo('install Obsidian from https://obsidian.md/download');
+        // Homebrew's obsidian cask (formulae.brew.sh/cask/obsidian) and Obsidian's own winget package.
+        if (ctx.os === 'macos') {
+          if (fs.existsSync('/Applications/Obsidian.app')) return ctx.ok('Obsidian already installed');
+          if (!ctx.dryRun && !ctx.has('brew')) throw new Skip('needs Homebrew; or download Obsidian from https://obsidian.md/download');
+          return ctx.run('brew install --cask obsidian');
+        }
+        if (ctx.os === 'windows') {
+          if (!ctx.dryRun && !ctx.has('winget')) throw new Skip('winget is missing; download Obsidian from https://obsidian.md/download');
+          if ((ctx.capture('winget list --id Obsidian.Obsidian -e') || '').includes('Obsidian.Obsidian')) return ctx.ok('Obsidian already installed');
+          return ctx.run('winget install --id Obsidian.Obsidian -e --accept-source-agreements --accept-package-agreements');
+        }
+        // Inside WSL the app belongs on the Windows side, which install.ps1 sets up by default.
+        if ((ctx.capture('winget.exe list --id Obsidian.Obsidian -e') || '').includes('Obsidian.Obsidian')) return ctx.ok('Obsidian already installed on the Windows side');
+        ctx.todo('install Obsidian on the Windows side: .\\install.ps1 --modules wsl offers it, or https://obsidian.md/download');
       });
     }
     // Obsidian on Windows reaches a vault inside WSL through its \\wsl.localhost path.

@@ -56,6 +56,8 @@ export default {
   title: 'ClickUp',
   description: 'clickup-axi CLI, its agent skill and session hook, plus a workspace structure guide',
   order: 80,
+  group: 'notes',
+  summary: 'ClickUp tasks for your agents',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],
   default: false,
@@ -81,10 +83,23 @@ export default {
     const token = ctx.get('CLICKUP_TOKEN');
     const tokenFile = path.join(ctx.home, '.config', 'clickup-axi', 'token');
     const authed = ctx.os !== 'windows' && fs.existsSync(tokenFile);
+    const list = ctx.get('CLICKUP_DEFAULT_LIST');
+    const signIn = (t) => ctx.run('clickup-axi auth login', { input: `${t}\n` });
+    const setList = () => ctx.run(`clickup-axi config set default_list "${list.replace(/"/g, '')}"`);
     await ctx.step('sign in', () => {
       if (authed) return ctx.ok('clickup-axi already has a stored token');
-      if (!token) return ctx.todo('clickup-axi auth login   (or set CLICKUP_TOKEN)');
-      ctx.run('clickup-axi auth login', { input: `${token}\n` });
+      if (token) return signIn(token);
+      // The key waits for the last screen; the default list follows it there.
+      const after = list ? `, then: clickup-axi config set default_list "${list.replace(/"/g, '')}"` : '';
+      ctx.keyAtEnd({
+        name: 'ClickUp',
+        label: 'ClickUp key (in ClickUp: Settings, Apps)',
+        apply: (t) => {
+          signIn(t);
+          if (list) setList();
+        },
+        todo: `clickup-axi auth login   (or set CLICKUP_TOKEN)${after}`,
+      });
     });
 
     if (ctx.get('CLICKUP_HOOK')) {
@@ -92,13 +107,7 @@ export default {
       await ctx.step('session hook', () => ctx.run('clickup-axi setup --global'));
     }
 
-    const list = ctx.get('CLICKUP_DEFAULT_LIST');
-    if (list) {
-      await ctx.step('default list', () => {
-        if (!authed && !token) throw new Skip('sign in first, then: clickup-axi config set default_list "<list>"');
-        ctx.run(`clickup-axi config set default_list "${list.replace(/"/g, '')}"`);
-      });
-    }
+    if (list && (authed || token)) await ctx.step('default list', setList);
     ctx.info('suggested workspace layout: docs/clickup-structure.md');
   },
 };

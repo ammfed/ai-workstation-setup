@@ -262,7 +262,9 @@ const kv = (text) => Object.fromEntries(text.split('\n').map((l) => /^([A-Za-z0-
  * Who is working on what, from task records: one `<id>.meta` file of key=value lines per
  * task (project, kind, worktree, and home when the task is itself an agent with its own
  * folder of task records), with its `<id>.status` log beside it. A task is listed while its
- * record or log changed within `days`, newest first, with its working copy and latest line.
+ * record or log changed within `days`, newest first. Each line leads with what the work is
+ * and its latest news, tags removed; the task's name and working copy follow in brackets,
+ * only to tell two items apart, so the voice talks by project and topic, not by id.
  */
 function tasks(p) {
   const since = Date.now() - (p.days || 14) * 86400_000;
@@ -279,15 +281,17 @@ function tasks(p) {
     try {
       const lines = fs.readFileSync(log, 'utf8').trim().split('\n');
       at = Math.max(at, fs.statSync(log).mtimeMs);
-      latest = lines[lines.length - 1].replace(/\s*\[(?:key|corr)=[^\]]*\]|\s*\bcorr=[0-9a-f]+/g, '').trim();
+      latest = lines[lines.length - 1].replace(/\s*\[[A-Za-z_]+=[^\]]*\]|\s*\b[A-Za-z_]+=[0-9a-f]{6,}\b/g, '').trim();
     } catch {}
     if (at < since) continue;
     const under = owner.get(path.resolve(t.home));
-    const what = [t.meta.kind || 'task', t.meta.project && `on ${path.basename(t.meta.project)}`, under && `under ${under}`].filter(Boolean).join(' ');
-    const copy = t.meta.worktree ? `; working copy ${tilde(t.meta.worktree)}` : '';
-    out.push({ at, text: `- ${t.id} (${what})${copy}; latest, ${when(at)}: ${clip(latest || 'no status yet', 240)}` });
+    const what = [t.meta.kind || 'task', t.meta.project && `on ${path.basename(t.meta.project).replace(/[-_]+/g, ' ')}`].filter(Boolean).join(' ');
+    const tag = [t.id, under && `under ${under}`, t.meta.worktree && `working copy ${tilde(t.meta.worktree)}`].filter(Boolean).join('; ');
+    out.push({ at, text: `- ${what}, latest ${when(at)}: ${clip(latest || 'no status yet', 240)} [${tag}]` });
   }
-  return out.sort((a, b) => b.at - a.at).map((l) => l.text).join('\n');
+  if (!out.length) return '';
+  const head = '(Each line is one piece of work. The name in brackets only tells two items apart; talk about the work by its project and topic.)';
+  return [head, ...out.sort((a, b) => b.at - a.at).map((l) => l.text)].join('\n');
 }
 
 function part(p) {

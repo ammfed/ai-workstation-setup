@@ -2,10 +2,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Skip, which } from '../../lib/context.mjs';
 import { addSessionStartHook, claudeDir } from '../../lib/claude.mjs';
+import { PRIVATE_RULES_DEFAULT, parsePrivateRules } from '../preferences/private-rules.mjs';
 import { TOOLS, warnPathOrder } from './tools.mjs';
-import { mergePixelSettings, patchPixelAgents } from './pixel-agents.mjs';
+import { earlierOfficeNamesHelper, mergePixelSettings, patchPixelAgents } from './pixel-agents.mjs';
 
 export const DEFAULTS = ['gh-axi', 'chrome-devtools-axi', 'lavish-axi', 'tasks-axi', 'quota-axi', 'ctx7', 'no-mistakes', 'treehouse'];
+
+// With no saved answer, the list starts with the defaults and every tool already on this
+// machine ticked, found the way ensureTool finds them (ctx.has on the tool's command).
+export function defaultClis(ctx) {
+  const installed = Object.entries(TOOLS).filter(([key, t]) => !DEFAULTS.includes(key) && ctx.has(t.bin || t.name));
+  return [...DEFAULTS, ...installed.map(([key]) => key)];
+}
 
 // `cswap auto` (github.com/realiti4/claude-swap, `cswap auto --help`) is a foreground loop that
 // switches to another saved account when the active one nears its 5-hour or weekly limit.
@@ -160,11 +168,89 @@ async function pinReviewModel(ctx, pin) {
   await ctx.writeFile(file, next, { onConflict: 'replace' });
 }
 
+// The design checks a reviewer can judge from the code alone, from the workflow-playbook skill's
+// principles/checks.md (same ids). Rows that need the screen itself (grouping, spacing, colour)
+// stay with a reviewer who sees screenshots. no-mistakes adds these machine-local
+// review.path_instructions to every review on this machine whose change touches a matching file
+// (its global-config reference). A path without a slash matches the file name at any depth.
+export const REVIEW_RULE_PATHS = ['*.html', '*.jsx', '*.tsx', '*.vue', '*.svelte'];
+export const REVIEW_RULES = [
+  'Interface code: raise a finding for each of these design checks the change breaks, with its id.',
+  'W4: a button says its exact effect ("Send report"), not "Submit" or "OK".',
+  'L3: every field has a visible label; a placeholder is never the label.',
+  'L9: an empty state says what is missing and gives one next action.',
+  'N1: values to compare are bars or dots on one shared scale; no pie, donut, radar, gauge, 3D or bubble chart.',
+  'I1: an AI flag names its specific concern, not only a confidence number.',
+  'I2: AI-proposed items look different from accepted ones, and anything below the threshold goes to a person.',
+  'I3: a finding that only confirms what the reader expected carries a "second look" note.',
+  'I4: personalisation is a visible setting the user chooses, never an inferred trait.',
+  'I5: a chat surface shows what it can do with a few suggestions, not a blank box.',
+  'Leave out checks the change does not touch.',
+];
+const RULES_BEGIN = '# >>> ai-workstation-setup design review rules (rerun the installer to update; your own go under Reviewer in your private rules file)';
+const RULES_END = '# <<< ai-workstation-setup design review rules';
+
+/** The review: block holding `lines` (the generic rules plus your Reviewer lines) for every path. */
+export function reviewRulesBlock(lines) {
+  const body = lines.map((l) => `        ${String(l).replace(/\s+/g, ' ').trim()}`).join('\n');
+  const entries = REVIEW_RULE_PATHS.map((p) => `    - path: "${p}"\n      instructions: |\n${body}`);
+  return [RULES_BEGIN, 'review:', '  path_instructions:', ...entries, RULES_END].join('\n');
+}
+
+/**
+ * The no-mistakes config text with the design review rules block, or null when the file has its
+ * own top-level review: key (yours is kept; merge the block by hand). A block this installer wrote
+ * earlier is replaced, and removed when `lines` is empty. Everything else stays as it was.
+ */
+export function withReviewRules(text, lines) {
+  const current = String(text ?? '');
+  const block = lines.length ? reviewRulesBlock(lines) : '';
+  const begin = current.indexOf(RULES_BEGIN);
+  const end = current.indexOf(RULES_END, begin);
+  if (begin !== -1 && end !== -1) {
+    const before = current.slice(0, begin).replace(/\n*$/, '');
+    const after = current.slice(end + RULES_END.length).replace(/^\n*/, '');
+    const out = [before, after, block].filter(Boolean).join('\n\n');
+    return out ? `${out}\n` : '';
+  }
+  if (/^review\s*:/m.test(current)) return null;
+  if (!block) return current;
+  const body = current.replace(/\n*$/, '');
+  return `${body}${body ? '\n\n' : ''}${block}\n`;
+}
+
+// Your Reviewer lines. PREFS_PRIVATE_RULES comes from this run, else your saved answers, else the default.
+function privateReviewerLines(ctx) {
+  const raw = ctx.get('PREFS_PRIVATE_RULES') ?? ctx.answers.get('PREFS_PRIVATE_RULES') ?? PRIVATE_RULES_DEFAULT;
+  const file = raw && ctx.path(raw);
+  if (!file || !fs.existsSync(file)) return [];
+  return parsePrivateRules(fs.readFileSync(file, 'utf8')).rules.reviewer;
+}
+
+export async function writeReviewRules(ctx, on) {
+  const file = noMistakesConfigPath(ctx);
+  const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  const own = on ? privateReviewerLines(ctx) : [];
+  const lines = on ? [...REVIEW_RULES, ...own] : [];
+  const next = withReviewRules(current, lines);
+  if (next === null) {
+    if (!on) return ctx.ok(`${file} has its own review rules; left untouched`);
+    ctx.info(`the block to merge:\n${reviewRulesBlock(lines)}`);
+    return ctx.todo(`${file} has its own review: key, so the design review rules were not added; merge the block printed above into it`);
+  }
+  if (next === current) return ctx.ok(on ? `${file} already has the design review rules` : `${file} has no design review rules from this installer`);
+  if (on) ctx.info(`no-mistakes design review rules for ${REVIEW_RULE_PATHS.join(' ')}, with ${own.length} Reviewer line(s) from your private rules`);
+  else ctx.info('removing the no-mistakes design review rules this installer added');
+  await ctx.writeFile(file, next, { onConflict: 'replace' });
+}
+
 export default {
   name: 'agent-clis',
   title: 'Agent CLIs',
   description: 'Agent-ergonomic CLIs (gh-axi, chrome-devtools-axi, ctx7, no-mistakes, treehouse, ...)',
   order: 30,
+  group: 'tools',
+  summary: 'helper commands for GitHub and the browser',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],
   default: true,
@@ -173,7 +259,7 @@ export default {
       key: 'AGENT_CLIS',
       type: 'multi',
       message: 'CLIs to install',
-      default: DEFAULTS,
+      default: defaultClis,
       choices: Object.entries(TOOLS).map(([value, t]) => ({ value, label: `${value.padEnd(20)} ${t.about}` })),
     },
     {
@@ -181,6 +267,13 @@ export default {
       type: 'text',
       message: 'Model and effort no-mistakes reviews with when it runs Claude, in every repository (agent_config in its config; empty or "keep" leaves it alone)',
       default: NO_MISTAKES_REVIEW,
+      when: (ctx) => ctx.get('AGENT_CLIS').includes('no-mistakes'),
+    },
+    {
+      key: 'NO_MISTAKES_PRINCIPLES',
+      type: 'confirm',
+      message: 'Add design review rules to no-mistakes in every repository (button wording, visible labels, empty states, chart types, AI flags; plus the Reviewer lines of your private rules), checked when a change touches interface files?',
+      default: true,
       when: (ctx) => ctx.get('AGENT_CLIS').includes('no-mistakes'),
     },
     {
@@ -198,8 +291,8 @@ export default {
     {
       key: 'CTX7_SETUP',
       type: 'confirm',
-      message: 'Run `ctx7 setup --claude --cli` now (browser sign-in; installs the find-docs skill and a docs rule)?',
-      default: true,
+      message: 'Sign in to Context7 at the end of the setup (`ctx7 setup --claude --cli`: installs the find-docs skill and a docs rule)? Without it, it waits until you want it',
+      default: false,
       when: (ctx) => ctx.interactive && ctx.get('AGENT_CLIS').includes('ctx7'),
     },
     {
@@ -311,8 +404,13 @@ export default {
     if (chosen.includes('ctx7')) {
       await ctx.step('ctx7 setup', () => {
         if (fs.existsSync(path.join(claudeDir(ctx), 'skills', 'find-docs'))) return ctx.ok('Context7 is already set up for Claude Code');
-        if (ctx.get('CTX7_SETUP')) ctx.run('ctx7 setup --claude --cli -y');
-        else ctx.todo('ctx7 setup --claude --cli   (signs in with your browser)');
+        ctx.signIn({
+          name: 'Context7',
+          later: 'Context7, for fresh answers about code tools',
+          cmd: 'ctx7 setup --claude --cli -y',
+          todo: 'ctx7 setup --claude --cli   (signs in with your browser)',
+          wanted: Boolean(ctx.get('CTX7_SETUP')),
+        });
       });
     }
 
@@ -353,12 +451,14 @@ export default {
         await ctx.step('pixel-office-names', () => {
           const prefix = String(ctx.get('PIXEL_AGENTS_TAB_PREFIX') ?? '').trim();
           if (!/^[\w.-]*$/.test(prefix)) throw new Error('PIXEL_AGENTS_TAB_PREFIX may hold only letters, digits, dot, dash and underscore');
-          return ctx.writeFile('~/.local/bin/pixel-office-names', ctx.template('pixel-agents/bin/pixel-office-names.mjs', { TAB_PREFIX: prefix }), {
-            onConflict: 'ask',
-            mode: 0o755,
-          });
+          const content = ctx.template('pixel-agents/bin/pixel-office-names.mjs', { TAB_PREFIX: prefix });
+          // The patched office runs this helper with --print, so an earlier office-names helper
+          // of your own under this name is replaced (a backup is kept); any other file is kept.
+          const earlier = earlierOfficeNamesHelper(path.join(ctx.home, '.local', 'bin', 'pixel-office-names'), content);
+          if (earlier) ctx.info('an earlier office-names helper is at ~/.local/bin/pixel-office-names; replacing it with this one');
+          return ctx.writeFile('~/.local/bin/pixel-office-names', content, { onConflict: earlier ? 'replace' : 'ask', mode: 0o755 });
         });
-        ctx.info('office names: run `pixel-office-names --watch` next to Pixel Agents (it needs herdr); see docs/pixel-agents.md');
+        ctx.info('office names: the office asks pixel-office-names for names by itself (it needs herdr); see docs/pixel-agents.md');
       }
       ctx.info('start Pixel Agents with `pixel-agents` and open the address it prints; see docs/pixel-agents.md');
     }
@@ -386,6 +486,7 @@ export default {
     if (chosen.includes('no-mistakes')) {
       const pin = parseReviewModel(ctx.get('NO_MISTAKES_REVIEW_MODEL'));
       if (pin) await ctx.step('no-mistakes review model', () => pinReviewModel(ctx, pin));
+      await ctx.step('no-mistakes design review rules', () => writeReviewRules(ctx, ctx.get('NO_MISTAKES_PRINCIPLES')));
       ctx.info('per repository: `no-mistakes init` (also installs its /no-mistakes skill)');
     }
   },

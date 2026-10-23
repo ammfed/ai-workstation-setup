@@ -2,18 +2,20 @@
 // pixel-office-names - give each character in the Pixel Agents office the name its agent has
 // in herdr, instead of the folder it runs in.
 //
-// It writes ~/.pixel-agents/agent-names.json: { "<Claude session id>": "<name>" }. Pixel
-// Agents reads that file only after the installer's optional office-names patch
-// (PIXEL_AGENTS_NAMES); the office picks up new names within about ten seconds of a
-// change, or on a page reload.
+// Names are { "<Claude session id>": "<name>" }. After the installer's optional office-names
+// patch (PIXEL_AGENTS_NAMES) the office runs `pixel-office-names --print` itself about every ten
+// seconds, so nothing needs to keep running. It also reads ~/.pixel-agents/agent-names.json,
+// which a sync writes; without herdr, write that file yourself in the same shape.
 //
 // A name is, in order: the agent's own name in herdr, else its tab label (without the
 // prefix {{TAB_PREFIX}}, and skipping herdr's numbered default tabs), else its workspace label.
-// Without herdr, write the file yourself in the same shape.
+// herdr 0.9 reports no name per agent (its `agent` field is the kind, such as "claude"), so
+// there the tab label, or the workspace label, is the name.
 //
 // Usage:
-//   pixel-office-names                 sync once
+//   pixel-office-names                 sync once to ~/.pixel-agents/agent-names.json
 //   pixel-office-names --watch [secs]  keep syncing, every 15 seconds by default
+//   pixel-office-names --print         print the names as JSON and write nothing
 //
 // Installed by ai-workstation-setup (agent-clis module). No dependencies. It never replaces
 // the names file with an empty one.
@@ -50,12 +52,16 @@ export function officeNames(agents, tabs, workspaces, prefix = TAB_PREFIX) {
   return names;
 }
 
-function syncOnce() {
-  const names = officeNames(
+function herdrNames() {
+  return officeNames(
     list(herdr('agent', 'list'), 'agents'),
     list(herdr('tab', 'list'), 'tabs'),
     list(herdr('workspace', 'list'), 'workspaces'),
   );
+}
+
+function syncOnce() {
+  const names = herdrNames();
   const count = Object.keys(names).length;
   if (!count) return `no agent names found in herdr; ${NAMES} left unchanged`;
   const next = `${JSON.stringify(names, null, 2)}\n`;
@@ -69,7 +75,7 @@ function syncOnce() {
 function main() {
   const [flag, secs] = process.argv.slice(2);
   try {
-    console.log(syncOnce());
+    console.log(flag === '--print' ? JSON.stringify(herdrNames()) : syncOnce());
   } catch (err) {
     console.error(`pixel-office-names: ${err.code === 'ENOENT' ? 'herdr is not on PATH' : err.message}`);
     if (flag !== '--watch') process.exit(1);
@@ -86,4 +92,14 @@ function main() {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+// Run directly, not imported by a test. Real paths on both sides: a symlinked folder (such as
+// macOS's /var -> /private/var) would otherwise make the two differ and the script do nothing.
+function runAsScript() {
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (runAsScript()) main();

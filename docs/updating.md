@@ -26,8 +26,9 @@ look first), then `.\install.ps1`.
 not possible it stops, says why, and changes nothing. It never forces, never merges, never
 rebases, never stashes and never throws anything away.
 
-Running the installer again reuses your saved answers: it asks only questions that are new
-since your last run, drops answers to questions that no longer exist, and never asks again
+Running the installer again reuses your saved answers. At a terminal it says how many settings
+are new since your last run; Enter gives them their recommended answers, and `c` lets you
+answer them yourself. It drops answers to questions that no longer exist, and never asks again
 or resets something you already answered. One answer grows: skills added to the default set
 since your last run are added to `SKILLS` (the installer keeps the list it offered in
 `SKILLS_OFFERED`), while a skill you removed stays off. To change an answer, edit that line in
@@ -37,7 +38,8 @@ the installer lists modules you have not selected, and you add one by putting it
 
 To update only the Claude Code part (shipped hooks, status line, reader subagent, hook
 registrations and the default agent tools), run `scripts/apply-to-machine.sh --dry-run` to
-see the plan, then `scripts/apply-to-machine.sh` yourself (Linux, macOS, WSL). It leaves your
+see the plan, then `scripts/apply-to-machine.sh` yourself (Linux, macOS, WSL). It sets the
+default model and effort from `docs/model-map.md` only where you have not set them, leaves your
 other settings alone, asks y/N before it replaces a file you edited, changes a status line you
 set or installs a tool, and keeps one backup set per run in
 `~/.config/ai-workstation-setup/apply-backups/`. `--undo` restores the latest set (tools it

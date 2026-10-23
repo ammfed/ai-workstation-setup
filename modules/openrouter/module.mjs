@@ -3,7 +3,7 @@ import path from 'node:path';
 
 // One OpenRouter key and one decision model (Jev by default) for the tools that can reach a model
 // through OpenRouter by their own documented settings. The key is taken from OPENROUTER_API_KEY or
-// a hidden prompt and stored only in a local env file (mode 600), outside this clone. Tools are
+// pasted on the last screen and stored only in a local env file (mode 600), outside this clone. Tools are
 // wired only through settings they document; where a tool offers none, it is named, not patched.
 // See docs/openrouter.md.
 
@@ -24,12 +24,25 @@ export function withKey(text, key) {
   return `${lines.join('\n')}\n`;
 }
 
+function storeKey(ctx, file, current, key) {
+  const next = withKey(current, key);
+  if (current === next) return ctx.ok(`${file} already holds this key`);
+  if (ctx.dryRun) return ctx.say(`  ~ would store the key in ${file} (mode 600)`);
+  ctx.backup(file);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, next, { mode: 0o600 });
+  fs.chmodSync(file, 0o600);
+  ctx.ok(`stored the key in ${file} (mode 600)`);
+}
+
 export default {
   name: NAME,
   title: 'OpenRouter key (optional)',
   description: 'Opt-in: one OpenRouter key and decision model (Jev by default) for the tools that support it, kept in a local env file',
   // Before voice-mode, which reads the key file and model from these answers.
   order: 85,
+  group: 'tools',
+  summary: 'one OpenRouter key for the tools that use it',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   default: false,
   questions: [
@@ -52,20 +65,15 @@ export default {
     await ctx.step('key file', async () => {
       const key = ctx.get('OPENROUTER_API_KEY');
       const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
-      if (!key) {
-        if (current !== null) return ctx.ok(`${file} exists; left as it is`);
-        await ctx.writeFile(file, 'OPENROUTER_API_KEY=\n', { mode: 0o600 });
-        ctx.todo(`put your OpenRouter key in ${file} (mode 600; never commit it or paste it in chat)`);
-        return;
-      }
-      const next = withKey(current, key);
-      if (current === next) return ctx.ok(`${file} already holds this key`);
-      if (ctx.dryRun) return console.log(`  ~ would store the key in ${file} (mode 600)`);
-      ctx.backup(file);
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, next, { mode: 0o600 });
-      fs.chmodSync(file, 0o600);
-      ctx.ok(`stored the key in ${file} (mode 600)`);
+      if (key) return storeKey(ctx, file, current, key);
+      if (/^\s*OPENROUTER_API_KEY=\S/m.test(current || '')) return ctx.ok(`${file} already holds a key; left as it is`);
+      if (current === null) await ctx.writeFile(file, 'OPENROUTER_API_KEY=\n', { mode: 0o600 });
+      ctx.keyAtEnd({
+        name: 'OpenRouter',
+        label: 'OpenRouter key (on openrouter.ai: Keys)',
+        apply: (v) => storeKey(ctx, file, fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null, v),
+        todo: `put your OpenRouter key in ${file} (mode 600; never commit it or paste it in chat)`,
+      });
     });
 
     await ctx.step('tools', () => {

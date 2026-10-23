@@ -205,6 +205,8 @@ export default {
   title: 'Daily sync (one daily alignment pass)',
   description: 'Opt-in: a daily job that pulls clean repos, ingests new raw files, checks tool updates and reads task surfaces for drift, reporting loudly',
   order: 90,
+  group: 'agents',
+  summary: 'a daily check that keeps repos, notes and tasks in line',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],
   default: false,

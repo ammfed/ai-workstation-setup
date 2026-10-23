@@ -9,19 +9,26 @@ Where it writes (`PREFS_TARGETS`):
 | Target | File | Loaded by |
 | --- | --- | --- |
 | `claude` | `~/.claude/rules/working-preferences.md` | Claude Code, as user rules in every project |
-| `firstmate` | `data/captain.md` in your Firstmate home (`FIRSTMATE_HOME`, else the clone; the file firstmate reads for preferences) | Firstmate, at session start |
+| `firstmate` | `data/captain.md` in your Firstmate home (`FIRSTMATE_HOME` from this run or your saved answers, else the clone; the file firstmate reads for preferences) | Firstmate, at session start |
 
 The file is yours: edit it freely. Re-running the installer asks before replacing a
 changed file and keeps a timestamped backup.
 
 After the targets, one question decides how many follow: `PREFS_REVIEW_EACH` (default no)
 writes the recommended set below without asking each one. Answer yes to go through them one
-by one. One question is always asked: `PREFS_PAGE_PREPARE_NEXT`, which controls whether
-the agent prepares the next stage while a review page waits for your decision. An answers
-file still sets any key it names either way.
+by one. `PREFS_PAGE_PREPARE_NEXT` (default no: a review page waits for your answer) is asked
+only when you choose for yourself; going ahead with the first screen takes its default. An
+answers file still sets any key it names either way.
 
-With `PREFS_WRITING_STYLE=ste` and the `firstmate` target, the same house style also goes to
-Firstmate's `config/brief-include.md`, so every worker writes its status lines and reports in it.
+With the `firstmate` target, the module also writes Firstmate's `config/brief-include.md`, which
+Firstmate appends to every worker brief. It holds what applies: the house style with
+`PREFS_WRITING_STYLE=ste` (for what workers write to Firstmate, never the deliverable), the
+helper-model rule from `PREFS_DELEGATE_RETRIEVAL`, the build rules from `PREFS_TEST_FIRST` and
+`PREFS_GLOSSARY_ADR`, the principle checker line from `PREFS_PRINCIPLE_CHECKS`, and your private
+Everywhere and Workers lines. Nothing applies, nothing is written.
+
+Your own rules that are not generic go in a private rules file outside the clone; see
+[Your private rules](#your-private-rules).
 
 ## Questions and the rules they write
 
@@ -45,7 +52,7 @@ Firstmate's `config/brief-include.md`, so every worker writes its status lines a
 
 | Key | Default | Rule |
 | --- | --- | --- |
-| `PREFS_STATUS` | `board` | Every status reply opens with one table whose three columns, TODO, DOING and DONE, sit side by side, then groups what is left by who acts: your block labelled YOU, the agent's labelled with its own role name (never ME). Small text bars and boxes only where they carry meaning. `actions` gives a very short list of action items, yours first, then a pointer to the full report; `brief` opens with a one-line answer, then brief action items. |
+| `PREFS_STATUS` | `needs-you` | Every status reply opens with one line of headline counts, then NEEDS YOU (only what you alone can do, ranked, each with a rough time cost and one link), AT RISK (what is stuck or slipping and what it costs you), always a table with To do, Doing and Done side by side (one row per project, Done only since the last status), and one Links line. Empty parts are left out, except the table. `board` opens with one table whose three columns, TODO, DOING and DONE, sit side by side, then groups what is left by who acts: your block labelled YOU, the agent's labelled with its own role name (never ME). Small text bars and boxes only where they carry meaning. `actions` gives a very short list of action items, yours first, then a pointer to the full report; `brief` opens with a one-line answer, then brief action items. |
 | `PREFS_HONEST_NUMBERS` | yes | Uncertain numbers are ranges or "not yet known"; charts are plain bars or small multiples, never radar or gauges. |
 | `PREFS_LINK_DELIVERABLES` | yes | Every finished item links to its output: a URL, or an absolute path for a local file. |
 | `PREFS_DAILY_CHECK` | yes | Once a day, a nothing-forgotten check: uncollected review answers, anything waiting longer than `PREFS_STALE_DAYS` (default 2), and standing rules with no evidence they ran. Each item is verified before it is called dropped. |
@@ -55,7 +62,7 @@ Firstmate's `config/brief-include.md`, so every worker writes its status lines a
 
 | Key | Default | Rule |
 | --- | --- | --- |
-| `PREFS_DECISIONS` | `both` | Quick questions go through the agent's question tool, one at a time, with a preview on every option and a recommendation; larger or visual decisions go on a Lavish decision-card page. `cards` puts every decision on a card page; `tool` uses only the question tool; `chat` asks in chat. |
+| `PREFS_DECISIONS` | `both` | Quick questions go through the agent's question tool, one at a time, with a preview on every option and a recommendation; larger or visual decisions go on a Lavish decision-card page. `cards` puts every decision on a card page; `tool` uses only the question tool; `chat` asks in chat. With `both` or `cards`, a page is created without opening a tab (`--no-open`), checked, then opened once in your browser when it is handed over, with its link; while you are away nothing opens and the link waits for your return brief. |
 | `PREFS_YES_NO_IN_CHAT` | yes | Simple yes-or-no questions stay in plain chat. |
 | `PREFS_PREVIEW_BEFORE_BUILD` | yes | A change to how something looks or feels is shown on a review page before it is built. |
 | `PREFS_CHECK_ANSWERS_FIRST` | yes | The agent checks for your answer before calling a page or question open. |
@@ -74,7 +81,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | `PREFS_PAGE_SIDE_BY_SIDE` | yes | The decision card sits on one side and a canvas showing the current decision on the other, horizontally, never stacked. |
 | `PREFS_PAGE_FLIP_PREVIEWS` | yes | Every option of a visual choice has a preview, and you can flip between all of them; never only the recommended one. |
 | `PREFS_PAGE_MINIMAL_TEXT` | yes | A title, the question and short option labels: no fluff, no helper text, no explaining the obvious. Visuals carry the meaning. |
-| `PREFS_PAGE_PHONE` | yes | Every review page also reads well on a phone (390 px wide): the card and its picture stack, body text is at least 14 px, and a wide diagram gets a phone version instead of tiny labels. A 390 by 844 screenshot is checked before the link is sent. |
+| `PREFS_PAGE_PHONE` | yes | Every review page also reads well on a phone (390 px wide): the card and its picture stack, body text is at least 14 px, and a wide diagram gets a phone version instead of tiny labels. A 390 by 844 screenshot is checked before the link is sent. The same answer decides whether `PREFS_PROTOTYPE_CHECK` also checks phone width, so one answer pauses or restores every phone check. |
 | `PREFS_PAGE_WIDE_HEADER` | yes | A large title and intro spread across the full page width. |
 
 ### Review page delivery and workflow
@@ -83,7 +90,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | --- | --- | --- |
 | `PREFS_PAGE_CHECK_BEFORE_SEND` | yes | A page is opened in the agent's own browser and checked by screenshot before its link is sent, and the link is always sent. |
 | `PREFS_PAGE_FIRST` | yes | When a decision waits on a page, the page is built and checked first, the link is sent, and the agent stands by until you answer. |
-| `PREFS_PAGE_PREPARE_NEXT` | no | Always asked, even when you skip the others. With `PREFS_PAGE_FIRST`: while a review page waits for your decision, the agent prepares the next stage but does not start it until you approve. |
+| `PREFS_PAGE_PREPARE_NEXT` | no | Asked only when you choose for yourself. With `PREFS_PAGE_FIRST`: while a review page waits for your decision, the agent prepares the next stage but does not start it until you approve. |
 | `PREFS_PAGES_TOGETHER` | yes | While several review pages are in progress, links are held until all open work is done; the pages are checked against each other (each question once, dependencies in order, no clashing recommendations, one set of names) and sent together in the order to take them, with brief status meanwhile. |
 | `PREFS_FLEET_WORKFLOW` | yes | Supervising agents brief workers with a goal, branch and definition of done; workers report only at phase changes and land through a pull request with green checks; review pages are for real decisions and look-and-feel changes, never status or routine choices; permission prompts and command mechanics are never escalated. Live state is checked before work is called in progress or finished, the next step of a plan starts as soon as one lands, and a wait over 30 minutes is raised within the hour. When you must type in an agent's window, it is named by the labels you see on screen, never internal ids. |
 
@@ -95,7 +102,8 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | `PREFS_ROUTE` | no | Software projects go through six steps, each with its skill: Plan, Decide, Prototype, Breakdown, Build, Ship, with short paths for a small change and a bug. [The route](route.md) describes each step. |
 | `PREFS_TEST_FIRST` | no | Product code is built test-first at the seams the spec names (tdd, codebase-design). Prototypes, docs and config are not test-first. |
 | `PREFS_GLOSSARY_ADR` | no | `GLOSSARY.md` and `docs/adr/` are read before building, and new terms and decision records land with the change that introduces them. The files start only when a term or a hard-to-reverse decision comes up. |
-| `PREFS_PROTOTYPE_CHECK` | no | Before you see a prototype, the agent opens it at your target screen size first, then at laptop width and at phone width (390 px), checks that font sizes and column positions stay the same on every tab, and fixes broken layout, unclear labels and dead ends. |
+| `PREFS_PROTOTYPE_CHECK` | no | Before you see a prototype, the agent opens it at your target screen size first, then at laptop width and, when `PREFS_PAGE_PHONE` is yes, at phone width (390 px), checks that font sizes and column positions stay the same on every tab, and fixes broken layout, unclear labels and dead ends. |
+| `PREFS_PRINCIPLE_CHECKS` | yes | With the `firstmate` target: every worker brief tells the worker to run the principle checker that `workflow-playbook` installs (`principles/bin/principle-check.mjs`, with `--phone` for work built for other people) before it reports done on anything with a screen, fix every `fail` line and list each `check` line for the reviewer. Written only when the playbook is chosen or already installed. |
 | `PREFS_MODEL_GUIDE` | yes | When a model is named for a task, the agent reads that vendor's official prompting guide first and briefs the model the way it says. |
 
 ### Ideas and priorities
@@ -142,6 +150,47 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 Always included: no secrets or personal data anywhere, only genuine decisions brought
 to you, and saying plainly when something was reasoned about rather than tested.
 
+## The taste preset
+
+`PREFS_TASTE_PRESET` (default no) adds an optional taste preset: the screen taste and review
+habits the template's author works by, cleaned to generic rules in
+`templates/preferences/taste-preset.md`. It holds only rules no question above writes, such as
+purposeful minimalism, one word per label, one fixed layout frame, and treating a comment on a
+review page as something to rework rather than agreement. Its `Everywhere` lines land in a
+"Taste preset" section of the rules file and of every Firstmate worker brief; its `Sessions`
+lines go to the rules file only. Turn it off and re-run the installer to remove them. The
+recommended set leaves it off, so it is asked only when you go through each preference.
+
+## Your private rules
+
+Some of your rules are yours alone: a screen size, a house style detail, the name of a tool or
+a home. They never go in this repository. Keep them in a private rules file outside the clone,
+at `PREFS_PRIVATE_RULES` (default `~/.config/ai-workstation-setup/private-rules.md`, beside the
+card template). The module reads it when it exists; a path inside the clone is refused.
+
+It is plain Markdown. Each `##` heading says where its lines go:
+
+| Heading | Goes to |
+| --- | --- |
+| `Everywhere` | All three files below |
+| `Sessions` | The rules file (`working-preferences.md`, and Firstmate's `data/captain.md`) |
+| `Workers` | Firstmate's `config/brief-include.md`, appended to every worker brief |
+| `Second mates` | Firstmate's `data/captain-shared.md` in the main home, which every second mate reads; written only when there are lines for it |
+| `Reviewer` | The no-mistakes design review rules (agent-clis, `NO_MISTAKES_PRINCIPLES`), added after the generic ones to every review whose change touches an interface file |
+
+Each `-` or numbered item, or each paragraph, is one rule; a line that follows without a blank
+line continues it. A `#` title, text before the first heading and HTML comments are not used.
+An unknown heading is reported and its lines are left out. The lines land in a "Private rules"
+section at the end of each file, so edit them in your private file, not in the written copies.
+
+```markdown
+## Everywhere
+- Check every page at my laptop size before you send it.
+
+## Workers
+- Use the research browser for anything that needs a sign-in.
+```
+
 ## Tools the rules point to
 
 - **Decision cards**: with `PREFS_DECISIONS=both` or `cards` the module installs a starter page at
@@ -151,7 +200,8 @@ to you, and saying plainly when something was reasoned about rather than tested.
   between every option's preview. It is light by default, with a small switch to go dark.
   [Review pages](review-pages.md) describes the loop and the card fields.
 - **No surprise tabs**: agent-clis sets `LAVISH_AXI_NO_OPEN=1` (`LAVISH_NO_OPEN`), so review
-  pages never open browser tabs on their own; links are shared in chat.
+  pages never open browser tabs on their own. The agent opens a checked page once, on
+  purpose, when it hands it over, and shares the link in chat.
 - **Research browser**: agent-clis installs `research-browser` (`RESEARCH_BROWSER`, Linux,
   macOS, WSL): a visible Chrome window with its own profile. Sign in to research sites
   there once; agents drive it with `research-browser axi <command>`.

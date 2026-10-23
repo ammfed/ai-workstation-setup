@@ -6,8 +6,7 @@ starting point to adjust to your own work and limits.
 
 | Work | Model | Effort | Why |
 |---|---|---|---|
-| Tiny mechanical edit (typo, version bump, config value) | Sonnet 5.5 | medium | Fast and cheap; nothing to reason about. |
-| Small, clear task (bug with a clear repro, docs or copy edit) | Sonnet 5.5 | high | Enough for a narrow change; re-run it on Opus 5.5 at medium after a failed check. |
+| Small, clear task (bug with a clear repro, docs or copy edit, typo, version bump, config value) | Sonnet 5.5 | high | Enough for a narrow change; re-run it on Opus 5.5 at medium after a failed check. |
 | Building a feature, normal everyday work | Opus 5.5 | medium | The best quality for the cost; raise effort before you change the model. |
 | Prototype frontend and visual design: a new look, not yet settled | Opus 5.5 | xhigh | The look is the product, and the extra effort shows. |
 | Polish of a prototype frontend whose look is settled (spacing, copy, states, small layout fixes, fixes from a usability check) | Opus 5.5 | high | The look is decided; the remaining work needs care, not invention. |
@@ -36,12 +35,21 @@ starting point to adjust to your own work and limits.
 
 | Setting | Module | Answer key | Default |
 |---|---|---|---|
+| Default model in `~/.claude/settings.json` (`model`) | claude-code | `CLAUDE_MODEL` | `opus` (Opus 5.5) |
+| Default effort in `~/.claude/settings.json` (`effortLevel`; it reaches Opus 5, Fable 5.1 and older models only) | claude-code | `CLAUDE_EFFORT` | `medium` |
 | Opus 5.5 effort in `~/.claude/settings.json` (`modelSettings`) | claude-code | `CLAUDE_MODEL_EFFORTS` | `claude-opus-5-5=medium` |
 | `reader` subagent in `~/.claude/agents/reader.md` (`model: haiku`, read-only tools) | claude-code | `CLAUDE_READER_AGENT` | yes; a reader you wrote is kept |
 | no-mistakes review model (`agent_config.claude` in `~/.no-mistakes/config.yaml`, or `$NM_HOME`) | agent-clis | `NO_MISTAKES_REVIEW_MODEL` | `claude-opus-5-5 medium` |
 | Example worker dispatch profiles (`config/crew-dispatch.json`) | firstmate | `FIRSTMATE_DISPATCH` | `capable` |
+| Second mates (`config/secondmate-harness`) | firstmate | `FIRSTMATE_SECONDMATE_HARNESS` | `claude claude-opus-5-5 medium` with the `capable` profiles on Claude, otherwise `default` |
+| backpass, which turns past sessions into rule suggestions | backpass | `BACKPASS_MODEL` | `claude-opus-5-5` (`gpt-5.5` on Codex); a dotted Claude id such as `claude-opus-5.5` is read as `claude-opus-5-5` |
 | Research model for the bulk-reading CLI | preferences | `PREFS_DELEGATE_MODEL` | `gemini-3.8-flash-high` for agy |
 | Model for the same work after a Gemini quota error | preferences | `PREFS_DELEGATE_FALLBACK_MODEL` | `claude-sonnet-4-6` for agy |
+
+Claude Code's own `effortLevel` no longer reaches Opus 5.5 and newer models; they take
+their level from `modelSettings`, which is what `CLAUDE_MODEL_EFFORTS` writes. Set both, so
+every model starts at medium. A saved answer wins over these defaults, so a `keep` saved
+from an earlier install stays `keep` until you change it.
 
 no-mistakes takes one model per harness for all repositories, and re-reads its config at each
 run, so a change applies to the next run without restarting its daemon. An `agent_config`

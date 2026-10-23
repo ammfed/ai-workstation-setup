@@ -16,22 +16,92 @@ const STE_RULES = [
   'The house style does not apply to anything written as the user for other people (documents, emails, decks, pull request text): those follow the rules for outward writing.',
 ];
 
-// The same house style for Firstmate's workers, as config/brief-include.md: what they write to
-// firstmate, never the deliverable itself. Empty when the style is not chosen.
-export function renderBriefInclude(get) {
-  if (get('PREFS_WRITING_STYLE') !== 'ste') return '';
-  return [
-    '## Writing style: Simplified Technical English (house style)',
-    '',
-    'Write your status lines, reports, questions and notes for firstmate in this style (based on ASD-STE100, adapted):',
-    ...STE_RULES.slice(1, 8).map((rule, i) => `${i + 1}. ${rule}`),
-    '',
-    'This style does not apply to the deliverable itself when it is written for other people (product copy, user-facing text, documents written as the user, code, commit messages, pull request descriptions): follow the project\'s and the brief\'s own rules there.',
-    '',
-  ].join('\n');
+// Rules written both for sessions and for Firstmate's workers, so the two never drift apart.
+const TEST_FIRST_RULE =
+  'Build product code test-first at the seams the spec names (tdd, codebase-design skills when installed). Prototypes, docs and config are not test-first.';
+const GLOSSARY_RULE =
+  'Before building, read GLOSSARY.md and docs/adr/ if they exist. Add new terms and decision records in the same change that introduces them. Start these files in any project, but only when a term or a hard-to-reverse decision comes up.';
+
+function delegateRule(get) {
+  const cli = get('PREFS_DELEGATE_RETRIEVAL');
+  if (!cli) return '';
+  const fallback = get('PREFS_DELEGATE_FALLBACK_MODEL');
+  return `Hand retrieval-heavy work (large document sweeps, broad web reading, bulk page reads) to \`${[cli, get('PREFS_DELEGATE_MODEL') && `--model ${get('PREFS_DELEGATE_MODEL')}`].filter(Boolean).join(' ')}\` and reason over what it returns. Keep decisions and code changes with the main agent.${
+    fallback ? ` If it reports a Gemini quota error, use \`${[cli, `--model ${fallback}`].join(' ')}\` instead.` : ''
+  }`;
 }
 
-export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
+const bullets = (title, lines) => {
+  const kept = lines.filter(Boolean);
+  return kept.length ? `## ${title}\n\n${kept.map((l) => `- ${l}`).join('\n')}\n` : '';
+};
+
+const PRIVATE_NOTE = "From the user's private rules file. They are changed there and the installer re-run, not edited here.";
+const TASTE_NOTE = "From the template's optional taste preset (PREFS_TASTE_PRESET). Turn it off and re-run the installer to remove these lines.";
+
+// The taste preset section: its Everywhere lines plus the lines of `also` (sessions or workers).
+function tasteSection(tastePreset, also) {
+  const lines = [...(tastePreset?.everywhere ?? []), ...(tastePreset?.[also] ?? [])];
+  return lines.length ? `## Taste preset\n\n${TASTE_NOTE}\n\n${lines.map((l) => `- ${l}`).join('\n')}\n` : '';
+}
+
+// Firstmate's config/brief-include.md, appended to every worker brief: the house style for what
+// workers write to firstmate (never the deliverable itself), the helper-model rule, the standing
+// build rules, the principle checker before done, the taste preset's Everywhere lines when it is on,
+// and the private Everywhere and Workers lines.
+// Empty when none of them applies. `checkerPath` is the installed principle checker, or null.
+export function renderBriefInclude(get, { checkerPath, privateRules, tastePreset } = {}) {
+  const parts = [];
+  if (get('PREFS_WRITING_STYLE') === 'ste') {
+    parts.push(
+      [
+        '## Writing style: Simplified Technical English (house style)',
+        '',
+        'Write your status lines, reports, questions and notes for firstmate in this style (based on ASD-STE100, adapted):',
+        ...STE_RULES.slice(1, 8).map((rule, i) => `${i + 1}. ${rule}`),
+        '',
+        'This style does not apply to the deliverable itself when it is written for other people (product copy, user-facing text, documents written as the user, code, commit messages, pull request descriptions): follow the project\'s and the brief\'s own rules there.',
+        '',
+      ].join('\n'),
+    );
+  }
+  parts.push(bullets('Helper models', [delegateRule(get)]));
+  parts.push(bullets('Building', [get('PREFS_TEST_FIRST') && TEST_FIRST_RULE, get('PREFS_GLOSSARY_ADR') && GLOSSARY_RULE]));
+  const checker = checkerPath && (/\s/.test(checkerPath) ? JSON.stringify(checkerPath) : checkerPath);
+  parts.push(
+    bullets('Principle checks', [
+      get('PREFS_PRINCIPLE_CHECKS') &&
+        checker &&
+        `Before you report done on anything with a screen (a page, an app screen, a prototype, a document layout), run \`node ${checker} <its files or folder>\`. Add \`--phone\` when it is built for other people. Fix every \`fail\` line first. List each \`check\` line in your report for the reviewer. The full list is in principles/checks.md beside the checker.`,
+    ]),
+  );
+  parts.push(tasteSection(tastePreset, 'workers'));
+  const own = [...(privateRules?.everywhere ?? []), ...(privateRules?.workers ?? [])];
+  if (own.length) parts.push(`## Private rules\n\n${PRIVATE_NOTE}\n\n${own.map((l) => `- ${l}`).join('\n')}\n`);
+  return parts.filter(Boolean).join('\n');
+}
+
+// Firstmate's data/captain-shared.md in the main home, which every second mate reads (read-only
+// there): the private Everywhere and Second mates lines. Empty when there are none.
+export function renderCaptainShared(privateRules) {
+  const lines = [...(privateRules?.everywhere ?? []), ...(privateRules?.['second mates'] ?? [])];
+  if (!lines.length) return '';
+  return `# Shared captain preferences
+
+<!-- memory tiers: see the stow skill -->
+
+Main-authoritative: the main Firstmate home owns this file, and every second-mate home gets a
+read-only copy. Do not edit it in a second-mate home. Route a new preference to the main
+Firstmate through a marked status line or a document pointer.
+
+Written by ai-workstation-setup from the Everywhere and Second mates headings of your private
+rules file. Change that file and re-run the installer, which asks before replacing a changed copy.
+
+${lines.map((l) => `- ${l}`).join('\n')}
+`;
+}
+
+export function renderPreferences(get, { cardsPath, decisionsPath, privateRules, tastePreset } = {}) {
   const sections = [];
   const section = (title, lines) => {
     const kept = lines.filter(Boolean);
@@ -69,6 +139,15 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
   const status = get('PREFS_STATUS');
   const days = get('PREFS_STALE_DAYS') || '2';
   section('Reporting and status', [
+    status === 'needs-you' &&
+      'Open every status reply with one line of headline counts (for example "3 need you, 5 finished, 1 at risk").',
+    status === 'needs-you' &&
+      'Then NEEDS YOU: only what the user alone can do, ranked by impact, one line each with a rough time cost and one link. Fold older open review pages into one line.',
+    status === 'needs-you' && 'Then AT RISK: anything stuck or slipping, with what it costs the user.',
+    status === 'needs-you' &&
+      'Then always a table with To do, Doing and Done as three columns side by side, one row per project, short cells. Done holds only what finished since the last status.',
+    status === 'needs-you' &&
+      'End with one Links line: the full link of each Done item. Leave out any empty part except the table, and leave out how the work was done and work that did not change.',
     status === 'board' &&
       'Open every status reply with the current work as one table whose three columns sit side by side: TODO, DOING, DONE. Each column lists its own items, one short line each. Never three stacked lists or three separate rows.',
     status === 'actions' &&
@@ -101,7 +180,10 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     decisions === 'both' &&
       'Ask quick questions with the question tool, one at a time, a preview on every option and a recommendation. Put larger or visual decisions on a Lavish decision-card page.',
     cards && cardsPath && !allCards && `Start each decision page from the template at \`${cardsPath}\`.`,
-    cards && 'Open review pages without launching a browser tab (`--no-open`, or `LAVISH_AXI_NO_OPEN=1`), never open one automatically, and never re-run the open command just to refresh a page; the running page already updates.',
+    cards &&
+      `Create review pages without launching a browser tab (\`--no-open\`, or \`LAVISH_AXI_NO_OPEN=1\`), and never re-run the open command just to refresh a page; the running page already updates. Once the page is checked, open it once in the user's browser at hand-over and give the link: a page that is only linked is easily missed.${
+        get('PREFS_AWAY_MODE') ? ' While the user is away, open nothing; the link goes into the return brief.' : ''
+      }`,
     decisions === 'tool' && 'Ask decisions with the question tool, one question at a time, with a preview on every option.',
     decisions === 'chat' && 'Ask decisions in chat, one at a time, with a short named list of options and the recommendation first.',
     decisions !== 'chat' && get('PREFS_YES_NO_IN_CHAT') && 'Ask a simple yes-or-no question in plain chat, not on a review page.',
@@ -182,19 +264,17 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     get('PREFS_ROUTE') &&
       'Take a software project (building or changing an app, a tool or a codebase) through six steps, each with its skill when installed: ' +
         '1 Plan: write the idea down, judge fit and timing, and say so in one line. If the effort takes more than one session, start a map at once without being asked and show it. When the user types /wayfinder, wayfinder tracks the map as tickets. ' +
-        '2 Decide: settle the open decisions in rounds of questions and record the answers (grilling, or grill-with-docs). ' +
+        '2 Decide: settle the open decisions in rounds of questions and record the answers (grilling, with domain-modeling for the glossary and decision records). ' +
         '3 Prototype: write a spec that names the test seams, with a throwaway prototype when the look or flow needs judging, and get it approved before building (to-spec, prototype). ' +
         '4 Breakdown: cut a spec too big for one change into tickets with their blocking edges (to-tickets). ' +
         '5 Build: one builder builds the whole spec test-first (tdd, codebase-design). ' +
         '6 Ship: validate, open a pull request, and merge once approved (no-mistakes).',
     get('PREFS_ROUTE') &&
       'Short paths: a small clear change goes Plan, Build, Ship. A bug goes Plan, find the cause, Build with the reproduction as the regression test, Ship. Documents, review pages, research and one-off tasks do not take the route.',
-    get('PREFS_TEST_FIRST') &&
-      'Build product code test-first at the seams the spec names (tdd, codebase-design skills when installed). Prototypes, docs and config are not test-first.',
-    get('PREFS_GLOSSARY_ADR') &&
-      'Before building, read GLOSSARY.md and docs/adr/ if they exist. Add new terms and decision records in the same change that introduces them. Start these files in any project, but only when a term or a hard-to-reverse decision comes up.',
+    get('PREFS_TEST_FIRST') && TEST_FIRST_RULE,
+    get('PREFS_GLOSSARY_ADR') && GLOSSARY_RULE,
     get('PREFS_PROTOTYPE_CHECK') &&
-      "Before the user sees a prototype, open it in the agent's browser at the user's target screen size first, then at laptop width and at phone width (390 px). Check that font sizes and column positions stay the same on every tab. Fix broken layout, unclear labels and dead ends first.",
+      `Before the user sees a prototype, open it in the agent's browser at the user's target screen size first, then at laptop width${get('PREFS_PAGE_PHONE') ? ' and at phone width (390 px)' : ''}. Check that font sizes and column positions stay the same on every tab. Fix broken layout, unclear labels and dead ends first.`,
     get('PREFS_MODEL_GUIDE') &&
       "When a model is named for a task, read that vendor's official prompting guide first and brief the model the way it says.",
   ]);
@@ -238,10 +318,7 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
     routing !== 'none' && 'Use a model above the one these rules pick only when the user names it for a task.',
     get('PREFS_QUOTA') &&
       'Treat subscription limits as scarce. Check them with `quota-axi` before heavy or parallel work, take the cheapest path that still answers, and pause heavy work near a limit and say so.',
-    get('PREFS_DELEGATE_RETRIEVAL') &&
-      `Hand retrieval-heavy work (large document sweeps, broad web reading, bulk page reads) to \`${[get('PREFS_DELEGATE_RETRIEVAL'), get('PREFS_DELEGATE_MODEL') && `--model ${get('PREFS_DELEGATE_MODEL')}`].filter(Boolean).join(' ')}\` and reason over what it returns. Keep decisions and code changes with the main agent.${
-        get('PREFS_DELEGATE_FALLBACK_MODEL') ? ` If it reports a Gemini quota error, use \`${[get('PREFS_DELEGATE_RETRIEVAL'), `--model ${get('PREFS_DELEGATE_FALLBACK_MODEL')}`].join(' ')}\` instead.` : ''
-      }`,
+    delegateRule(get),
   ]);
 
   section('Research', [
@@ -288,6 +365,11 @@ export function renderPreferences(get, { cardsPath, decisionsPath } = {}) {
       'When asked to have something ready by a time, keep every normal check and work in dependency order. Never skip a check, a review or an approval to go faster.',
     'Say plainly when something was reasoned about rather than tested.',
   ]);
+
+  const taste = tasteSection(tastePreset, 'sessions');
+  if (taste) sections.push(taste.trimEnd());
+  const own = [...(privateRules?.everywhere ?? []), ...(privateRules?.sessions ?? [])];
+  if (own.length) sections.push(`## Private rules\n\n${PRIVATE_NOTE}\n\n${own.map((l) => `- ${l}`).join('\n')}`);
 
   return `# Working preferences
 

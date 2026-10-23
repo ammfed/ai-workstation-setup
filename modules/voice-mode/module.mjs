@@ -158,6 +158,8 @@ export default {
   title: 'Voice mode (talk with your assistant)',
   description: 'Opt-in: speech-to-speech with OpenAI Realtime or Gemini Live, answers from your records, queues work, opens apps by voice; hotkey',
   order: 95,
+  group: 'assistant',
+  summary: 'talking with it by voice',
   platforms: ['linux', 'macos'],
   unsupported: {
     wsl: 'needs a desktop hotkey, window control and typing into other apps, which WSL does not give (WSLg passes sound, not the desktop); use OpenWhispr on the Windows side for dictation, or run it on a Linux or macOS desktop',

@@ -121,6 +121,7 @@ test('inside WSL, core checks PATH, switches on systemd, and opens links in Wind
   assert.match(out, /would write .*\.local\/bin\/open-in-windows/);
   assert.match(out, /would set BROWSER/);
   assert.match(out, /gh auth login && gh auth setup-git/);
+  assert.doesNotMatch(out, /would run: gh auth setup-git/, 'setup-git waits for the sign-in; run first, it fails with nobody signed in');
 });
 
 test('the wsl module is only offered on Windows', { skip }, () => {

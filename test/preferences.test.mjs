@@ -1,7 +1,8 @@
 // Tests for the working-preferences rules: what the defaults write, how the decision,
-// grilling, status and writing-style choices change the text, the route and its build
-// rules, that an earlier PREFS_GRILL_ON_GAPS answer carries over to PREFS_GRILL, and that
-// the card template ships its style and phone layout.
+// grilling, status and writing-style choices change the text, how pages are opened, the one
+// phone answer, the route and its build rules, that an earlier PREFS_GRILL_ON_GAPS answer
+// carries over to PREFS_GRILL, that the card template ships its style and phone layout, and
+// how the private rules file feeds the rules file, worker briefs and the shared second-mate file.
 // Run: node --test test/preferences.test.mjs
 
 import assert from 'node:assert/strict';
@@ -14,7 +15,8 @@ import { fileURLToPath } from 'node:url';
 import { Context, detectPlatform } from '../lib/context.mjs';
 import firstmate from '../modules/firstmate/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
-import { renderPreferences } from '../modules/preferences/render.mjs';
+import { parsePrivateRules } from '../modules/preferences/private-rules.mjs';
+import { renderBriefInclude, renderCaptainShared, renderPreferences } from '../modules/preferences/render.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CARDS = path.join(os.tmpdir(), 'decision-cards.html');
@@ -54,8 +56,24 @@ test('the defaults ask through both the question tool and card pages, and grill 
   assert.match(decisions, /--no-open/, 'card-page rules still apply with both');
 });
 
-test('the default status is the board, with a YOU block and never ME', async () => {
+test('the default status leads with what needs the user, then what is at risk, the table and the links', async () => {
+  assert.equal((await answer()).get('PREFS_STATUS'), 'needs-you');
   const status = sectionOf(await render(), 'Reporting and status');
+  const parts = ['one line of headline counts', 'Then NEEDS YOU: only what the user alone can do', 'Then AT RISK:', 'Then always a table with To do, Doing and Done', 'End with one Links line'];
+  let at = -1;
+  for (const part of parts) {
+    const i = status.indexOf(part);
+    assert.ok(i > at, `"${part}" missing or out of order`);
+    at = i;
+  }
+  assert.match(status, /Leave out any empty part except the table/);
+  assert.match(status, /Show progress as counts like "3 of 5"/);
+  assert.doesNotMatch(status, /TODO, DOING, DONE|labelled YOU/, 'the older board shape is not mixed in');
+  assert.doesNotMatch(sectionOf(await render({ PREFS_STATUS: 'board' }), 'Reporting and status'), /NEEDS YOU/);
+});
+
+test('the board status is still a choice, with a YOU block and never ME', async () => {
+  const status = sectionOf(await render({ PREFS_STATUS: 'board' }), 'Reporting and status');
   assert.match(status, /TODO, DOING, DONE/);
   assert.match(status, /the user's block labelled YOU, the agent's labelled with its own role name \(for example FIRST MATE\), never ME\./);
   assert.match(status, /small text bars and boxes where they carry meaning/);
@@ -123,6 +141,25 @@ test('review pages also read well on a phone, a page in a skill\'s own look is r
   assert.match(pages, /a wide diagram gets a phone version/);
   assert.match(pages, /and the look of boards that a skill brings with it/);
   assert.doesNotMatch(await render({ PREFS_PAGE_PHONE: 'no' }), /reads well on a phone/);
+});
+
+test('one phone answer covers review pages and the prototype check', async () => {
+  const on = await render({ PREFS_PROTOTYPE_CHECK: 'yes' });
+  assert.match(sectionOf(on, 'Building'), /then at laptop width and at phone width \(390 px\)\. Check/);
+  const off = await render({ PREFS_PROTOTYPE_CHECK: 'yes', PREFS_PAGE_PHONE: 'no' });
+  assert.match(sectionOf(off, 'Building'), /at the user's target screen size first, then at laptop width\. Check that font sizes/);
+  assert.doesNotMatch(off, /390|phone/i, 'no phone width is left anywhere');
+});
+
+test('a page is created without a tab, checked, then opened once at hand-over, and nothing opens while the user is away', async () => {
+  const decisions = sectionOf(await render(), 'Decisions');
+  assert.match(decisions, /Create review pages without launching a browser tab \(`--no-open`, or `LAVISH_AXI_NO_OPEN=1`\)/);
+  assert.match(decisions, /never re-run the open command just to refresh a page/);
+  assert.match(decisions, /Once the page is checked, open it once in the user's browser at hand-over and give the link/);
+  assert.match(decisions, /While the user is away, open nothing; the link goes into the return brief\./);
+  assert.doesNotMatch(decisions, /never open one automatically/, 'the older rule that forbade every open is gone');
+  assert.doesNotMatch(await render({ PREFS_AWAY_MODE: 'no' }), /While the user is away, open nothing/);
+  assert.doesNotMatch(await render({ PREFS_DECISIONS: 'chat' }), /open it once/);
 });
 
 test('planning effort is checked, and the agent decides process questions from the primary source', async () => {
@@ -251,6 +288,14 @@ test('the card template ships its fonts, colours, waiting strip and phone layout
   assert.match(html, /showModal\(\)/, 'a picture opens full size on tap');
 });
 
+test('the card template labels its note box and hides an empty waiting strip', () => {
+  const html = fs.readFileSync(path.join(repoRoot, 'templates/preferences/decision-cards.html'), 'utf8');
+  assert.match(html, /<label[^>]*for="note"[^>]*>Note<\/label>\s*<textarea id="note"/, 'a visible label sits above the note box');
+  // The strip is display:flex, which beats the hidden attribute unless hidden is forced.
+  assert.match(html, /\[hidden\]\{display:none!important\}/);
+  assert.match(html, /<div class="waiting" id="waiting" hidden>/);
+});
+
 test('the card template is light by default with a guarded dark switch', () => {
   const html = fs.readFileSync(path.join(repoRoot, 'templates/preferences/decision-cards.html'), 'utf8');
   assert.doesNotMatch(html, /prefers-color-scheme\s*:\s*dark/, 'the browser dark setting is not followed');
@@ -264,4 +309,220 @@ test('the card template is light by default with a guarded dark switch', () => {
     assert.match(html.slice(Math.max(0, m.index - 80), m.index), /try\s*\{[^}]*$/, 'storage access is wrapped in try/catch');
   }
   assert.ok(html.indexOf('localStorage.getItem') < html.indexOf('<style>'), 'theme is applied before first paint');
+});
+
+// A private rules file with all five headings, an unknown one, a title and a comment.
+const PRIVATE = [
+  '# My own rules',
+  'Intro text before the first heading is not used.',
+  '<!-- a note to myself -->',
+  '## Everywhere',
+  '- Everywhere rule one.',
+  '- Everywhere rule two,',
+  '  continued on the next line.',
+  '## sessions',
+  'Sessions rule as a paragraph.',
+  '',
+  'Another sessions paragraph.',
+  '## Workers',
+  '1. Workers rule.',
+  '## Second mates',
+  '* Second mates rule.',
+  '## Reviewer',
+  '- Reviewer rule.',
+  '## Hobbies',
+  '- Hobby rule.',
+].join('\n');
+
+test('the private rules file splits into its five headings, and an unknown heading is reported', () => {
+  const { rules, unknown } = parsePrivateRules(PRIVATE);
+  assert.deepEqual(rules.everywhere, ['Everywhere rule one.', 'Everywhere rule two, continued on the next line.']);
+  assert.deepEqual(rules.sessions, ['Sessions rule as a paragraph.', 'Another sessions paragraph.']);
+  assert.deepEqual(rules.workers, ['Workers rule.']);
+  assert.deepEqual(rules['second mates'], ['Second mates rule.']);
+  assert.deepEqual(rules.reviewer, ['Reviewer rule.']);
+  assert.deepEqual(unknown, ['Hobbies']);
+  const all = Object.values(rules).flat().join('\n');
+  assert.doesNotMatch(all, /Intro text|a note to myself|Hobby rule|My own rules/);
+  assert.deepEqual(parsePrivateRules('').unknown, []);
+});
+
+test('private Everywhere and Sessions lines close the rules file; the other headings stay out of it', async () => {
+  const { rules } = parsePrivateRules(PRIVATE);
+  const ctx = await answer();
+  const text = renderPreferences((key) => ctx.get(key), { cardsPath: CARDS, privateRules: rules });
+  const own = sectionOf(text, 'Private rules');
+  for (const line of ['Everywhere rule one.', 'Sessions rule as a paragraph.', 'Another sessions paragraph.']) assert.ok(own.includes(`- ${line}`), line);
+  assert.doesNotMatch(text, /Workers rule|Second mates rule|Reviewer rule/);
+  assert.ok(text.trimEnd().endsWith('- Another sessions paragraph.'), 'the private section comes last');
+  assert.doesNotMatch(await render(), /## Private rules/, 'no file, no section');
+});
+
+test('the worker brief include gains the helper model, build rules, the principle checker and private Workers lines', async () => {
+  const { rules } = parsePrivateRules(PRIVATE);
+  const ctx = await answer({ PREFS_TARGETS: 'claude,firstmate', PREFS_TEST_FIRST: 'yes', PREFS_GLOSSARY_ADR: 'yes', PREFS_DELEGATE_RETRIEVAL: 'agy', PREFS_DELEGATE_MODEL: 'example-model' });
+  assert.equal(ctx.get('PREFS_PRINCIPLE_CHECKS'), true, 'the checker line is on by default');
+  const checker = path.join(os.tmpdir(), 'skills', 'workflow-playbook', 'principles', 'bin', 'principle-check.mjs');
+  const text = renderBriefInclude((key) => ctx.get(key), { checkerPath: checker, privateRules: rules });
+  const order = ['## Helper models', '`agy --model example-model`', '## Building', 'test-first at the seams', 'GLOSSARY.md', '## Principle checks', `node ${checker} <its files or folder>`, '--phone', '## Private rules', '- Everywhere rule one.', '- Workers rule.'];
+  let at = -1;
+  for (const part of order) {
+    const i = text.indexOf(part);
+    assert.ok(i > at, `"${part}" missing or out of order`);
+    at = i;
+  }
+  assert.doesNotMatch(text, /Sessions rule|Second mates rule|Reviewer rule|## Writing style/);
+  assert.doesNotMatch(text, /Delivery contract: mode=/);
+  // The checker line needs both the answer and an installed checker.
+  assert.doesNotMatch(renderBriefInclude((key) => ctx.get(key)), /Principle checks/);
+  assert.doesNotMatch(renderBriefInclude((key) => (key === 'PREFS_PRINCIPLE_CHECKS' ? false : ctx.get(key)), { checkerPath: checker }), /Principle checks/);
+  assert.match(renderBriefInclude((key) => ctx.get(key), { checkerPath: '/a b/principle-check.mjs' }), /node "\/a b\/principle-check\.mjs"/, 'a path with a space is quoted');
+});
+
+test('the shared second-mate file carries the Everywhere and Second mates lines under a main-authoritative header, and only when there are any', () => {
+  const { rules } = parsePrivateRules(PRIVATE);
+  const text = renderCaptainShared(rules);
+  assert.match(text, /^# Shared captain preferences\n/);
+  assert.match(text, /<!-- memory tiers: see the stow skill -->/);
+  assert.match(text, /Main-authoritative/);
+  assert.match(text, /read-only copy\. Do not edit it in a second-mate home\./);
+  assert.match(text, /- Everywhere rule one\.\n/);
+  assert.match(text, /- Second mates rule\.\n$/);
+  assert.doesNotMatch(text, /Sessions rule|Workers rule|Reviewer rule/);
+  assert.equal(renderCaptainShared(null), '');
+  assert.equal(renderCaptainShared(parsePrivateRules('## Workers\n- only for workers').rules), '');
+});
+
+test('a private rules path inside this clone is refused', async () => {
+  await assert.rejects(answer({ PREFS_PRIVATE_RULES: path.join(repoRoot, 'local', 'private-rules.md') }), /inside this clone/);
+});
+
+function capture(fn) {
+  const lines = [];
+  const log = console.log;
+  console.log = (...a) => lines.push(a.join(' '));
+  return Promise.resolve()
+    .then(fn)
+    .finally(() => (console.log = log))
+    .then(() => lines.join('\n'));
+}
+
+// Runs the module for real into a temporary home, as the throwaway HOME install test would.
+async function installInto(home, given) {
+  const answers = new Map(Object.entries({ PREFS_TARGETS: 'claude,firstmate', PREFS_DECISIONS: 'chat', ...given }));
+  const ctx = new Context({ platform: { ...detectPlatform(), home }, dryRun: false, interactive: false, answers, prompter: null, repoRoot });
+  ctx.beginModule('preferences');
+  for (const q of preferences.questions) if (!q.when || q.when(ctx)) await ctx.ask(q);
+  // Answers of the firstmate and skills modules, which run before this one.
+  Object.assign(ctx.values, { FIRSTMATE_HOME: path.join(home, 'fm'), SKILLS: ['workflow-playbook'] });
+  const out = await capture(() => preferences.install(ctx));
+  return { out, ctx };
+}
+
+test('a real run writes the private lines into all three files, warns about an unknown heading, and a second run changes nothing', { skip: process.platform === 'win32' }, async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const file = path.join(home, 'private-rules.md');
+    fs.writeFileSync(file, PRIVATE);
+    const { out, ctx } = await installInto(home, { PREFS_PRIVATE_RULES: file });
+    assert.match(out, /unknown heading "Hobbies"; its lines are not used/);
+    assert.deepEqual(ctx.record.warnings.length, 1);
+    assert.equal(ctx.record.failures.length, 0, out);
+    const prefs = fs.readFileSync(path.join(home, '.claude', 'rules', 'working-preferences.md'), 'utf8');
+    assert.match(prefs, /- Sessions rule as a paragraph\./);
+    assert.equal(fs.readFileSync(path.join(home, 'fm', 'data', 'captain.md'), 'utf8'), prefs);
+    const brief = fs.readFileSync(path.join(home, 'fm', 'config', 'brief-include.md'), 'utf8');
+    assert.match(brief, /- Workers rule\./);
+    assert.ok(brief.includes(path.join(home, '.claude', 'skills', 'workflow-playbook', 'principles', 'bin', 'principle-check.mjs')), 'the brief names the installed checker');
+    assert.match(fs.readFileSync(path.join(home, 'fm', 'data', 'captain-shared.md'), 'utf8'), /- Second mates rule\./);
+    const again = (await installInto(home, { PREFS_PRIVATE_RULES: file })).out;
+    assert.equal((again.match(/is already up to date/g) || []).length, 4, again);
+    assert.doesNotMatch(again, /wrote|created/i);
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('without the firstmate module in the run, the saved Firstmate home is used, not ~/firstmate', { skip: process.platform === 'win32' }, async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const saved = path.join(home, '.fm-home');
+    // The checker an earlier run installed, so the brief has a line without SKILLS in this run.
+    const checker = path.join(home, '.claude', 'skills', 'workflow-playbook', 'principles', 'bin', 'principle-check.mjs');
+    fs.mkdirSync(path.dirname(checker), { recursive: true });
+    fs.writeFileSync(checker, '');
+    const answers = new Map(Object.entries({ PREFS_TARGETS: 'claude,firstmate', PREFS_DECISIONS: 'chat', FIRSTMATE_HOME: saved, PREFS_PRIVATE_RULES: path.join(home, 'missing.md') }));
+    const ctx = new Context({ platform: { ...detectPlatform(), home }, dryRun: false, interactive: false, answers, prompter: null, repoRoot });
+    ctx.beginModule('preferences');
+    for (const q of preferences.questions) if (!q.when || q.when(ctx)) await ctx.ask(q);
+    const out = await capture(() => preferences.install(ctx));
+    assert.equal(ctx.record.failures.length, 0, out);
+    assert.ok(fs.existsSync(path.join(saved, 'data', 'captain.md')), out);
+    assert.ok(fs.readFileSync(path.join(saved, 'config', 'brief-include.md'), 'utf8').includes(checker), out);
+    assert.ok(!fs.existsSync(path.join(home, 'firstmate')), 'nothing lands in ~/firstmate');
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('with no private rules file, nothing extra is written and no shared second-mate file appears', { skip: process.platform === 'win32' }, async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const { out } = await installInto(home, { PREFS_PRIVATE_RULES: path.join(home, 'missing.md') });
+    assert.match(out, /no private rules file at .*missing\.md; nothing extra written/);
+    assert.doesNotMatch(fs.readFileSync(path.join(home, '.claude', 'rules', 'working-preferences.md'), 'utf8'), /## Private rules/);
+    assert.ok(!fs.existsSync(path.join(home, 'fm', 'data', 'captain-shared.md')));
+    assert.doesNotMatch(fs.readFileSync(path.join(home, 'fm', 'config', 'brief-include.md'), 'utf8'), /## Private rules/);
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('the taste preset is off by default, so the recommended set writes none of it', async () => {
+  const ctx = await answer();
+  assert.equal(ctx.get('PREFS_TASTE_PRESET'), false);
+  assert.equal(preferences.questions.find((q) => q.key === 'PREFS_TASTE_PRESET').useDefault(ctx), true, 'not asked unless the user goes through each preference');
+  assert.doesNotMatch(await render(), /## Taste preset/);
+});
+
+test('the taste preset ships generic rules that no preference question already writes', async () => {
+  const text = fs.readFileSync(path.join(repoRoot, 'templates', 'preferences', 'taste-preset.md'), 'utf8');
+  const { rules, unknown } = parsePrivateRules(text);
+  assert.deepEqual(unknown, []);
+  assert.ok(rules.everywhere.length && rules.sessions.length, 'it has screen taste and review habits');
+  assert.equal(rules.workers.length + rules['second mates'].length + rules.reviewer.length, 0);
+  assert.doesNotMatch(text, /—|@|~\/|\/home\/|\b(19|20)\d\d\b/, 'no em dashes, addresses, paths or years');
+  const yesToAll = Object.fromEntries(preferences.questions.filter((q) => q.type === 'confirm').map((q) => [q.key, 'yes']));
+  const written = (await render({ ...yesToAll, PREFS_TASTE_PRESET: 'no' })).split('\n').map((l) => l.replace(/^- /, ''));
+  for (const line of [...rules.everywhere, ...rules.sessions]) assert.ok(!written.includes(line), `already written: ${line}`);
+});
+
+test('turning the taste preset on writes its rules into the rules file and its Everywhere lines into worker briefs', { skip: process.platform === 'win32' }, async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const { rules } = parsePrivateRules(fs.readFileSync(path.join(repoRoot, 'templates', 'preferences', 'taste-preset.md'), 'utf8'));
+    const { out, ctx } = await installInto(home, { PREFS_TASTE_PRESET: 'yes', PREFS_PRIVATE_RULES: path.join(home, 'missing.md') });
+    assert.equal(ctx.record.failures.length, 0, out);
+    assert.match(out, new RegExp(`taste preset: ${rules.everywhere.length + rules.sessions.length} rules added`));
+    const prefs = fs.readFileSync(path.join(home, '.claude', 'rules', 'working-preferences.md'), 'utf8');
+    const taste = sectionOf(prefs, 'Taste preset');
+    for (const line of [...rules.everywhere, ...rules.sessions]) assert.ok(taste.includes(`- ${line}`), line);
+    assert.equal(fs.readFileSync(path.join(home, 'fm', 'data', 'captain.md'), 'utf8'), prefs);
+    const brief = sectionOf(fs.readFileSync(path.join(home, 'fm', 'config', 'brief-include.md'), 'utf8'), 'Taste preset');
+    for (const line of rules.everywhere) assert.ok(brief.includes(`- ${line}`), line);
+    for (const line of rules.sessions) assert.ok(!brief.includes(line), `a session habit stays out of worker briefs: ${line}`);
+    assert.ok(!fs.existsSync(path.join(home, 'fm', 'data', 'captain-shared.md')), 'second mates read captain.md through the main home, not a shared copy');
+    const off = (await installInto(home, { PREFS_PRIVATE_RULES: path.join(home, 'missing.md') })).out;
+    assert.doesNotMatch(off, /taste preset/);
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
 });

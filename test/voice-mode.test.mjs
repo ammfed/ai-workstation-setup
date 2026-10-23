@@ -270,7 +270,7 @@ test('session: a hand-off sends one note with an id and the reply command, and i
   while (!logs.some((l) => l.event === 'handoff-answer') && performance.now() < until) await new Promise((r) => setTimeout(r, 20));
   session.close();
   assert.match(session.provider.said[0], /Answer arrived .*"is the login fix merged yet".*: Yes, it merged this morning\./);
-  assert.match(session.provider.said[0], /as your own answer/);
+  assert.match(session.provider.said[0], /as your own answer, naming work by its project and topic rather than by an id or slug\./);
   const heard = logs.find((l) => l.event === 'handoff-answer');
   assert.equal(heard.id, id);
   assert.ok(heard.round_trip_ms > 0 && heard.speak_ms >= 0, JSON.stringify(heard));
@@ -354,6 +354,10 @@ test('session: without a queue command there is no hand_off tool', () => {
   // Records come before a hand-off, and without one, before the refusal.
   assert.match(new Session(config(), { script: [] }).provider.instructions, /look it up yourself first, in the same reply: search_records[^\n]*\n- Only when those do not answer \(after you looked\)/);
   assert.match(session.provider.instructions, /look it up yourself first[^\n]*\n- You cannot do work/);
+  // With or without a hand-off, work is named by project and topic, never by id.
+  for (const i of [session.provider.instructions, new Session(config(), { script: [] }).provider.instructions]) {
+    assert.match(i, /- Talk about the work the way a colleague would, by its project and what it is about\. Never read task ids, slugs, codes, file names or links aloud; say a name only when two items would otherwise be confused/);
+  }
   session.close();
 });
 
@@ -363,7 +367,7 @@ test('handoff: the note format, and reply validation', () => {
   const c = config();
   assert.equal(
     noteText({ id: 'vq-0a1b2c', kind: 'task', request: 'draft\n the  summary', replyCommand: 'voice-mode reply' }),
-    'Voice request vq-0a1b2c: "draft the summary" -- the user is waiting in voice mode; answer in one to three short spoken sentences with: voice-mode reply vq-0a1b2c "<answer>"',
+    'Voice request vq-0a1b2c: "draft the summary" -- the user is waiting in voice mode; answer in one to three short spoken sentences that name work by its project and what it is about, as a colleague would, not by task ids or slugs (give one only when two items would otherwise be confused), with: voice-mode reply vq-0a1b2c "<answer>"',
   );
   assert.throws(() => saveReply(c, '../x', 'hi'), /not a voice hand-off id/);
   assert.throws(() => saveReply(c, 'vq-ffffff', 'hi'), /no voice hand-off vq-ffffff/);
@@ -929,8 +933,14 @@ test('briefing: whole memory files, lines cut short, and who is working on what'
   const web = /\n(- web - [^\n]*)\n- api - owns the api/.exec(b.text)?.[1];
   assert.ok(web && web.length <= 60 && web.endsWith('[...]'), web);
   const when = '\\d+ \\w{3} \\d\\d:\\d\\d';
-  assert.match(b.text, new RegExp(`- site-mate \\(secondmate on site\\); working copy ${mate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}; latest, ${when}: done: shipped the banner`));
-  assert.match(b.text, new RegExp(`- banner \\(ship on site under site-mate\\); working copy ~/copies/site-1; latest, ${when}: paused: PR open, waiting on review`));
+  const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const work = /## Who is working on what\n([^]*?)(?:\n## |$)/.exec(b.text)[1];
+  assert.match(work, /^\(Each line is one piece of work\. The name in brackets only tells two items apart; talk about the work by its project and topic\.\)\n/);
+  // Each line leads with what the work is and its news; the name and copy only follow, in brackets.
+  assert.match(work, new RegExp(`\\n- secondmate on site, latest ${when}: done: shipped the banner \\[site-mate; working copy ${esc(mate)}\\]`));
+  assert.match(work, new RegExp(`\\n- ship on site, latest ${when}: paused: PR open, waiting on review \\[banner; under site-mate; working copy ~/copies/site-1\\]`));
+  assert.doesNotMatch(work, /key=|corr=|ab12cd34/, 'status tags are removed');
+  assert.doesNotMatch(work, /^- (site-mate|banner)\b/m, 'no line leads with a name');
   assert.doesNotMatch(b.text, /^- old\b/m, "a task quiet for longer than days is left out");
   // A task's new status line counts as a change to rebuild for.
   const before = briefingStamp(c);
@@ -1535,7 +1545,7 @@ test('instructions: the browser rule is there only with browser control on', () 
 
 // ------------------------------------------------------------------ lookout, computer, tasks, notes, exclude
 
-const { Lookout, boardEvents, lookoutLine, readBoard, loopback } = await import(path.join(bin, 'lookout.mjs'));
+const { Lookout, boardEvents, lookoutLine, readBoard, loopback, SAY } = await import(path.join(bin, 'lookout.mjs'));
 const { parsePmset, parseDf, parseMeminfo, parseVmStat, topApps, parseNmcli, gather, summary, linuxBattery } = await import(path.join(bin, 'pc.mjs'));
 const { dueToday, tasksSummary, readTasks, parseDue } = await import(path.join(bin, 'tasks.mjs'));
 const { wrapPrompt, agyArgv, askNotes, busyReason, disabledFile, vaultState, vaultChanges, spokenText, agyMayRead, BUSY_ANSWER, TIMEOUT_ANSWER, CHANGED_ANSWER, DENIED_ANSWER } = await import(path.join(bin, 'notes.mjs'));
@@ -1564,15 +1574,76 @@ test('lookout: what waits on you and workers that stopped or failed; a question 
   const prev = { 'main/import-job': { dot: 'working' }, 'main/quiet-one': { dot: 'working' } };
   const ev = boardEvents(b, prev);
   assert.deepEqual(ev.map((e) => e.kind).sort(), ['asks', 'failed', 'needs', 'stopped']);
-  assert.equal(ev.find((e) => e.kind === 'needs').text, 'blue header is waiting on you: Blue logo or grey?');
-  assert.equal(ev.find((e) => e.kind === 'asks').text, 'docs update is asking you something: Which page first?');
-  assert.equal(ev.find((e) => e.kind === 'failed').text, 'parser fix failed: tests failing on the parser');
-  assert.equal(ev.find((e) => e.kind === 'stopped').text, 'import job stopped before finishing. Its last words: halfway through the import');
+  // The plain sentence names the project and the work, never the task's name.
+  assert.equal(ev.find((e) => e.kind === 'needs').text, 'In demo app, a piece of work is waiting on you: Blue logo or grey?');
+  assert.equal(ev.find((e) => e.kind === 'asks').text, 'In demo app, a piece of work has a question for you: Which page first?');
+  assert.equal(ev.find((e) => e.kind === 'failed').text, 'In demo app, a piece of work failed: tests failing on the parser');
+  assert.equal(ev.find((e) => e.kind === 'stopped').text, 'In demo app, a piece of work stopped before finishing: halfway through the import');
+  assert.deepEqual(ev.find((e) => e.kind === 'needs'), { key: 'needs:main/blue-header:2026-01-05T07:00:00.000Z', kind: 'needs', live: true, project: 'demo app', topic: null, task: 'blue-header', detail: 'Blue logo or grey?', text: 'In demo app, a piece of work is waiting on you: Blue logo or grey?' });
   // Without having seen it working, a stopped worker is not news.
   assert.ok(!boardEvents(b, {}).some((e) => e.kind === 'stopped'));
   // No pull-request-ready or landed lines.
   assert.ok(!ev.some((e) => /pull|merged|Shipped/.test(e.text)));
-  assert.equal(lookoutLine(ev, 2), 'blue header is waiting on you: Blue logo or grey? docs update is asking you something: Which page first? And 2 more things on the board.');
+  assert.equal(
+    lookoutLine(ev, 2),
+    [
+      'What is new on the board:',
+      '- Project: demo app. Work: no title on the board, so describe it in a few words from what was said. What happened: it is waiting on the user for a decision. What was said: "Blue logo or grey?". What the user needs to do: make the call.',
+      '- Project: demo app. Work: no title on the board, so describe it in a few words from what was said. What happened: the worker on it asked the user a question. What was said: "Which page first?". What the user needs to do: answer the question.',
+      'And 2 more things on the board; say that in a few words at the end.',
+      SAY,
+    ].join('\n'),
+  );
+});
+
+test('lookout: every kind of event reaches the voice by project and topic, with no task name, id or lane in it', () => {
+  const titled = (task, name, over) => row(task, { name, project: 'demo-app', ...over });
+  const b = board({
+    needs: [{ ...need('blue-header', 'fm-hold-v1:' + Buffer.from('Blue logo or grey?').toString('base64')), name: 'Header colour (small)' }],
+    rows: [
+      titled('blue-header', 'Header colour (small)', { state: 'needs-decision' }),
+      titled('docs-update', 'Docs for the new search', { asks: 'Which page first? See https://example.com/docs/plan' }),
+      titled('parser-fix', 'Faster parser', { state: 'failed', text: 'failed [at=1792742085]: tests failing in src/parser.test.mjs' }),
+      titled('cache-move', 'Move the cache', { state: 'blocked', text: 'needs the staging password' }),
+      titled('import-job', 'Nightly import', { dot: 'stopped', text: 'halfway through the import' }),
+    ],
+  });
+  const ev = boardEvents(b, { 'main/import-job': { dot: 'working' } });
+  assert.deepEqual(ev.map((e) => e.kind), ['needs', 'asks', 'failed', 'blocked', 'stopped']);
+  const line = lookoutLine(ev, 5);
+  const slug = /blue.header|docs.update|parser.fix|cache.move|import.job|main\/|fm-hold|https?:|\.mjs|\[at=|Name to tell/;
+  for (const said of [line, ...ev.map((e) => e.text)]) assert.doesNotMatch(said, slug);
+  assert.equal(ev[0].text, 'In demo app, the work on Header colour is waiting on you: Blue logo or grey?');
+  assert.equal(
+    line,
+    [
+      'What is new on the board:',
+      '- Project: demo app. Work: Header colour. What happened: it is waiting on the user for a decision. What was said: "Blue logo or grey?". What the user needs to do: make the call.',
+      '- Project: demo app. Work: Docs for the new search. What happened: the worker on it asked the user a question. What was said: "Which page first? See a link". What the user needs to do: answer the question.',
+      '- Project: demo app. Work: Faster parser. What happened: the work failed. What was said: "failed: tests failing in a file". What the user needs to do: look at what went wrong when they can.',
+      '- Project: demo app. Work: Move the cache. What happened: the worker on it is stuck. What was said: "needs the staging password". What the user needs to do: help it get unstuck.',
+      '- Project: demo app. Work: Nightly import. What happened: the worker on it stopped before finishing. What was said: "halfway through the import". What the user needs to do: check whether it should be picked up again.',
+      SAY,
+    ].join('\n'),
+  );
+});
+
+test('lookout: two items with the same title in one line are told apart by name; the same title in another project is not', () => {
+  const b = board({
+    rows: [
+      row('parser-a', { name: 'Parser rewrite', state: 'failed', text: 'tests failing' }),
+      row('parser-b', { name: 'Parser rewrite', asks: 'Keep the old flags?' }),
+      row('parser-c', { name: 'Parser rewrite', project: 'other-app', state: 'blocked', text: 'waiting on review' }),
+    ],
+  });
+  const line = lookoutLine(boardEvents(b));
+  assert.match(line, /Work: Parser rewrite\. Name to tell it apart: parser a\. What happened: the work failed/);
+  assert.match(line, /Work: Parser rewrite\. Name to tell it apart: parser b\. What happened: the worker on it asked/);
+  assert.match(line, /Project: other app\. Work: Parser rewrite\. What happened: the worker on it is stuck/);
+  assert.doesNotMatch(line, /parser c/);
+  assert.ok(line.endsWith(`${SAY} Some items share a topic: only for those, say the name given to tell them apart, naturally, for example "the one called ...".`));
+  // Without a twin in the line, no name at all.
+  assert.doesNotMatch(lookoutLine(boardEvents(board({ rows: [b.rows[0]] }))), /parser a|tell them apart/);
 });
 
 test('lookout: the first read is a silent baseline; each event is said once; bursts become one line, at most one line per gap', async () => {
@@ -1587,13 +1658,15 @@ test('lookout: the first read is a silent baseline; each event is said once; bur
   snap = board({ needs: [need('old-ask', 'Already there?'), need('new-ask', 'Ship on Friday?')], rows: [row('worker-1', { dot: 'stopped' })] });
   assert.equal((await lo.check(t0 + 5000)).length, 2);
   assert.equal(lo.next(t0 + 10_000), null, 'the burst is gathered first');
-  assert.equal(lo.next(t0 + 36_000), 'new ask is waiting on you: Ship on Friday? worker 1 stopped before finishing. Its last words: building it.');
+  const line = lo.next(t0 + 36_000);
+  assert.match(line, /"Ship on Friday\?"[^\n]*make the call\.\n- [^\n]*stopped before finishing\. What was said: "building it"/);
+  assert.doesNotMatch(line, /new ask|worker 1|And \d+ more/);
   // Said once: the same board again finds nothing new.
   assert.deepEqual(await lo.check(t0 + 40_000), []);
   snap = board({ needs: [need('old-ask', 'Already there?'), need('new-ask', 'Ship on Friday?'), need('third', 'Rename it?')], rows: [] });
   await lo.check(t0 + 45_000);
   assert.equal(lo.next(t0 + 80_000), null, 'the gap since the last line is kept');
-  assert.equal(lo.next(t0 + 160_000), 'third is waiting on you: Rename it?');
+  assert.match(lo.next(t0 + 160_000), /^What is new on the board:\n- [^\n]*"Rename it\?"[^\n]*\n[^\n]*$/);
   const st = JSON.parse(fs.readFileSync(c.lookout.stateFile, 'utf8'));
   assert.equal(fs.statSync(c.lookout.stateFile).mode & 0o777, 0o600);
   assert.deepEqual(st.pending, []);
@@ -1612,7 +1685,9 @@ test('lookout: found but not said when the conversation ends, it is said once at
   snap = board({ needs: [need('a-task', 'Merge it?')] });
   const second = new Lookout(c, { run });
   await second.check(5_000_000);
-  assert.equal(second.next(5_000_000), 'a task is waiting on you: Merge it?', 'b-task was answered meanwhile, so it is not said late');
+  const said = second.next(5_000_000);
+  assert.match(said, /"Merge it\?"/);
+  assert.doesNotMatch(said, /Rename it/, 'b-task was answered meanwhile, so it is not said late');
   assert.equal(second.next(9_000_000), null);
 });
 
@@ -1633,12 +1708,12 @@ test('lookout: only a loopback board; the ledger command when the board is off; 
   const r = await readBoard({ url: 'http://127.0.0.1:4391/api/board', command: ['ledger', 'board', '--json'] }, { fetchImpl: down, run: async (argv) => (ran.push(argv), board()) });
   assert.deepEqual(ran, [['ledger', 'board', '--json']]);
   assert.ok(Array.isArray(r.rows));
-  // A due line is queued for the running conversation, which says it word for word as a heads-up.
+  // A due line is queued for the running conversation, which says it in its own words as a heads-up.
   const c = config({ lookout: { enabled: true, stateFile: path.join(tmp, 'lookout-c.json') } });
   fs.rmSync(handoffDir(c), { recursive: true, force: true });
   const live = new Live(c, () => {});
   live.mic = {};
-  live.lookout = { tick: () => 'parser fix failed: tests failing.' };
+  live.lookout = { tick: () => 'What is new on the board:\n- Project: demo app. Work: Parser rewrite.' };
   live.watchBoard();
   const [entry] = waitingReplies(c);
   assert.equal(entry.from, 'lookout');
@@ -1646,7 +1721,8 @@ test('lookout: only a loopback board; the ledger command when the board is off; 
   const sent = [];
   s.provider.say = (t) => (sent.push(t), true);
   s.speakAnswer(entry);
-  assert.equal(sent[0], 'A heads-up from watching the work, to say out loud now. Say exactly these words, and nothing before or after them: "parser fix failed: tests failing."');
+  assert.equal(sent[0], 'A heads-up from watching the work, to tell the user now.\nWhat is new on the board:\n- Project: demo app. Work: Parser rewrite.');
+  assert.doesNotMatch(sent[0], /Say exactly/);
   s.close();
   // No conversation, nothing read or said.
   live.mic = null;

@@ -1,6 +1,7 @@
 // Tests for the model defaults the template writes: the per-model effort in Claude Code
 // settings, the read-only reader subagent, the no-mistakes review model, the example
-// Firstmate dispatch profiles, and the research model in the working preferences.
+// Firstmate dispatch profiles and second mates, backpass, and the research model in the
+// working preferences.
 // Invented values only; a temporary folder stands in for the home.
 // Run: node --test test/models.test.mjs
 
@@ -11,9 +12,10 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Context, detectPlatform } from '../lib/context.mjs';
-import { NO_MISTAKES_REVIEW, noMistakesConfigPath, parseReviewModel, withClaudeReviewModel } from '../modules/agent-clis/module.mjs';
+import agentClis, { NO_MISTAKES_REVIEW, REVIEW_RULE_PATHS, REVIEW_RULES, noMistakesConfigPath, parseReviewModel, reviewRulesBlock, withClaudeReviewModel, withReviewRules, writeReviewRules } from '../modules/agent-clis/module.mjs';
 import claudeCode, { installReaderAgent, parseModelEfforts } from '../modules/claude-code/module.mjs';
-import firstmate, { dispatchProfiles } from '../modules/firstmate/module.mjs';
+import backpass, { claudeModelId } from '../modules/backpass/module.mjs';
+import firstmate, { dispatchProfiles, secondmateDefault } from '../modules/firstmate/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
 import { renderPreferences } from '../modules/preferences/render.mjs';
 
@@ -32,6 +34,17 @@ test('Claude Code settings default Opus 5.5 to medium effort, and the question s
   assert.equal(q.default, 'claude-opus-5-5=medium');
   assert.deepEqual(parseModelEfforts(q.default), { 'claude-opus-5-5': 'medium' });
   assert.deepEqual(parseModelEfforts(''), {});
+});
+
+test('Claude Code starts on Opus at medium effort, and a saved keep still wins', async () => {
+  const ask = async (answers) => {
+    const ctx = context(os.tmpdir(), { answers, dryRun: true });
+    for (const key of ['CLAUDE_MODEL', 'CLAUDE_EFFORT', 'CLAUDE_MODEL_EFFORTS']) await ctx.ask(question(claudeCode, key));
+    return ['CLAUDE_MODEL', 'CLAUDE_EFFORT', 'CLAUDE_MODEL_EFFORTS'].map((key) => ctx.get(key));
+  };
+  assert.deepEqual(await ask({}), ['opus', 'medium', 'claude-opus-5-5=medium']);
+  assert.deepEqual(await ask({ CLAUDE_MODEL: 'keep', CLAUDE_EFFORT: 'keep', CLAUDE_MODEL_EFFORTS: '' }), ['keep', 'keep', '']);
+  assert.match(question(claudeCode, 'CLAUDE_EFFORT').message, /older models; Opus 5\.5 has its own level/);
 });
 
 test('the reader subagent runs on Haiku, read-only, and lands in the Claude agents folder', async () => {
@@ -93,6 +106,60 @@ test('an existing claude entry or an agent_config the template cannot edit is le
   assert.equal(withClaudeReviewModel('agent_config:\n  codex: {}\n  "claude":\n    effort: high\n', pin), null);
   assert.equal(withClaudeReviewModel('agent_config: {}\n', pin), null);
   assert.equal(withClaudeReviewModel('agent_config: { claude: { model: sonnet } }\n', pin), null);
+});
+
+test('the design review rules go into an empty config and beside other keys, once per interface path', () => {
+  const block = reviewRulesBlock(REVIEW_RULES);
+  assert.equal(withReviewRules('', REVIEW_RULES), `${block}\n`);
+  assert.equal(withReviewRules('agent: auto\nlog_level: info\n', REVIEW_RULES), `agent: auto\nlog_level: info\n\n${block}\n`);
+  assert.match(block, /^review:\n  path_instructions:\n    - path: "\*\.html"\n      instructions: \|\n        Interface code:/m);
+  assert.equal(block.match(/- path: /g).length, REVIEW_RULE_PATHS.length);
+  for (const p of REVIEW_RULE_PATHS) assert.ok(!p.includes('/'), `${p} matches by file name at any depth`);
+  for (const id of ['W4', 'L3', 'L9', 'N1', 'I1', 'I2', 'I3', 'I4', 'I5']) assert.match(block, new RegExp(`${id}: `));
+  // no-mistakes takes at most 32 entries and 16,384 bytes of injected rules, shared with each repository's own.
+  assert.ok(REVIEW_RULE_PATHS.length * (Buffer.byteLength(REVIEW_RULES.join('\n')) + 400) < 16384 / 2);
+});
+
+test('a config with its own review: key is left alone, and a second run gives the same file', () => {
+  assert.equal(withReviewRules('review:\n  path_instructions:\n    - path: "*.go"\n      instructions: mine\n', REVIEW_RULES), null);
+  assert.equal(withReviewRules('agent: auto\nreview: {}\n', REVIEW_RULES), null);
+  const once = withReviewRules('agent: auto\n', REVIEW_RULES);
+  assert.equal(withReviewRules(once, REVIEW_RULES), once);
+  const more = withReviewRules(once, [...REVIEW_RULES, 'Dates are written as 22 Oct.']);
+  assert.match(more, /^        Dates are written as 22 Oct\.$/m);
+  assert.equal(more.match(/^review:/gm).length, 1);
+  assert.equal(withReviewRules(more, []), 'agent: auto\n');
+  assert.equal(withReviewRules('agent: auto\n', []), 'agent: auto\n');
+});
+
+test('the design review rules are asked with no-mistakes, default yes, and take your Reviewer lines', async () => {
+  const q = question(agentClis, 'NO_MISTAKES_PRINCIPLES');
+  assert.equal(q.type, 'confirm');
+  assert.equal(q.default, true);
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'models-'));
+  const saved = process.env.NM_HOME;
+  process.env.NM_HOME = path.join(home, '.nm');
+  fs.mkdirSync(process.env.NM_HOME);
+  const file = path.join(home, '.nm', 'config.yaml');
+  fs.writeFileSync(file, 'agent: auto\n');
+  const rules = path.join(home, 'private-rules.md');
+  fs.writeFileSync(rules, '## Reviewer\n\n- Every chart has a plain title.\n\n## Sessions\n\n- Not for the reviewer.\n');
+  const run = async (on) => {
+    // PREFS_PRIVATE_RULES comes from the saved answers when preferences is not in this run.
+    await writeReviewRules(context(home, { answers: { PREFS_PRIVATE_RULES: rules } }), on);
+    return fs.readFileSync(file, 'utf8');
+  };
+  try {
+    const first = await run(true);
+    assert.match(first, /^agent: auto\n\n# >>> /);
+    assert.match(first, /^        Every chart has a plain title\.$/m);
+    assert.doesNotMatch(first, /Not for the reviewer/);
+    assert.equal(await run(true), first);
+    assert.equal(await run(false), 'agent: auto\n');
+  } finally {
+    if (saved === undefined) delete process.env.NM_HOME;
+    else process.env.NM_HOME = saved;
+  }
 });
 
 test('the no-mistakes config lives in NM_HOME when set, else ~/.no-mistakes', () => {
@@ -162,4 +229,71 @@ test('agy research runs on gemini-3.8-flash-high by default', async () => {
   assert.equal(other.get('PREFS_DELEGATE_FALLBACK_MODEL'), undefined);
   assert.doesNotMatch(renderPreferences((key) => other.get(key), { cardsPath: path.join(os.tmpdir(), 'cards.html') }), /quota error/);
   assert.match(renderPreferences((key) => other.get(key), { cardsPath: path.join(os.tmpdir(), 'cards.html') }), /to `other-cli`/);
+});
+
+test('second mates run on Opus 5.5 at medium with the capable profiles on Claude, else the harness default', async () => {
+  assert.equal(secondmateDefault('capable', 'claude'), 'claude claude-opus-5-5 medium');
+  assert.equal(secondmateDefault('capable', 'codex'), 'default');
+  assert.equal(secondmateDefault('starter', 'claude'), 'default');
+  assert.equal(secondmateDefault('none', undefined), 'default');
+  // Asked after the dispatch questions, so its default can follow them.
+  const keys = firstmate.questions.map((q) => q.key);
+  assert.ok(keys.indexOf('FIRSTMATE_SECONDMATE_HARNESS') > keys.indexOf('FIRSTMATE_DISPATCH_HARNESS'));
+  const ask = async (answers) => {
+    const ctx = context(os.tmpdir(), { answers, dryRun: true });
+    for (const key of ['FIRSTMATE_DISPATCH', 'FIRSTMATE_DISPATCH_HARNESS', 'FIRSTMATE_SECONDMATE_HARNESS']) {
+      const q = question(firstmate, key);
+      if (!q.when || q.when(ctx)) await ctx.ask(q);
+    }
+    return ctx.get('FIRSTMATE_SECONDMATE_HARNESS');
+  };
+  assert.equal(await ask({}), 'claude claude-opus-5-5 medium');
+  assert.equal(await ask({ FIRSTMATE_DISPATCH: 'none' }), 'default');
+  assert.equal(await ask({ FIRSTMATE_SECONDMATE_HARNESS: 'default' }), 'default');
+});
+
+test('backpass defaults to Opus 5.5 and reads a dotted Claude id as the dashed one', async () => {
+  const ask = async (answers) => {
+    const ctx = context(os.tmpdir(), { answers, dryRun: true });
+    for (const key of ['BACKPASS_AGENT', 'BACKPASS_MODEL']) await ctx.ask(question(backpass, key));
+    return ctx.get('BACKPASS_MODEL');
+  };
+  assert.equal(await ask({}), 'claude-opus-5-5');
+  assert.equal(await ask({ BACKPASS_AGENT: 'codex' }), 'gpt-5.5');
+  assert.equal(claudeModelId('claude-opus-5.5'), 'claude-opus-5-5');
+  assert.equal(claudeModelId(' claude-sonnet-4.6 '), 'claude-sonnet-4-6');
+  assert.equal(claudeModelId('claude-opus-5-5'), 'claude-opus-5-5');
+  assert.equal(claudeModelId('gpt-5.5'), 'gpt-5.5');
+});
+
+test('the model map lists the installer defaults and sends small tasks to Sonnet 5.5 at high only', () => {
+  const map = fs.readFileSync(path.join(repoRoot, 'docs', 'model-map.md'), 'utf8');
+  assert.match(map, /\| claude-code \| `CLAUDE_MODEL` \| `opus` \(Opus 5\.5\) \|/);
+  assert.match(map, /\| claude-code \| `CLAUDE_EFFORT` \| `medium` \|/);
+  assert.match(map, /\| firstmate \| `FIRSTMATE_SECONDMATE_HARNESS` \| `claude claude-opus-5-5 medium`/);
+  assert.match(map, /\| backpass \| `BACKPASS_MODEL` \| `claude-opus-5-5`/);
+  assert.doesNotMatch(map, /\| Sonnet 5\.5 \| medium \|/);
+  assert.match(map, /version bump, config value\) \| Sonnet 5\.5 \| high \|/);
+});
+
+test('the workflow-playbook skill routes models and waits at a review page the way the shipped preferences do', () => {
+  const skill = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
+  const routing = skill.slice(skill.indexOf('**Match the model to the job.**'), skill.indexOf('2. **One complete brief.**'));
+  const row = (job) => routing.split('\n').map((l) => l.trim()).find((l) => l.startsWith(`| ${job}`)) || '';
+  assert.match(row('Building'), /strongest model at medium effort/);
+  assert.match(row('Research, investigations'), /strongest model at high effort.*highest effort when the result is weak/);
+  assert.match(row('A new look'), /highest effort/);
+  assert.match(row('Polish'), /strongest model at high effort/);
+  assert.match(row('Small, clear tasks'), /faster model at high effort.*failed check, re-run it on the strongest model at medium effort/);
+  assert.match(routing, /above these only when the owner names it/);
+
+  const rules = renderPreferences((k) => ({ PREFS_MODEL_ROUTING: 'capable' })[k]);
+  assert.match(rules, /polish of a prototype whose look is already settled[^\n]*high effort/);
+  assert.match(rules, /small, clear tasks[^\n]*faster model at high effort, and re-run it on the most capable model at medium effort after a failed check/);
+
+  const wait = skill.slice(skill.indexOf('2. **Never leave the next step empty'), skill.indexOf('3. **End every reply'));
+  assert.match(wait, /stands by quietly for that answer: it does not prepare the next stage/);
+  assert.match(wait, /owner's preference[^.]*, and the recommended answer is no/);
+  const prepare = preferences.questions.find((q) => q.key === 'PREFS_PAGE_PREPARE_NEXT');
+  assert.equal(prepare.default, false, 'the setup also waits by default');
 });

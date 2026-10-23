@@ -78,6 +78,8 @@ export default {
   title: 'Claude Code',
   description: 'Claude Code CLI plus settings: model, effort, theme, status line, plugins',
   order: 20,
+  group: 'assistant',
+  summary: 'Claude Code with sensible settings',
   platforms: ['linux', 'macos', 'wsl', 'windows'],
   requires: ['core'],
   default: true,
@@ -93,10 +95,11 @@ export default {
       key: 'CLAUDE_MODEL',
       type: 'choice',
       message: 'Default model',
-      default: 'keep',
+      // docs/model-map.md: the most capable model at medium effort for everyday work.
+      default: 'opus',
       choices: [
         keep,
-        { value: 'opus', label: 'opus - most capable' },
+        { value: 'opus', label: 'opus - most capable (recommended)' },
         { value: 'opus[1m]', label: 'opus[1m] - most capable, with the 1M-token context window' },
         { value: 'sonnet', label: 'sonnet - balanced' },
         { value: 'haiku', label: 'haiku - fastest' },
@@ -117,8 +120,10 @@ export default {
     {
       key: 'CLAUDE_EFFORT',
       type: 'choice',
-      message: 'Default effort level',
-      default: 'keep',
+      // In the user settings the top-level effortLevel reaches Opus 5, Fable 5.1 and older
+      // models only; newer ones take their level from CLAUDE_MODEL_EFFORTS (modelSettings).
+      message: 'Default effort level (reaches older models; Opus 5.5 has its own level, asked later)',
+      default: 'medium',
       choices: [keep, ...EFFORTS.map((value) => ({ value }))],
     },
     {
@@ -274,7 +279,10 @@ export default {
         check: versionCheck('claude'),
       }),
     );
-    if (state === 'installed') ctx.todo('run `claude` once and sign in');
+    // Claude's sign-in is the one stop at the end. An earlier install counts as signed in
+    // unless Claude says it is not (`claude auth status` reports loggedIn).
+    const signedOut = state === 'installed' || (state === 'present' && ctx.os !== 'windows' && /"loggedIn":\s*false/.test(ctx.capture('claude auth status 2>&1 || true') ?? ''));
+    if (signedOut) ctx.signIn({ name: 'Claude', cmd: 'claude auth login', todo: 'run `claude` once and sign in' });
 
     // Anthropic's installer, published to winget as Anthropic.Claude (https://code.claude.com/docs/en/desktop).
     if (ctx.os === 'windows' && ctx.get('CLAUDE_DESKTOP')) {

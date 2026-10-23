@@ -31,18 +31,18 @@ Everything below is installed from its own official source by the module named i
 brackets; nothing is vendored. Items marked optional are off until you pick them.
 
 **Agents and their settings**
-- [Claude Code](https://code.claude.com/docs) with model, effort per model (Opus 5.5 at medium by default), permission mode, theme, view, Remote Control and auto-compact settings, plus optional phone push notifications, feedback drafts, forced session persistence, spinner tips, skipping the bypass-permissions confirmation, and (off by default) letting agents merge pull requests without asking (claude-code); the Claude desktop app on Windows.
+- [Claude Code](https://code.claude.com/docs) with model and effort (Opus 5.5 at medium by default, also per model), permission mode, theme, view, Remote Control and auto-compact settings, plus optional phone push notifications, feedback drafts, forced session persistence, spinner tips, skipping the bypass-permissions confirmation, and (off by default) letting agents merge pull requests without asking (claude-code); the Claude desktop app on Windows.
 - Models: a map of which model and effort fits each kind of work, which the defaults follow ([docs/model-map.md](docs/model-map.md)), extra-high effort only for a new frontend look, high effort for investigations, plans and polish of a settled look, research at high effort that hands bulk fetching, reading and drafting to cheaper helpers, and a read-only `reader` subagent on Haiku for reading, lookup and summaries (claude-code).
 - Status line: a built-in gauges line with context, 5-hour and weekly bars and their reset times (the default, nothing extra to install), or [ccstatusline](https://github.com/sirmalloc/ccstatusline) (claude-code).
 - Plugins: [diagram-design](https://github.com/cathrynlavery/diagram-design); optional [compact-adviser](https://github.com/kunchenguid/compact-adviser), which says when a session is at a safe point to compact (claude-code).
 - Hooks: session-start briefings from the agent CLIs, and reminders to save notes before and after a compaction, with the save point following the auto-compact window and checked on prompts and during long tool runs (claude-code, agent-clis).
-- Skills, all installed by default: [kun](https://github.com/kunchenguid/kun), [vision](https://github.com/kunchenguid/vision), grill-me, grilling, teach, tdd, codebase-design, grill-with-docs, to-spec, to-tickets, to-questionnaire and wayfinder (with its helpers domain-modeling, research and prototype) from [mattpocock/skills](https://github.com/mattpocock/skills), find-docs from [Context7](https://github.com/upstash/context7), no-mistakes, composio-cli, and workflow-playbook, a working method for long projects run with AI agents that ships with this setup (skills). The skills are not stored in this repo: the install downloads each one from its upstream with the [skills CLI](https://github.com/vercel-labs/skills). no-mistakes and composio-cli need their tool first; without it they are skipped with a note, and the run still succeeds. The end of the install lists the skills installed, skipped and failed; restart Claude Code so they load. To add one later, rerun `./install.sh --modules skills` and tick it, or add any public skill with `npx skills add <owner>/<repo> --skill <name> -g -a claude-code`. A rerun updates the chosen skills you already have to their latest upstream version (it asks once; `--yes` updates). [docs/route.md](docs/route.md) shows where each one fits in a software project.
+- Skills, all installed by default: [kun](https://github.com/kunchenguid/kun), [vision](https://github.com/kunchenguid/vision), grilling, teach, tdd, codebase-design, to-spec, to-tickets, to-questionnaire and wayfinder (with its helpers domain-modeling, research and prototype) from [mattpocock/skills](https://github.com/mattpocock/skills), find-docs from [Context7](https://github.com/upstash/context7), no-mistakes, composio-cli, and workflow-playbook, a working method for long projects run with AI agents that ships with this setup (ten phases from capturing an idea to improving the way of working, with the review stakes set once at capture and a quiet wait while a review page is open), with a list of design and writing checks and a small checker for them in its `principles/` folder (skills). The skills are not stored in this repo: the install downloads each one from its upstream with the [skills CLI](https://github.com/vercel-labs/skills). no-mistakes and composio-cli need their tool first; without it they are skipped with a note, and the run still succeeds. The end of the install lists the skills installed, skipped and failed; restart Claude Code so they load. To add one later, rerun `./install.sh --modules skills` and tick it, or add any public skill with `npx skills add <owner>/<repo> --skill <name> -g -a claude-code`. A rerun updates the chosen skills you already have to their latest upstream version (it asks once; `--yes` updates). [docs/route.md](docs/route.md) shows where each one fits in a software project.
 - Optional other agents: [Codex](https://github.com/openai/codex), [Pi](https://github.com/earendil-works/pi), [Antigravity CLI](https://antigravity.google) (agent-clis).
-- Working preferences written as a rules file every session loads: tone, status format, decisions, review pages, model use, research and safety; one question takes the recommended set, or you go through each one (preferences; [guide](docs/working-preferences.md)).
+- Working preferences written as a rules file every session loads: tone, status format, decisions, review pages, model use, research and safety; one question takes the recommended set, or you go through each one, with an optional taste preset of screen taste and review habits, off by default (preferences; [guide](docs/working-preferences.md)).
 
 **Agent fleet**
 - [Firstmate](https://github.com/kunchenguid/firstmate), cloned from upstream, with its backend, harnesses, permission mode, example dispatch profiles after the [model map](docs/model-map.md), a home kept apart from the code, and one persistent second mate per domain (firstmate; [notes](docs/firstmate.md)).
-- [tasks-axi](https://github.com/kunchenguid/tasks-axi) backlog, [quota-axi](https://github.com/kunchenguid/quota-axi) plan limits, [no-mistakes](https://github.com/kunchenguid/no-mistakes) validation pipeline (reviews on Opus 5.5 at medium), [treehouse](https://github.com/kunchenguid/treehouse) worktree pool; optional [herdr](https://github.com/ogulcancelik/herdr) workspace backend, with starter settings (theme, agents grouped by space, names on pane borders, desktop notifications), or tmux (agent-clis, firstmate).
+- [tasks-axi](https://github.com/kunchenguid/tasks-axi) backlog, [quota-axi](https://github.com/kunchenguid/quota-axi) plan limits, [no-mistakes](https://github.com/kunchenguid/no-mistakes) validation pipeline (reviews on Opus 5.5 at medium, with design review rules for interface files), [treehouse](https://github.com/kunchenguid/treehouse) worktree pool; optional [herdr](https://github.com/ogulcancelik/herdr) workspace backend, with starter settings (theme, agents grouped by space, names on pane borders, desktop notifications), or tmux (agent-clis, firstmate).
 - Optional [gnhf](https://github.com/kunchenguid/gnhf) overnight loop and [pixel-agents](https://github.com/pixel-agents-hq/pixel-agents) live office view, with its view settings and, off by default, characters named after their herdr agent (agent-clis; [guide](docs/pixel-agents.md)).
 - Optional reminder for the main Firstmate session to run `/stow` once its context gets large (firstmate).
 - Optional [backpass](https://github.com/kunchenguid/backpass) behind a privacy gate (backpass).
@@ -60,7 +60,7 @@ brackets; nothing is vendored. Items marked optional are off until you pick them
 - By hand, if you want it: the [Claude in Chrome](https://code.claude.com/docs/en/chrome) extension for your own browser, claude.ai connectors (such as Claude Docs) turned on in your claude.ai settings, and plugins from the Anthropic plugin directory (such as Refero for design references) picked with `/plugin` in Claude Code.
 
 **Notes and tasks**
-- A Markdown second brain for [Obsidian](https://obsidian.md) with templates, map, checker and ingest scripts, and [obsidian-axi](https://github.com/AndersHoffmann/obsidian-axi) for agents; optional ranked search, quick capture, a bookmark converter, a small agent tidy-up pass (garden) and timers for housekeeping and garden (second-brain; [design](docs/second-brain.md)).
+- A Markdown second brain for [Obsidian](https://obsidian.md) with templates, map, checker and ingest scripts, and [obsidian-axi](https://github.com/AndersHoffmann/obsidian-axi) for agents, and the Obsidian app itself; optional ranked search, quick capture, a bookmark converter, a small agent tidy-up pass (garden) and timers for housekeeping and garden (second-brain; [design](docs/second-brain.md)).
 - [clickup-axi](https://github.com/JanSuthacheeva/clickup-axi) with its skill and session hook (clickup; [structure](docs/clickup-structure.md)).
 
 **Always-on helpers (opt-in)**
@@ -85,7 +85,7 @@ cd ai-workstation-setup
 
 ```sh
 ./install.sh --dry-run   # see the plan, change nothing
-./install.sh             # pick modules, answer questions, install
+./install.sh             # see what will be set up, Enter to go ahead, install
 ```
 
 **Windows (PowerShell)** (no Git yet? download the ZIP from GitHub and unpack it)
@@ -106,22 +106,48 @@ What runs inside WSL, what runs on Windows, and how the two sides connect (links
 pages, the vault, the browser tools, systemd, PATH, DNS, GPU) is in
 [docs/windows-wsl.md](docs/windows-wsl.md).
 
-The only prerequisite is Node.js 20+; the entry script offers to install it
-(per-user with nvm on Linux/macOS, with winget on Windows). You pick modules, every
-question is asked up front, then the install runs and ends with a summary of what
-was done, skipped, failed, and what is left for you (such as signing in). When a tool
+The only prerequisite is Node.js 20+; when it is missing the entry script installs it
+without asking (per-user with nvm on Linux/macOS, with winget on Windows), saying so in two
+plain lines at a terminal. Before anything is installed,
+the setup shows one short screen: what you get, in a few plain lines, starting from the
+recommended picks (`./install.sh --list` shows them as `default: yes`). Press Enter to start:
+every question then takes its recommended answer. On Linux (and Linux inside Windows) your
+computer password is asked once, just before the install starts, and kept fresh until the
+end, so nothing stops halfway to ask for it again. Type `c` to choose for yourself: you
+tick the parts you want in a plain list, the recommended ones first and "More you can add"
+below (the arrow keys move, Space ticks or unticks, Enter goes on). Then "Keep the
+recommended settings for what you picked?": Enter keeps them, so nothing more is asked
+(except which outside connections, when you ticked those), and `d` asks every question of
+the picked parts up front (in a list, Space ticks; typed numbers tick or untick those items;
+the CLI list starts with the tools already on your machine ticked). Your saved answers always win over
+the recommended ones. With `--yes` the lines still print and the install goes ahead. At a
+terminal no sign-in or key interrupts the install: they all wait for one screen at the end,
+where Claude's sign-in opens your browser and any key a picked part needs (ClickUp,
+OpenRouter, Context7) is pasted hidden, or left for later with Enter. GitHub and Context7 are listed there under "Later,
+when you want them" (pick them under `c` to sign in at the end of the first run); running
+the setup again offers them. While it installs, a terminal shows one line per group with a
+word for its state (done, now, did not work) and nothing to answer; the step-by-step detail
+and command output go to `setup-notes.md` in your home folder (a dry run writes it to a
+temporary folder and names it). At a terminal the last screen says "All set! Claude is
+ready." and how to start it, or "Nearly all set." naming what did not work; the summary and
+what is left for you go into `setup-notes.md`, worded so Claude can read it and help you
+finish. With `--yes` the install ends with a printed summary of what was done, skipped,
+failed, and what is left for you (every sign-in is listed there). When a tool
 lands in a folder your shell does not have on PATH yet (such as `~/.local/bin`), the setup
 adds one PATH line to your shell profile, so a new terminal finds it.
 
 Re-running is safe: installed tools are detected and skipped (tools that can prove
 they work without a sign-in are also given a quick real check), config edits only
 happen when something differs, and a changed file you own is never replaced
-without asking (a timestamped `.bak-*` copy is kept when it is). With `--yes`, a
+without asking (a timestamped `.bak-*` copy is kept when it is). With `--yes`, and at a
+terminal while the install runs (it asks nothing then), a
 script or file the setup shipped is refreshed when your copy is an older version it
 shipped (known from a hash list in `~/.config/ai-workstation-setup/shipped.json` and
 from this clone's git history); a copy you edited is left alone. Your answers are
-saved to `answers.env` (gitignored), so a re-run asks only questions you have not
-answered yet.
+saved to `answers.env` (gitignored), so a re-run keeps them. At a terminal a re-run opens
+with "Welcome back! Your earlier choices are kept.", says how many new settings take their
+recommended answers, and Enter updates (type `c` to change your picks, then `d` to answer the new
+questions yourself).
 
 ## Getting updates
 
@@ -135,7 +161,8 @@ answered yet.
 
 What the rerun does:
 
-- It reuses your answers in `answers.env` and asks only the questions that are new.
+- It reuses your answers in `answers.env`. New questions take their recommended answer when
+  you press Enter (or run with `--yes`); type `c` to answer them yourself.
 - It installs the skills that are new since your last run, and updates the skills you have to
   their latest upstream version (it asks once, `--yes` updates, and an update replaces local
   edits to those skills). A skill you removed from `SKILLS` in `answers.env` stays off.
@@ -148,7 +175,8 @@ What the rerun does:
   `MODULES` in `answers.env`.
 
 To bring only the Claude Code part of an existing machine up to the template (hooks, status
-line, reader subagent, hook registrations, missing default tools) without a full re-run, run
+line, reader subagent, hook registrations, missing default tools, and the default model and
+effort where you have not set them) without a full re-run, run
 `scripts/apply-to-machine.sh --dry-run`, then `scripts/apply-to-machine.sh` (Linux, macOS,
 WSL). It keeps every other setting, asks y/N before it replaces a file you edited, changes
 your status line or installs a tool, keeps one backup set per run, and `--undo` restores the
@@ -171,21 +199,21 @@ the environment variable `AI_WORKSTATION_SETUP_NO_UPDATE_CHECK=1`.
 | Module | What it sets up | Linux | macOS | WSL | Windows |
 | --- | --- | :-: | :-: | :-: | :-: |
 | `core` | git, Node.js check, GitHub CLI (and sign-in), jq; inside WSL also the checks and bridges in [docs/windows-wsl.md](docs/windows-wsl.md) (clone location, Windows programs on PATH, systemd, line endings, links opening in Windows, DNS, memory, GPU) | ✓ | ✓ | ✓ | ✓ |
-| `claude-code` | Claude Code (and the Claude desktop app on Windows); model (including the 1M-context Opus), effort (also per model, Opus 5.5 at medium by default), a read-only `reader` subagent on Haiku, permission mode, theme, thinking summaries, Remote Control, view, auto-compact, push notifications, feedback drafts, session persistence, spinner tips, the bypass-permissions confirmation, an opt-in rule letting agents merge pull requests; usage-gauges (default) or ccstatusline status line; diagram-design and optional compact-adviser plugins; context and after-compaction reminders; a once-a-day reminder when the template has updates | ✓ | ✓ | ✓ | ✓ |
-| `agent-clis` | gh-axi, chrome-devtools-axi, lavish-axi, tasks-axi, quota-axi, ctx7, no-mistakes (with its Claude review model, Opus 5.5 at medium), treehouse; optional notion-axi, ntn, gws-axi, Google Workspace CLI, agent-device, herdr (starter settings), Codex, Pi, Antigravity, claude-swap (optional `cswap auto` service), notebooklm-mcp-cli, CLI for Microsoft 365, Vercel CLI, Composio (not native Windows), mermaid-ascii, pixel-agents (view settings; optional office names), gnhf; session hooks; `research-browser` launcher and optional lavish-axi no-open wrapper (not native Windows); inside WSL, Google Chrome for Linux for the browser tools | ✓ | ✓ | ✓ | ✓ |
+| `claude-code` | Claude Code (and the Claude desktop app on Windows); model (Opus by default, including the 1M-context Opus), effort (medium by default, also per model, Opus 5.5 at medium), a read-only `reader` subagent on Haiku, permission mode, theme, thinking summaries, Remote Control, view, auto-compact, push notifications, feedback drafts, session persistence, spinner tips, the bypass-permissions confirmation, an opt-in rule letting agents merge pull requests; usage-gauges (default) or ccstatusline status line; diagram-design and optional compact-adviser plugins; context and after-compaction reminders; a once-a-day reminder when the template has updates | ✓ | ✓ | ✓ | ✓ |
+| `agent-clis` | gh-axi, chrome-devtools-axi, lavish-axi, tasks-axi, quota-axi, ctx7, no-mistakes (with its Claude review model, Opus 5.5 at medium, and design review rules for interface files), treehouse; optional notion-axi, ntn, gws-axi, Google Workspace CLI, agent-device, herdr (starter settings), Codex, Pi, Antigravity, claude-swap (optional `cswap auto` service), notebooklm-mcp-cli, CLI for Microsoft 365, Vercel CLI, Composio (not native Windows), mermaid-ascii, pixel-agents (view settings; optional office names), gnhf; session hooks; `research-browser` launcher and optional lavish-axi no-open wrapper (not native Windows); inside WSL, Google Chrome for Linux for the browser tools | ✓ | ✓ | ✓ | ✓ |
 | `mcp-servers` | Optional context7, chrome-devtools, TickTick and REA (with its reverse-engineer-anything skill) MCP servers for Claude Code | ✓ | ✓ | ✓ | ✓ |
-| `skills` | Claude Code skills, all by default and downloaded at install: kun, vision, grill-me, grilling, teach, tdd, codebase-design, grill-with-docs, to-spec, to-tickets, to-questionnaire, wayfinder, find-docs, no-mistakes, composio-cli, workflow-playbook; updates installed ones | ✓ | ✓ | ✓ | ✓ |
+| `skills` | Claude Code skills, all by default and downloaded at install: kun, vision, grilling, teach, tdd, codebase-design, to-spec, to-tickets, to-questionnaire, wayfinder, find-docs, no-mistakes, composio-cli, workflow-playbook; updates installed ones | ✓ | ✓ | ✓ | ✓ |
 | `backpass` | Opt-in [backpass](https://github.com/kunchenguid/backpass) behind a privacy gate: project allowlist, denylist check before any model call, one pinned model, never auto-applies; optional schedule (cron) | ✓ | ✓ | ✓ | ✓ |
 | `firstmate` | Upstream Firstmate clone plus its local config: an operational home apart from the code (FM_HOME, a shell default plus a pin on each standalone second mate), backend, harnesses, permission mode, backlog, example dispatch profiles ([model map](docs/model-map.md)), Herdr presentation, startup memory budget, tool update watch, optional /stow reminder for the main session; [notes](docs/firstmate.md) | ✓ | ✓ | ✓ | via `wsl` |
-| `preferences` | How your agents work, as a rules file: language and tone, everyday habits, reporting, decisions, review pages, fleet workflow, building, ideas, model use, research, safety; the recommended set in one answer or each question in turn; the house style also in Firstmate worker briefs; [guide](docs/working-preferences.md), [review pages](docs/review-pages.md) | ✓ | ✓ | ✓ | ✓ |
-| `second-brain` | Markdown vault: life-area and fixed-type entity folders, note contract, provenance rules, eight note templates, map/checker/ingest/housekeeping scripts; optional search, capture, garden and bookmarks tools and housekeeping and garden timers (cron when no systemd user session runs); obsidian-axi wiring; [design notes](docs/second-brain.md) | ✓ | ✓ | ✓ | ✓ |
+| `preferences` | How your agents work, as a rules file: language and tone, everyday habits, reporting, decisions, review pages, fleet workflow, building, ideas, model use, research, safety; the recommended set in one answer or each question in turn; standing rules and the principle checker in Firstmate worker briefs; an optional taste preset, off by default; your own rules from a private file outside the clone; [guide](docs/working-preferences.md), [review pages](docs/review-pages.md) | ✓ | ✓ | ✓ | ✓ |
+| `second-brain` | Markdown vault: life-area and fixed-type entity folders, note contract, provenance rules, eight note templates, map/checker/ingest/housekeeping scripts; optional search, capture, garden and bookmarks tools and housekeeping and garden timers (cron when no systemd user session runs); obsidian-axi wiring; the Obsidian app (flatpak on Linux, Homebrew on macOS, winget on Windows, the Windows side under WSL); [design notes](docs/second-brain.md) | ✓ | ✓ | ✓ | ✓ |
 | `clickup` | clickup-axi (checksum-verified release binary), skill, session hook, default list; [structure guide](docs/clickup-structure.md) | ✓ | ✓ | ✓ | ✓ |
 | `extras` | Optional docling (documents to markdown), OpenWhispr (voice dictation), llama.cpp (local models; Homebrew or winget), Lavish Library (find and reopen review pages; Linux, macOS, WSL), and the Linux desktop fixes open-guard and fontcache-guard | ✓ | ✓ | app on Windows side | ✓ |
 | `daily-sync` | Opt-in daily job: fast-forwards clean repos, runs the vault ingest (failing loudly on a missing raw folder), checks tool updates, reads ClickUp and TickTick for drift; model calls only for new drift; one short report, FAILED when a run fails or is missed; [guide](docs/daily-sync.md) | ✓ | ✓ | ✓ | schedule by hand |
 | `voice-mode` | Opt-in speech-to-speech with your assistant: OpenAI Realtime or Gemini Live (one config line), answers from your records read-only and a live briefing of your assistant's current conversation and work (redacted), hands deeper questions and real work to your assistant and speaks the answer when it comes back, controls the PC mid-sentence via a fast decision model choosing from a fixed list (open apps, sites, folders and records; switch and arrange windows; volume, media, brightness, screenshot, lock; notes, web search, typing through ydotool, which it installs and starts on Linux; never deleting, sending or closing); optional browser control of a Chrome started for the assistant (click, type into a field, scroll, back, tabs, read the page; anything that sends, deletes, pays or signs in waits for a spoken yes, and password, payment and identity fields are never typed into); records looked up before anything is handed off, and a conversation that stays open until a handed-off answer is spoken; `voice-mode do` and `voice-mode say` let your assistant use the same desktop actions and voice; while a conversation runs it speaks up when something new waits on you or a worker stopped or failed (the ledger board); this computer's status and today's tasks when asked; notes-vault questions answered by agy under a read-only check; your own exclude patterns keep files out of everything; one conversation per hotkey press (on, then off), talk over a reply to cut in (echo cancellation), a floating orb that moves with the voices, measured latency; [guide](docs/voice-mode.md) | ✓ | ✓ | – | – |
 | `ledger` | Opt-in always-on service: one append-only record of your messages, rulings and every Firstmate status line and inbox note, with secrets redacted, and a live Now page (waiting on you, in flight, latest words, latest status) rebuilt within seconds, plus an optional read-only live board on 127.0.0.1 (a cron `@reboot` line when no systemd user session runs), and an optional task sync service: linked items stay the same across the homes, TickTick (official `ticktick-cli`), ClickUp and the vault, both ways, with clashes as cards; [guide](docs/ledger.md#the-task-sync) | ✓ | ✓ | ✓ | – (inside WSL) |
 | `news-digest` | Opt-in scheduled collector: new items from the feeds and pages you list, written as one Markdown digest every few hours; a summary only from a model command you give; [guide](docs/news-digest.md) | ✓ | ✓ | ✓ | schedule by hand |
-| `openrouter` | Opt-in OpenRouter key (environment or hidden prompt, stored in a local env file) and decision model, wired into voice mode; [notes](docs/openrouter.md) | ✓ | ✓ | ✓ | ✓ |
+| `openrouter` | Opt-in OpenRouter key (environment, or pasted on the last screen; stored in a local env file) and decision model, wired into voice mode; [notes](docs/openrouter.md) | ✓ | ✓ | ✓ | ✓ |
 | `wsl` | Opt-in on Windows (the recommended first choice): Windows version and virtualization checks, the Windows apps you pick (Claude desktop app, Chrome, Obsidian, WezTerm opening Ubuntu, JetBrainsMono Nerd Font, optional OpenWhispr), WSL with Ubuntu via Microsoft's `wsl --install` (and `wsl --update` when needed), a Linux user, resuming after a restart, systemd on, then this whole setup inside Ubuntu; [map](docs/windows-wsl.md) | – | – | – | ✓ |
 | `terminal` | Optional WezTerm, JetBrainsMono Nerd Font (for your user on Windows too) and a translucent theme with a configurable cursor blink in `~/.wezterm.lua` | ✓ | ✓ | Windows side (`wsl`) | ✓ |
 

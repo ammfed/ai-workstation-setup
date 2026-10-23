@@ -6,11 +6,12 @@ documented settings. The default model is [Jev](https://openrouter.ai/typesafe/j
 TypeSafe's fast structured decision model.
 
 ```sh
-export OPENROUTER_API_KEY=...        # or leave it unset and type it at the hidden prompt
+export OPENROUTER_API_KEY=...        # or leave it unset and paste it on the last screen
 ./install.sh --modules openrouter,voice-mode
 ```
 
-The key is read from `OPENROUTER_API_KEY` or a hidden prompt, never from an answers file,
+The key is read from `OPENROUTER_API_KEY` or pasted hidden on the setup's last screen (at a
+terminal, after the install), never from an answers file,
 and stored only in `~/.config/ai-workstation-setup/openrouter/.env` (mode 600), outside this
 clone. With no key given, the module creates that file empty for you to fill in.
 `OPENROUTER_MODEL` sets the model (default `typesafe/jev-1.13`).

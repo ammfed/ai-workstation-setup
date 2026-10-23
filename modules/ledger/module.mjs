@@ -150,6 +150,8 @@ export default {
   title: 'Ledger (one running record and a live Now page)',
   description: 'Opt-in: an always-on service that records what you say and decide and each status line, with a Now page rebuilt within seconds and an optional live board on 127.0.0.1',
   order: 91,
+  group: 'agents',
+  summary: 'a running record of what you decide, with a live page',
   platforms: ['linux', 'macos', 'wsl'],
   unsupported: { windows: 'it reads Firstmate homes, and Firstmate runs on Linux, macOS or WSL; set up WSL with .\\install.ps1 --modules wsl and add this module there' },
   requires: ['core'],

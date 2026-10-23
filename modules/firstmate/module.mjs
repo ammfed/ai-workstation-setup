@@ -93,6 +93,12 @@ export function dispatchProfiles(kind, harness) {
   };
 }
 
+// With the capable profiles on Claude, second mates run like the default worker: Opus 5.5 at
+// medium (docs/model-map.md). Otherwise they follow the harness's own default.
+export function secondmateDefault(dispatch, harness) {
+  return dispatch === 'capable' && harness === 'claude' ? 'claude claude-opus-5-5 medium' : 'default';
+}
+
 // Local second-mate homes from the primary's data/secondmates.md: "(home: <path>; ...)" per
 // route, skipping remote routes (host:), whose homes live on another machine. The format is
 // owned by the secondmate-provisioning skill in the firstmate clone.
@@ -168,6 +174,8 @@ export default {
   title: 'Firstmate',
   description: 'Firstmate agent-fleet supervisor: upstream clone plus your config choices',
   order: 60,
+  group: 'agents',
+  summary: 'Firstmate to run and watch several agents for you',
   platforms: ['linux', 'macos', 'wsl'],
   unsupported: { windows: 'firstmate needs Linux; .\\install.ps1 --modules wsl sets up WSL and installs it there' },
   requires: ['core', 'agent-clis'],
@@ -200,12 +208,6 @@ export default {
       message: 'Crewmate harness ("default" mirrors the harness you run firstmate in)',
       default: 'default',
       choices: ['default', ...HARNESSES, ...CREW_ONLY_HARNESSES].map((value) => ({ value })),
-    },
-    {
-      key: 'FIRSTMATE_SECONDMATE_HARNESS',
-      type: 'text',
-      message: 'Secondmate harness line "<harness> [model] [effort]", or "default"',
-      default: 'default',
     },
     {
       key: 'FIRSTMATE_PERMISSION_MODE',
@@ -245,6 +247,12 @@ export default {
       default: 'claude',
       choices: [...HARNESSES, ...CREW_ONLY_HARNESSES].map((value) => ({ value })),
       when: (ctx) => ctx.get('FIRSTMATE_DISPATCH') !== 'none',
+    },
+    {
+      key: 'FIRSTMATE_SECONDMATE_HARNESS',
+      type: 'text',
+      message: 'Secondmate harness line "<harness> [model] [effort]", or "default"',
+      default: (ctx) => secondmateDefault(ctx.get('FIRSTMATE_DISPATCH'), ctx.get('FIRSTMATE_DISPATCH_HARNESS')),
     },
     {
       key: 'FIRSTMATE_HERDR_SPACES',
