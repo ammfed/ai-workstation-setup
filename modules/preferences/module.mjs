@@ -43,6 +43,14 @@ function readPrivateRules(ctx) {
   return rules;
 }
 
+// The taste preset's lines when PREFS_TASTE_PRESET is on, in the private rules format. Null when off.
+function readTastePreset(ctx) {
+  if (!ctx.get('PREFS_TASTE_PRESET')) return null;
+  const { rules } = parsePrivateRules(ctx.template('preferences/taste-preset.md'));
+  ctx.info(`taste preset: ${rules.everywhere.length + rules.sessions.length} rules added`);
+  return rules;
+}
+
 // The principle checker the workflow-playbook skill installs, when it is chosen now or already there.
 function checkerPath(ctx) {
   const file = path.join(claudeDir(ctx), 'skills', 'workflow-playbook', 'principles', 'bin', 'principle-check.mjs');
@@ -305,6 +313,9 @@ export default {
     yes('PREFS_PRIVATE_STAYS_LOCAL', 'Safety: private chats and anything captured from your own sessions never go to an outside model?'),
     yes('PREFS_PUBLIC_REPOS', 'Safety: in public repositories, a no-reply commit identity, no email trailers, pull request text naming nothing private, and a privacy scan before each push?'),
 
+    // The optional taste preset (templates/preferences/taste-preset.md), off unless you turn it on
+    yes('PREFS_TASTE_PRESET', "Taste: add the template author's taste preset (screen taste and review habits, written as generic rules)?", { default: false }),
+
     // Your private layer
     {
       key: 'PREFS_PRIVATE_RULES',
@@ -327,7 +338,8 @@ export default {
 
     const log = ctx.get('PREFS_DECISIONS_LOG');
     const privateRules = readPrivateRules(ctx);
-    const text = renderPreferences((key) => ctx.get(key), { cardsPath: cards, decisionsPath: log ? ctx.path(log) : null, privateRules });
+    const tastePreset = readTastePreset(ctx);
+    const text = renderPreferences((key) => ctx.get(key), { cardsPath: cards, decisionsPath: log ? ctx.path(log) : null, privateRules, tastePreset });
     for (const name of targets) {
       const target = TARGETS[name];
       await ctx.step(name, () => {
@@ -339,8 +351,8 @@ export default {
     if (targets.includes('firstmate') && !ctx.forOs(TARGETS.firstmate.unsupported)) {
       const home = firstmateHome(ctx);
       // config/brief-include.md (Firstmate's docs/configuration.md "Home brief include") is appended
-      // to every worker brief: house style, helper model, build rules, principle checker, private lines.
-      const brief = renderBriefInclude((key) => ctx.get(key), { checkerPath: checkerPath(ctx), privateRules });
+      // to every worker brief: house style, helper model, build rules, principle checker, taste preset, private lines.
+      const brief = renderBriefInclude((key) => ctx.get(key), { checkerPath: checkerPath(ctx), privateRules, tastePreset });
       if (brief) await ctx.step('firstmate worker briefs', () => ctx.writeFile(path.join(home, 'config', 'brief-include.md'), brief, { onConflict: 'ask' }));
       // data/captain-shared.md in the main home is copied read-only into every second-mate home.
       const shared = renderCaptainShared(privateRules);

@@ -37,12 +37,20 @@ const bullets = (title, lines) => {
 };
 
 const PRIVATE_NOTE = "From the user's private rules file. They are changed there and the installer re-run, not edited here.";
+const TASTE_NOTE = "From the template's optional taste preset (PREFS_TASTE_PRESET). Turn it off and re-run the installer to remove these lines.";
+
+// The taste preset section: its Everywhere lines plus the lines of `also` (sessions or workers).
+function tasteSection(tastePreset, also) {
+  const lines = [...(tastePreset?.everywhere ?? []), ...(tastePreset?.[also] ?? [])];
+  return lines.length ? `## Taste preset\n\n${TASTE_NOTE}\n\n${lines.map((l) => `- ${l}`).join('\n')}\n` : '';
+}
 
 // Firstmate's config/brief-include.md, appended to every worker brief: the house style for what
 // workers write to firstmate (never the deliverable itself), the helper-model rule, the standing
-// build rules, the principle checker before done, and the private Everywhere and Workers lines.
+// build rules, the principle checker before done, the taste preset's Everywhere lines when it is on,
+// and the private Everywhere and Workers lines.
 // Empty when none of them applies. `checkerPath` is the installed principle checker, or null.
-export function renderBriefInclude(get, { checkerPath, privateRules } = {}) {
+export function renderBriefInclude(get, { checkerPath, privateRules, tastePreset } = {}) {
   const parts = [];
   if (get('PREFS_WRITING_STYLE') === 'ste') {
     parts.push(
@@ -67,6 +75,7 @@ export function renderBriefInclude(get, { checkerPath, privateRules } = {}) {
         `Before you report done on anything with a screen (a page, an app screen, a prototype, a document layout), run \`node ${checker} <its files or folder>\`. Add \`--phone\` when it is built for other people. Fix every \`fail\` line first. List each \`check\` line in your report for the reviewer. The full list is in principles/checks.md beside the checker.`,
     ]),
   );
+  parts.push(tasteSection(tastePreset, 'workers'));
   const own = [...(privateRules?.everywhere ?? []), ...(privateRules?.workers ?? [])];
   if (own.length) parts.push(`## Private rules\n\n${PRIVATE_NOTE}\n\n${own.map((l) => `- ${l}`).join('\n')}\n`);
   return parts.filter(Boolean).join('\n');
@@ -92,7 +101,7 @@ ${lines.map((l) => `- ${l}`).join('\n')}
 `;
 }
 
-export function renderPreferences(get, { cardsPath, decisionsPath, privateRules } = {}) {
+export function renderPreferences(get, { cardsPath, decisionsPath, privateRules, tastePreset } = {}) {
   const sections = [];
   const section = (title, lines) => {
     const kept = lines.filter(Boolean);
@@ -357,6 +366,8 @@ export function renderPreferences(get, { cardsPath, decisionsPath, privateRules 
     'Say plainly when something was reasoned about rather than tested.',
   ]);
 
+  const taste = tasteSection(tastePreset, 'sessions');
+  if (taste) sections.push(taste.trimEnd());
   const own = [...(privateRules?.everywhere ?? []), ...(privateRules?.sessions ?? [])];
   if (own.length) sections.push(`## Private rules\n\n${PRIVATE_NOTE}\n\n${own.map((l) => `- ${l}`).join('\n')}`);
 

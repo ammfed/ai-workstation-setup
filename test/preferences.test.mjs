@@ -483,3 +483,46 @@ test('with no private rules file, nothing extra is written and no shared second-
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
+
+test('the taste preset is off by default, so the recommended set writes none of it', async () => {
+  const ctx = await answer();
+  assert.equal(ctx.get('PREFS_TASTE_PRESET'), false);
+  assert.equal(preferences.questions.find((q) => q.key === 'PREFS_TASTE_PRESET').useDefault(ctx), true, 'not asked unless the user goes through each preference');
+  assert.doesNotMatch(await render(), /## Taste preset/);
+});
+
+test('the taste preset ships generic rules that no preference question already writes', async () => {
+  const text = fs.readFileSync(path.join(repoRoot, 'templates', 'preferences', 'taste-preset.md'), 'utf8');
+  const { rules, unknown } = parsePrivateRules(text);
+  assert.deepEqual(unknown, []);
+  assert.ok(rules.everywhere.length && rules.sessions.length, 'it has screen taste and review habits');
+  assert.equal(rules.workers.length + rules['second mates'].length + rules.reviewer.length, 0);
+  assert.doesNotMatch(text, /—|@|~\/|\/home\/|\b(19|20)\d\d\b/, 'no em dashes, addresses, paths or years');
+  const yesToAll = Object.fromEntries(preferences.questions.filter((q) => q.type === 'confirm').map((q) => [q.key, 'yes']));
+  const written = (await render({ ...yesToAll, PREFS_TASTE_PRESET: 'no' })).split('\n').map((l) => l.replace(/^- /, ''));
+  for (const line of [...rules.everywhere, ...rules.sessions]) assert.ok(!written.includes(line), `already written: ${line}`);
+});
+
+test('turning the taste preset on writes its rules into the rules file and its Everywhere lines into worker briefs', { skip: process.platform === 'win32' }, async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const { rules } = parsePrivateRules(fs.readFileSync(path.join(repoRoot, 'templates', 'preferences', 'taste-preset.md'), 'utf8'));
+    const { out, ctx } = await installInto(home, { PREFS_TASTE_PRESET: 'yes', PREFS_PRIVATE_RULES: path.join(home, 'missing.md') });
+    assert.equal(ctx.record.failures.length, 0, out);
+    assert.match(out, new RegExp(`taste preset: ${rules.everywhere.length + rules.sessions.length} rules added`));
+    const prefs = fs.readFileSync(path.join(home, '.claude', 'rules', 'working-preferences.md'), 'utf8');
+    const taste = sectionOf(prefs, 'Taste preset');
+    for (const line of [...rules.everywhere, ...rules.sessions]) assert.ok(taste.includes(`- ${line}`), line);
+    assert.equal(fs.readFileSync(path.join(home, 'fm', 'data', 'captain.md'), 'utf8'), prefs);
+    const brief = sectionOf(fs.readFileSync(path.join(home, 'fm', 'config', 'brief-include.md'), 'utf8'), 'Taste preset');
+    for (const line of rules.everywhere) assert.ok(brief.includes(`- ${line}`), line);
+    for (const line of rules.sessions) assert.ok(!brief.includes(line), `a session habit stays out of worker briefs: ${line}`);
+    assert.ok(!fs.existsSync(path.join(home, 'fm', 'data', 'captain-shared.md')), 'second mates read captain.md through the main home, not a shared copy');
+    const off = (await installInto(home, { PREFS_PRIVATE_RULES: path.join(home, 'missing.md') })).out;
+    assert.doesNotMatch(off, /taste preset/);
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});

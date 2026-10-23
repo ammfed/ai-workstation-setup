@@ -150,6 +150,17 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 Always included: no secrets or personal data anywhere, only genuine decisions brought
 to you, and saying plainly when something was reasoned about rather than tested.
 
+## The taste preset
+
+`PREFS_TASTE_PRESET` (default no) adds an optional taste preset: the screen taste and review
+habits the template's author works by, cleaned to generic rules in
+`templates/preferences/taste-preset.md`. It holds only rules no question above writes, such as
+purposeful minimalism, one word per label, one fixed layout frame, and treating a comment on a
+review page as something to rework rather than agreement. Its `Everywhere` lines land in a
+"Taste preset" section of the rules file and of every Firstmate worker brief; its `Sessions`
+lines go to the rules file only. Turn it off and re-run the installer to remove them. The
+recommended set leaves it off, so it is asked only when you go through each preference.
+
 ## Your private rules
 
 Some of your rules are yours alone: a screen size, a house style detail, the name of a tool or
