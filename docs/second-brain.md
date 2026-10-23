@@ -129,3 +129,18 @@ Picked with `VAULT_TOOLS` (all off by default), each a single Node script in `bi
 with the agent command from `VAULT_AGENT_CMD`) as systemd user timers on Linux and WSL (a
 crontab line when no systemd user session runs) or launchd agents on macOS; on Windows it leaves a to-do for Task Scheduler. The agent CLI must
 already be signed in on its own: the timer passes only the command and its flags.
+
+## Telling Claude Code about the vault
+
+With `VAULT_AGENT_ACCESS` (on by default), the module also writes two Claude Code files, with
+your vault path filled in:
+
+- `~/.claude/rules/second-brain.md`, a user rules file loaded in every session. It says the
+  vault exists and is private, to look there first for past decisions and history, to find
+  notes through `MAP.md` and search, not to edit notes by hand, and that vault content never
+  goes to an outside model or service.
+- `~/.claude/skills/second-brain/SKILL.md`, a `second-brain` skill with the read routes: how
+  to find a note, how to read provenance and superseded lines, and how new material gets in.
+
+Both name only the scripts and tools you installed. Like every other file the installer
+writes, a copy you have edited is left alone on a rerun, and a replaced one is backed up first.

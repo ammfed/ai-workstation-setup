@@ -14,7 +14,8 @@ import { rank } from '../templates/second-brain/bin/search.mjs';
 import { appendLine } from '../templates/second-brain/bin/capture.mjs';
 import { bookmarksToMarkdown } from '../templates/second-brain/bin/bookmarks.mjs';
 import { parseStatus } from '../templates/second-brain/bin/garden.mjs';
-import { agentEnv, serviceUnit } from '../modules/second-brain/module.mjs';
+import { Context, detectPlatform } from '../lib/context.mjs';
+import secondBrain, { agentEnv, serviceUnit, writeClaudeFiles } from '../modules/second-brain/module.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const VARS = { DEFAULT_PILLAR: 'work', DEFAULT_LANG: 'en' };
@@ -266,4 +267,72 @@ test('the systemd service writes WorkingDirectory as a bare path that systemd ac
   fs.rmSync(dir, { recursive: true, force: true });
   assert.doesNotMatch(r.stdout + r.stderr, /WorkingDirectory|not absolute|fatal/i, r.stdout + r.stderr);
   assert.equal(r.status, 0, r.stdout + r.stderr);
+});
+
+// Writes the Claude Code rules file and skill for real into a temporary home.
+async function claudeFilesInto(home, given = {}) {
+  const answers = new Map(Object.entries({ VAULT_PATH: path.join(home, 'my vault'), VAULT_TOOLS: 'search,capture', ...given }));
+  const ctx = new Context({ platform: { ...detectPlatform(), home }, dryRun: false, interactive: false, answers, prompter: null, repoRoot });
+  ctx.beginModule('second-brain');
+  for (const q of secondBrain.questions) if (!q.when || q.when(ctx)) await ctx.ask(q);
+  const lines = [];
+  const log = console.log;
+  console.log = (...a) => lines.push(a.join(' '));
+  try {
+    await writeClaudeFiles(ctx, ctx.get('VAULT_PATH'), ['work', 'home']);
+  } finally {
+    console.log = log;
+  }
+  return { out: lines.join('\n'), vault: ctx.get('VAULT_PATH') };
+}
+
+test('claude files: the rules file and skill land with the vault path filled in, and an edited copy is left alone', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-claude-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const { out, vault } = await claudeFilesInto(home);
+    const rules = path.join(home, '.claude', 'rules', 'second-brain.md');
+    const skill = path.join(home, '.claude', 'skills', 'second-brain', 'SKILL.md');
+    for (const file of [rules, skill]) {
+      const text = fs.readFileSync(file, 'utf8');
+      assert.ok(text.includes(vault), `${file} names the vault`);
+      assert.doesNotMatch(text, /\{\{[A-Z_]+\}\}/, `${file} has no unfilled placeholder`);
+      assert.match(text, /never (goes|send its content) to an outside model or service|outside\s+model or service/);
+      assert.doesNotMatch(text, /—/, 'no em dashes');
+    }
+    const skillText = fs.readFileSync(skill, 'utf8');
+    assert.match(skillText, /^---\nname: second-brain\ndescription: .+\n---\n/);
+    assert.ok(skillText.includes(path.join(vault, 'bin', 'search.mjs')) && skillText.includes(path.join(vault, 'bin', 'capture.mjs')));
+    assert.match(skillText, /`work\/`, `home\/`/);
+    assert.match(out, /wrote .*second-brain\.md/);
+
+    // A rerun with the same answers changes nothing; a local edit survives a rerun.
+    assert.equal((await claudeFilesInto(home)).out.match(/is already up to date/g).length, 2);
+    fs.appendFileSync(rules, '- My own line.\n');
+    const again = (await claudeFilesInto(home)).out;
+    assert.match(again, /second-brain\.md exists with different content \(a local edit, not a version this setup shipped\); left untouched/);
+    assert.match(fs.readFileSync(rules, 'utf8'), /My own line/);
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('claude files: only the scripts that were installed are named', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-claude-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    await claudeFilesInto(home, { VAULT_TOOLS: '' });
+    const skill = fs.readFileSync(path.join(home, '.claude', 'skills', 'second-brain', 'SKILL.md'), 'utf8');
+    assert.doesNotMatch(skill, /search\.mjs|capture\.mjs/);
+    assert.match(skill, /MAP\.md/);
+    fs.rmSync(path.join(home, '.claude'), { recursive: true });
+    await claudeFilesInto(home, { VAULT_SCRIPTS: 'no' });
+    for (const file of [path.join('rules', 'second-brain.md'), path.join('skills', 'second-brain', 'SKILL.md')]) {
+      assert.doesNotMatch(fs.readFileSync(path.join(home, '.claude', file), 'utf8'), /bin\/|MAP\.md/, file);
+    }
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
 });
