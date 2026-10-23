@@ -3,7 +3,7 @@ import path from 'node:path';
 import { cronCommand, ensureCronLine, shellQuote } from '../../lib/cron.mjs';
 import { Skip } from '../../lib/context.mjs';
 import { windowsPathOf } from '../../lib/wsl.mjs';
-import { addSessionStartHook, setClaudeEnv } from '../../lib/claude.mjs';
+import { addSessionStartHook, claudeDir, setClaudeEnv } from '../../lib/claude.mjs';
 import { versionCheck } from '../agent-clis/tools.mjs';
 
 // A second brain: plain markdown notes with a frontmatter contract agents can rely on, plus
@@ -136,6 +136,44 @@ async function scheduleVaultJob(ctx, vault, name, script, env = {}) {
   ctx.info(`${unit}: logs with journalctl --user -u ${unit}; stop it with: systemctl --user disable --now ${unit}.timer`);
 }
 
+/**
+ * A Claude Code user rules file and a `second-brain` skill, so every session knows the vault
+ * exists, is private, and how to read it. Both name only the scripts this run installs.
+ */
+export async function writeClaudeFiles(ctx, vault, pillars) {
+  const scripts = ctx.get('VAULT_SCRIPTS');
+  const tools = scripts ? ctx.get('VAULT_TOOLS') : [];
+  const bin = (file, args = '') => `\`node "${path.join(vault, 'bin', file)}"${args && ` ${args}`}\``;
+  const find = [
+    scripts && `\`${path.join(vault, 'MAP.md')}\` lists every note, one line each, grouped by folder, with type, stage and life area. \`START-HERE.md\` explains the layout.`,
+    tools.includes('search') && `${bin('search.mjs', '"terms"')} ranks notes by those words. Narrow with \`--type project|person|decision|meeting|source|topic\` or \`--folder F\`.`,
+    `\`rg -l "phrase" "${vault}"\` finds exact text.`,
+  ].filter(Boolean);
+  const add = [
+    scripts && `Raw files go in \`${ctx.get('VAULT_RAW_DIR')}\`, outside the vault; ${bin('ingest.mjs')} reads them into notes.`,
+    tools.includes('capture') && `For a single fact with no file, ${bin('capture.mjs', '"text"')} writes it the vault's way.`,
+    `Read \`${path.join(vault, 'AGENTS.md')}\` first: it is the contract every note follows.`,
+  ].filter(Boolean);
+  const writers = ['ingest.mjs', ...(tools.includes('capture') ? ['capture.mjs'] : [])].map((f) => `\`bin/${f}\``).join(', ');
+  const contract = `\`${path.join(vault, 'AGENTS.md')}\``;
+  const vars = {
+    VAULT_PATH: vault,
+    PILLARS: pillars.map((p) => `\`${p}/\``).join(', '),
+    FIND_RULE: scripts
+      ? `- Read \`${path.join(vault, 'MAP.md')}\` to find a note, then ${tools.includes('search') ? '`bin/search.mjs` in that folder, or ' : ''}\`rg\`.`
+      : '- Search it with `rg`; the folder names say what each note is.',
+    EDIT_RULE: scripts
+      ? `- Do not edit vault notes by hand. Its own scripts (${writers}) write it; follow\n  ${contract} if a task needs a change there.`
+      : `- Do not edit vault notes by hand; follow ${contract} if a task needs a change there.`,
+    SCRIPTS_NOTE: scripts ? `Run the vault's scripts with absolute paths, for example ${bin('index.mjs')}.\n\n` : '',
+    FIND_ROUTES: find.map((line, i) => `${i + 1}. ${line}`).join('\n'),
+    ADD_ROUTES: add.map((line) => `- ${line}`).join('\n'),
+  };
+  const dir = claudeDir(ctx);
+  await ctx.writeFile(path.join(dir, 'rules', 'second-brain.md'), ctx.template('second-brain/claude/rules.md', vars), { onConflict: 'ask' });
+  await ctx.writeFile(path.join(dir, 'skills', 'second-brain', 'SKILL.md'), ctx.template('second-brain/claude/SKILL.md', vars), { onConflict: 'ask' });
+}
+
 const list = (s) => [...new Set(String(s).split(',').map((x) => x.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')).filter(Boolean))];
 
 export default {
@@ -181,7 +219,7 @@ export default {
       when: (ctx) => ctx.get('VAULT_SCRIPTS') && ctx.get('VAULT_TIMERS').includes('garden'),
     },
     { key: 'VAULT_GIT', type: 'confirm', message: 'Track the vault with git?', default: true },
-    { key: 'VAULT_AGENT_ACCESS', type: 'confirm', message: 'Give agents access (obsidian-axi, OBSIDIAN_VAULT, a Claude Code session hook)?', default: true },
+    { key: 'VAULT_AGENT_ACCESS', type: 'confirm', message: 'Give agents access (obsidian-axi, OBSIDIAN_VAULT, a Claude Code session hook, and a Claude Code rules file and skill that point to the vault)?', default: true },
     { key: 'VAULT_APP', type: 'confirm', message: 'Install the Obsidian app?', default: true },
   ],
 
@@ -302,6 +340,7 @@ export default {
       await ctx.step('RAW_DIR', () => ctx.setUserEnv('RAW_DIR', rawDir));
       await ctx.step('Claude Code env', () => setClaudeEnv(ctx, 'OBSIDIAN_VAULT', vault));
       await ctx.step('Claude Code hook', () => addSessionStartHook(ctx, 'obsidian-axi'));
+      await ctx.step('Claude Code rules and skill', () => writeClaudeFiles(ctx, vault, pillars));
     }
 
     if (ctx.get('VAULT_APP')) {
