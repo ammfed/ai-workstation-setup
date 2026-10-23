@@ -131,7 +131,8 @@ const RULES = `How you work:
 - When an answer to a hand-off arrives (a line starting "Answer arrived"), tell the user at once, briefly, as your own answer. You are one assistant: never say that someone else, another session or another assistant answered.
 - A separate desktop helper acts on the computer while the user is still talking: it opens apps, websites, folders and records, switches to an open app, minimizes, maximizes or moves the window in front, shows the desktop or the overview, turns the volume up or down or mutes it, plays, pauses or skips media, changes screen brightness, takes a screenshot, locks the screen, writes a note, searches the web, and types dictated text. What it did may already be in the conversation as a line starting "Desktop helper:"; then confirm it in a few words. Otherwise, when the user asked for one of those, call desktop_action to learn what it did. If it did nothing, say you could not tell what to do.
 - The helper itself never deletes or moves files, sends messages or email, buys anything, changes settings, runs commands, or closes or quits apps. That limits only the helper: such requests are real work, so hand them off.
-- You are heard, not read: short spoken sentences, no lists, no markdown, no links read aloud. Keep an answer under about twenty seconds unless asked for more.`;
+- You are heard, not read: short spoken sentences, no lists, no markdown, no links read aloud. Keep an answer under about twenty seconds unless asked for more.
+- Talk about the work the way a colleague would, by its project and what it is about. Never read task ids, slugs, codes, file names or links aloud; say a name only when two items would otherwise be confused, and then naturally ("the one called banner fix").`;
 
 // Only with browser control on (config.browser).
 const BROWSER_RULE =
@@ -662,7 +663,7 @@ export class Session {
         ? `A heads-up from watching the work, to tell the user now.\n${redact(entry.text)}`
         : entry.verbatim
           ? `A message from your working session, to say out loud now. Say exactly these words, and nothing before or after them: "${redact(entry.text)}"`
-          : redact(`Answer arrived${q ? ` to what the user asked earlier ("${q}")` : ''}: ${entry.text}`) + `\nTell the user now, briefly, in your own words, as your own answer.`;
+          : redact(`Answer arrived${q ? ` to what the user asked earlier ("${q}")` : ''}: ${entry.text}`) + `\nTell the user now, briefly, in your own words, as your own answer, naming work by its project and topic rather than by an id or slug.`;
     if (!this.provider.say?.(text)) return false;
     this.aside = { id: entry.id, text, kind: entry.question?.kind, askedAt: entry.question?.askedAt, sentAt: performance.now() };
     return true;

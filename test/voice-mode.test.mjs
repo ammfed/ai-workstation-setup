@@ -270,7 +270,7 @@ test('session: a hand-off sends one note with an id and the reply command, and i
   while (!logs.some((l) => l.event === 'handoff-answer') && performance.now() < until) await new Promise((r) => setTimeout(r, 20));
   session.close();
   assert.match(session.provider.said[0], /Answer arrived .*"is the login fix merged yet".*: Yes, it merged this morning\./);
-  assert.match(session.provider.said[0], /as your own answer/);
+  assert.match(session.provider.said[0], /as your own answer, naming work by its project and topic rather than by an id or slug\./);
   const heard = logs.find((l) => l.event === 'handoff-answer');
   assert.equal(heard.id, id);
   assert.ok(heard.round_trip_ms > 0 && heard.speak_ms >= 0, JSON.stringify(heard));
@@ -354,6 +354,10 @@ test('session: without a queue command there is no hand_off tool', () => {
   // Records come before a hand-off, and without one, before the refusal.
   assert.match(new Session(config(), { script: [] }).provider.instructions, /look it up yourself first, in the same reply: search_records[^\n]*\n- Only when those do not answer \(after you looked\)/);
   assert.match(session.provider.instructions, /look it up yourself first[^\n]*\n- You cannot do work/);
+  // With or without a hand-off, work is named by project and topic, never by id.
+  for (const i of [session.provider.instructions, new Session(config(), { script: [] }).provider.instructions]) {
+    assert.match(i, /- Talk about the work the way a colleague would, by its project and what it is about\. Never read task ids, slugs, codes, file names or links aloud; say a name only when two items would otherwise be confused/);
+  }
   session.close();
 });
 
@@ -363,7 +367,7 @@ test('handoff: the note format, and reply validation', () => {
   const c = config();
   assert.equal(
     noteText({ id: 'vq-0a1b2c', kind: 'task', request: 'draft\n the  summary', replyCommand: 'voice-mode reply' }),
-    'Voice request vq-0a1b2c: "draft the summary" -- the user is waiting in voice mode; answer in one to three short spoken sentences with: voice-mode reply vq-0a1b2c "<answer>"',
+    'Voice request vq-0a1b2c: "draft the summary" -- the user is waiting in voice mode; answer in one to three short spoken sentences that name work by its project and what it is about, as a colleague would, not by task ids or slugs (give one only when two items would otherwise be confused), with: voice-mode reply vq-0a1b2c "<answer>"',
   );
   assert.throws(() => saveReply(c, '../x', 'hi'), /not a voice hand-off id/);
   assert.throws(() => saveReply(c, 'vq-ffffff', 'hi'), /no voice hand-off vq-ffffff/);
@@ -929,8 +933,14 @@ test('briefing: whole memory files, lines cut short, and who is working on what'
   const web = /\n(- web - [^\n]*)\n- api - owns the api/.exec(b.text)?.[1];
   assert.ok(web && web.length <= 60 && web.endsWith('[...]'), web);
   const when = '\\d+ \\w{3} \\d\\d:\\d\\d';
-  assert.match(b.text, new RegExp(`- site-mate \\(secondmate on site\\); working copy ${mate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}; latest, ${when}: done: shipped the banner`));
-  assert.match(b.text, new RegExp(`- banner \\(ship on site under site-mate\\); working copy ~/copies/site-1; latest, ${when}: paused: PR open, waiting on review`));
+  const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const work = /## Who is working on what\n([^]*?)(?:\n## |$)/.exec(b.text)[1];
+  assert.match(work, /^\(Each line is one piece of work\. The name in brackets only tells two items apart; talk about the work by its project and topic\.\)\n/);
+  // Each line leads with what the work is and its news; the name and copy only follow, in brackets.
+  assert.match(work, new RegExp(`\\n- secondmate on site, latest ${when}: done: shipped the banner \\[site-mate; working copy ${esc(mate)}\\]`));
+  assert.match(work, new RegExp(`\\n- ship on site, latest ${when}: paused: PR open, waiting on review \\[banner; under site-mate; working copy ~/copies/site-1\\]`));
+  assert.doesNotMatch(work, /key=|corr=|ab12cd34/, 'status tags are removed');
+  assert.doesNotMatch(work, /^- (site-mate|banner)\b/m, 'no line leads with a name');
   assert.doesNotMatch(b.text, /^- old\b/m, "a task quiet for longer than days is left out");
   // A task's new status line counts as a change to rebuild for.
   const before = briefingStamp(c);

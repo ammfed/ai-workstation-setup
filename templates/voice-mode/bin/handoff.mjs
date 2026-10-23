@@ -37,7 +37,7 @@ const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 export function noteText({ id, kind, request, replyCommand }) {
   const what = kind === 'task' ? 'Voice request' : 'Voice question';
   const flat = String(request).replace(/\s+/g, ' ').trim();
-  return `${what} ${id}: "${flat}" -- the user is waiting in voice mode; answer in one to three short spoken sentences with: ${replyCommand} ${id} "<answer>"`;
+  return `${what} ${id}: "${flat}" -- the user is waiting in voice mode; answer in one to three short spoken sentences that name work by its project and what it is about, as a colleague would, not by task ids or slugs (give one only when two items would otherwise be confused), with: ${replyCommand} ${id} "<answer>"`;
 }
 
 export function newId() {
