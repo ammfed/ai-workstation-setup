@@ -14,7 +14,7 @@ import { rank } from '../templates/second-brain/bin/search.mjs';
 import { appendLine } from '../templates/second-brain/bin/capture.mjs';
 import { bookmarksToMarkdown } from '../templates/second-brain/bin/bookmarks.mjs';
 import { parseStatus } from '../templates/second-brain/bin/garden.mjs';
-import { agentEnv } from '../modules/second-brain/module.mjs';
+import { agentEnv, serviceUnit } from '../modules/second-brain/module.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const VARS = { DEFAULT_PILLAR: 'work', DEFAULT_LANG: 'en' };
@@ -248,4 +248,22 @@ test('a saved "no" for the Obsidian app still wins', { skip: process.platform ==
   assert.equal(code, 0, out);
   assert.doesNotMatch(out, /cask obsidian/);
   assert.doesNotMatch(out, /with the Obsidian app/);
+});
+
+const hasAnalyze = spawnSync('systemd-analyze', ['--version'], { stdio: 'ignore' }).status === 0;
+
+test('the systemd service writes WorkingDirectory as a bare path that systemd accepts', { skip: !hasAnalyze && 'systemd-analyze is not available here' }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'unit-'));
+  const vaultDir = path.join(dir, 'my vault');
+  fs.mkdirSync(vaultDir);
+  const script = path.join(dir, 'housekeeping.mjs');
+  fs.writeFileSync(script, '');
+  const unit = serviceUnit({ about: 'check the vault', vault: vaultDir, script, all: { PATH: process.env.PATH, VAULT_PATH: vaultDir } });
+  assert.match(unit, new RegExp(`^WorkingDirectory=${vaultDir}$`, 'm'));
+  const file = path.join(dir, 'second-brain-housekeeping.service');
+  fs.writeFileSync(file, unit);
+  const r = spawnSync('systemd-analyze', ['--user', 'verify', file], { encoding: 'utf8' });
+  fs.rmSync(dir, { recursive: true, force: true });
+  assert.doesNotMatch(r.stdout + r.stderr, /WorkingDirectory|not absolute|fatal/i, r.stdout + r.stderr);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
 });

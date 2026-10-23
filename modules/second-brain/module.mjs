@@ -43,12 +43,31 @@ const TIMERS = {
 };
 const TIMER_TAG = 'ai-workstation-setup second-brain';
 const unitQuote = (v) => `"${String(v).replace(/%/g, '%%').replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+// WorkingDirectory= takes a bare path: systemd rejects quotes there, and spaces need no escaping.
+const unitPath = (v) => String(v).replace(/%/g, '%%');
 const xml = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /** "my-agent --print --flag" -> { AGENT_CLI: 'my-agent', AGENT_CLI_ARGS: '--print --flag' } */
 export function agentEnv(command) {
   const [cli, ...args] = String(command || '').trim().split(/\s+/).filter(Boolean);
   return cli ? { AGENT_CLI: cli, AGENT_CLI_ARGS: args.join(' ') } : null;
+}
+
+/** The systemd user service that runs one vault job. */
+export function serviceUnit({ about, vault, script, all }) {
+  return [
+    '[Unit]',
+    `Description=Second brain: ${about} (${TIMER_TAG})`,
+    '',
+    '[Service]',
+    'Type=oneshot',
+    'Nice=15',
+    'IOSchedulingClass=idle',
+    `WorkingDirectory=${unitPath(vault)}`,
+    ...Object.entries(all).map(([k, v]) => `Environment=${unitQuote(`${k}=${v}`)}`),
+    `ExecStart=${unitQuote(process.execPath)} ${unitQuote(script)}`,
+    '',
+  ].join('\n');
 }
 
 /** Run `node bin/<script>` every few hours: a systemd user timer, or a launchd agent on macOS. */
@@ -95,19 +114,7 @@ async function scheduleVaultJob(ctx, vault, name, script, env = {}) {
     return ctx.info(`${unit}: ${about} every ${hours} hours from cron, as no systemd user session runs${hint}`);
   }
   const dir = path.join(ctx.home, '.config', 'systemd', 'user');
-  const service = [
-    '[Unit]',
-    `Description=Second brain: ${about} (${TIMER_TAG})`,
-    '',
-    '[Service]',
-    'Type=oneshot',
-    'Nice=15',
-    'IOSchedulingClass=idle',
-    `WorkingDirectory=${unitQuote(vault)}`,
-    ...Object.entries(all).map(([k, v]) => `Environment=${unitQuote(`${k}=${v}`)}`),
-    `ExecStart=${unitQuote(process.execPath)} ${unitQuote(script)}`,
-    '',
-  ].join('\n');
+  const service = serviceUnit({ about, vault, script, all });
   const timer = [
     '[Unit]',
     `Description=Second brain: ${about} every ${hours} hours (${TIMER_TAG})`,
