@@ -130,6 +130,19 @@ with the agent command from `VAULT_AGENT_CMD`) as systemd user timers on Linux a
 crontab line when no systemd user session runs) or launchd agents on macOS; on Windows it leaves a to-do for Task Scheduler. The agent CLI must
 already be signed in on its own: the timer passes only the command and its flags.
 
+## An existing vault
+
+When the vault folder is already a git repository with at least one commit, the module
+leaves out the starter files: the folder readmes, the note templates, the vault scripts and
+the optional tools. They would show up as untracked files in a vault that has its own
+tooling, and a job that needs a clean vault (the daily sync's ingest) would then skip its
+run. The skipped steps say so in the install output. Everything else still runs: the
+contract files that are missing, the git step, the timers, the agent access and the Claude
+Code rules file and skill.
+
+To add the missing starter files anyway, answer `VAULT_REFRESH=yes`. Files that already
+exist are still never replaced.
+
 ## Telling Claude Code about the vault
 
 With `VAULT_AGENT_ACCESS` (on by default), the module also writes two Claude Code files, with

@@ -15,7 +15,7 @@ import { appendLine } from '../templates/second-brain/bin/capture.mjs';
 import { bookmarksToMarkdown } from '../templates/second-brain/bin/bookmarks.mjs';
 import { parseStatus } from '../templates/second-brain/bin/garden.mjs';
 import { Context, detectPlatform } from '../lib/context.mjs';
-import secondBrain, { agentEnv, serviceUnit, writeClaudeFiles } from '../modules/second-brain/module.mjs';
+import secondBrain, { agentEnv, isExistingVault, serviceUnit, writeClaudeFiles } from '../modules/second-brain/module.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const VARS = { DEFAULT_PILLAR: 'work', DEFAULT_LANG: 'en' };
@@ -333,6 +333,101 @@ test('claude files: only the scripts that were installed are named', async () =>
     }
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+// Runs the module's install for real into a temporary home; only the vault files are in play.
+async function installInto(home, vaultDir, given = {}) {
+  const answers = new Map(Object.entries({
+    VAULT_PATH: vaultDir,
+    VAULT_RAW_DIR: path.join(home, 'raw'),
+    VAULT_PILLARS: 'work,home',
+    VAULT_TOOLS: 'search',
+    VAULT_GIT: 'no',
+    VAULT_AGENT_ACCESS: 'no',
+    VAULT_APP: 'no',
+    ...given,
+  }));
+  const ctx = new Context({ platform: { ...detectPlatform(), home }, dryRun: false, interactive: false, answers, prompter: null, repoRoot });
+  ctx.beginModule('second-brain');
+  for (const q of secondBrain.questions) if (!q.when || q.when(ctx)) await ctx.ask(q);
+  const lines = [];
+  const log = console.log;
+  console.log = (...a) => lines.push(a.join(' '));
+  try {
+    await secondBrain.install(ctx);
+  } finally {
+    console.log = log;
+  }
+  return lines.join('\n');
+}
+
+const STARTER_FILES = ['work/README.md', 'people/README.md', 'templates/topic.md', 'bin/index.mjs', 'bin/ingest.mjs', 'bin/search.mjs', 'prompts/ingest.md'];
+
+test('starter files: a fresh folder gets them, and it is not an existing vault', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-install-'));
+  const dir = path.join(home, 'vault');
+  try {
+    assert.equal(isExistingVault(dir), false);
+    const out = await installInto(home, dir);
+    for (const f of STARTER_FILES) assert.ok(fs.existsSync(path.join(dir, f)), `${f} is written`);
+    assert.doesNotMatch(out, /existing vault/);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('starter files: a git folder with a commit gets none, and the skip is said', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-install-'));
+  const dir = path.join(home, 'vault');
+  try {
+    fs.mkdirSync(path.join(dir, 'work'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'work', 'Alpha.md'), note('Alpha', 'topic', 'Alpha line'));
+    git(dir, 'init', '-q');
+    git(dir, 'add', '.');
+    git(dir, 'commit', '-qm', 'start');
+    assert.equal(isExistingVault(dir), true);
+    const out = await installInto(home, dir);
+    for (const f of STARTER_FILES) assert.ok(!fs.existsSync(path.join(dir, f)), `${f} is left out`);
+    for (const step of ['folder readmes', 'note templates', 'vault scripts', 'vault tools']) {
+      assert.ok(out.includes(`skipped: ${step}: ${dir} is an existing vault; starter files left out`), `${step} says it was skipped`);
+    }
+    assert.match(out, /VAULT_REFRESH=yes/);
+    assert.equal(git(dir, 'status', '--porcelain', '--untracked-files=all').stdout.includes('README.md'), false);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('starter files: a git folder with no commit yet is still set up', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-install-'));
+  const dir = path.join(home, 'vault');
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    git(dir, 'init', '-q');
+    assert.equal(isExistingVault(dir), false);
+    await installInto(home, dir);
+    for (const f of STARTER_FILES) assert.ok(fs.existsSync(path.join(dir, f)), `${f} is written`);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('starter files: VAULT_REFRESH=yes writes the missing ones into an existing vault', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-install-'));
+  const dir = path.join(home, 'vault');
+  try {
+    fs.mkdirSync(path.join(dir, 'work'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'work', 'README.md'), 'my own readme\n');
+    git(dir, 'init', '-q');
+    git(dir, 'add', '.');
+    git(dir, 'commit', '-qm', 'start');
+    const out = await installInto(home, dir, { VAULT_REFRESH: 'yes' });
+    for (const f of STARTER_FILES.filter((f) => f !== 'work/README.md')) assert.ok(fs.existsSync(path.join(dir, f)), `${f} is written`);
+    assert.equal(fs.readFileSync(path.join(dir, 'work', 'README.md'), 'utf8'), 'my own readme\n', 'an existing file is untouched');
+    assert.doesNotMatch(out, /starter files left out/);
+  } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
