@@ -246,6 +246,32 @@ test('a previous run that never finished and a stale last success are both FAILE
   assert.match(j.latest(), /all quiet/);
 });
 
+test('a stale last success alone is a notice, not a failed step, and this run is recorded as a success', () => {
+  const j = job({ vault: vault(rawFolder()) });
+  const old = Date.now() - 30 * 3_600_000;
+  j.setState({ lastSuccess: old });
+  assert.equal(j.run().code, 0);
+  const [note] = j.notified();
+  assert.doesNotMatch(note, /FAILED/);
+  assert.match(note, /Needs you:\n- no successful run since .* \(30h ago\)/);
+  assert.ok(j.state().lastSuccess > old, 'the passing run is recorded as a success');
+  assert.equal(j.state().lastRun.failed, 0);
+  assert.equal(spawnSync(process.execPath, [script, '--config', path.join(j.dir, 'config.json'), '--status'], { encoding: 'utf8' }).stdout, '');
+  // The notice is gone on the next run.
+  assert.equal(j.run().code, 0);
+  assert.equal(j.notified().length, 1);
+  assert.match(j.latest(), /all quiet/);
+});
+
+test('a stale last success with a real failed step is still FAILED and stays unrecorded', () => {
+  const j = job({ vault: vault(path.join(tmp, 'no-such-raw-folder')) });
+  const old = Date.now() - 30 * 3_600_000;
+  j.setState({ lastSuccess: old });
+  assert.equal(j.run().code, 1);
+  assert.match(j.notified()[0], /^FAILED /);
+  assert.equal(j.state().lastSuccess, old);
+});
+
 test('a clean repo that is behind is fast-forwarded', () => {
   const { clone, upstreamCommit } = remoteAndClone();
   upstreamCommit();
