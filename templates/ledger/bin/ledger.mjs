@@ -774,6 +774,21 @@ function epochOf(d) {
   return Number.isFinite(t) ? t : null;
 }
 
+/**
+ * A hold reason in words. Firstmate stores one as "fm-hold-v1:" and base64 text, so a reason can
+ * hold any characters; anything without that mark, or that does not decode cleanly, is kept.
+ */
+export function holdText(s) {
+  const t = String(s ?? '');
+  const b64 = /^fm-hold-v1:([A-Za-z0-9+/]*={0,2})$/.exec(t)?.[1];
+  if (b64 === undefined || Buffer.from(b64, 'base64').toString('base64') !== b64) return t;
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.from(b64, 'base64'));
+  } catch {
+    return t;
+  }
+}
+
 /** Title of a backlog row without its links, blockers and trailing (key: value) groups. */
 function rowTitle(rest) {
   let t = rest.replace(/<?https?:\/\/[^\s)"<>]+>?/g, '').replace(/\s*blocked-by:\s+[^\s)]+\s+-\s+.*$/, '').replace(/\s*blocked-by:\s+\S+/g, '');
@@ -816,7 +831,7 @@ export function backlogRows(text, { now = Date.now(), ageDays = 14 } = {}) {
         state: section,
         title: rowTitle(rest),
         repo: rowMeta(rest, 'repo'),
-        holdReason: oneLine(/.*\(hold:\s*([^)]*)/.exec(rest)?.[1] ?? '') || null,
+        holdReason: oneLine(holdText(oneLine(/.*\(hold:\s*([^)]*)/.exec(rest)?.[1] ?? ''))) || null,
         holdKind: rowMeta(rest, 'hold-kind'),
         holdUntil: rowMeta(rest, 'hold-until'),
         blockedBy: [...new Set([...rest.matchAll(/blocked-by:\s+([^\s)]+)/g)].map((x) => x[1]))],

@@ -651,14 +651,18 @@ export class Session {
   }
 
   /**
-   * Speak an answer that came back from a hand-off, or a message from the assistant's own
-   * session (`voice-mode say`), which is said word for word. False when the provider is busy.
+   * Speak an answer that came back from a hand-off, a message from the assistant's own
+   * session (`voice-mode say`), which is said word for word, or the lookout's facts, which are
+   * said in the voice's own words. False when the provider is busy.
    */
   speakAnswer(entry) {
     const q = entry.question?.request;
-    const text = entry.verbatim
-      ? `${entry.from === 'lookout' ? 'A heads-up from watching the work' : 'A message from your working session'}, to say out loud now. Say exactly these words, and nothing before or after them: "${redact(entry.text)}"`
-      : redact(`Answer arrived${q ? ` to what the user asked earlier ("${q}")` : ''}: ${entry.text}`) + `\nTell the user now, briefly, in your own words, as your own answer.`;
+    const text =
+      entry.from === 'lookout'
+        ? `A heads-up from watching the work, to tell the user now.\n${redact(entry.text)}`
+        : entry.verbatim
+          ? `A message from your working session, to say out loud now. Say exactly these words, and nothing before or after them: "${redact(entry.text)}"`
+          : redact(`Answer arrived${q ? ` to what the user asked earlier ("${q}")` : ''}: ${entry.text}`) + `\nTell the user now, briefly, in your own words, as your own answer.`;
     if (!this.provider.say?.(text)) return false;
     this.aside = { id: entry.id, text, kind: entry.question?.kind, askedAt: entry.question?.askedAt, sentAt: performance.now() };
     return true;
@@ -923,7 +927,7 @@ export class Live {
     this.log({ event: 'still-coming', ids: due.map((w) => w.id) });
   }
 
-  /** A lookout line that is due goes into the answer queue, to be said word for word in a quiet moment. */
+  /** A lookout line that is due goes into the answer queue, to be said in the voice's own words in a quiet moment. */
   watchBoard() {
     if (!this.lookout || !this.mic) return;
     const line = this.lookout.tick();
