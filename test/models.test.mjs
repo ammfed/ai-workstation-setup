@@ -215,11 +215,12 @@ test('the design review rules follow what the installed no-mistakes can read, an
     assert.equal(back.match(/^review:/gm).length, 1);
     assert.doesNotMatch(back, /^# (#|review|  )/m);
 
-    // Your own review: key is never touched; on an old version you are told it will not parse.
+    // Your own review: key is never touched, on an old version too, and no warning is given.
     const mine = 'review:\n  path_instructions:\n    - path: "*.go"\n      instructions: mine\n';
     const kept = await run('v1.84.0', mine);
     assert.equal(kept.text, mine);
-    assert.match(kept.said, /refuses to start with/);
+    assert.match(kept.said, /has its own review rules; left untouched/);
+    assert.doesNotMatch(kept.said, /^\s*(\x1b\[[0-9;]*m)?!/m);
   } finally {
     if (saved === undefined) delete process.env.NM_HOME;
     else process.env.NM_HOME = saved;

@@ -266,7 +266,6 @@ export async function writeReviewRules(ctx, wanted) {
   const lines = on ? [...REVIEW_RULES, ...own] : [];
   const next = withReviewRules(current, lines);
   if (next === null) {
-    if (!on && version && !readsGlobalReview(version)) return ctx.warn(`${file} has its own top-level review: key, which no-mistakes v${version.join('.')} refuses to start with; move those rules into each repository's .no-mistakes.yaml or upgrade no-mistakes`);
     if (!on) return ctx.ok(`${file} has its own review rules; left untouched`);
     ctx.info(`the block to merge:\n${reviewRulesBlock(lines)}`);
     return ctx.todo(`${file} has its own review: key, so the design review rules were not added; merge the block printed above into it`);
