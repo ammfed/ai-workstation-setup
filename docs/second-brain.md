@@ -163,8 +163,9 @@ your vault path filled in:
 By default both say vault content never goes to an outside model or service. Answer
 `VAULT_OUTSIDE_MODELS=yes` (default `no`) if you have removed sensitive content from your notes
 and raw files and want agents to send them to an outside model through an agent CLI you chose.
-Both files then say so, and still say that private chats and captures of your own agent
-sessions never go to an outside model or service. The question is only asked when
+Both files then say so. They also say that files agent workspaces write and export (reports,
+progress notes, memory archives, your answers) count as raw files and may go too, and that
+private chats themselves never go to an outside model or service. The question is only asked when
 `VAULT_AGENT_ACCESS` is on. On a rerun, a copy of either file that an earlier version of this
 setup shipped is replaced with the new wording (the old one is backed up); an edited copy is
 left alone.

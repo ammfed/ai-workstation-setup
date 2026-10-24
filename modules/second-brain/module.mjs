@@ -181,16 +181,33 @@ const OUTSIDE_STRICT = {
 const OUTSIDE_ALLOWED = {
   rule: [
     '- Vault content and raw source files may go to an outside model through an agent CLI you',
+    '  chose, because you have removed sensitive content from them. Files that agent workspaces',
+    '  write and export (reports, progress notes, memory archives, your answers) count as raw files',
+    '  and may go too. Private chats themselves never go to an outside model or service.',
+  ].join('\n'),
+  note: [
+    'It is private. Its content and the raw source files may go to an outside',
+    'model through an agent CLI you chose, because you have removed sensitive content from them.',
+    'Files that agent workspaces write and export (reports, progress notes, memory archives, your',
+    'answers) count as raw files and may go too. Private chats themselves never go to an outside',
+    'model or service. Read it; do not edit notes by hand.',
+  ].join('\n'),
+};
+// The allowed wording as PR 59 shipped it. A copy rendered from it still counts as a version this
+// setup shipped, so a reinstall replaces it even when the shipped record is missing.
+const OUTSIDE_ALLOWED_EARLIER = [{
+  OUTSIDE_RULE: [
+    '- Vault content and raw source files may go to an outside model through an agent CLI you',
     '  chose, because you have removed sensitive content from them. Private chats and captures of',
     '  your own agent sessions never go to an outside model or service.',
   ].join('\n'),
-  note: [
+  OUTSIDE_NOTE: [
     'It is private. Its content and the raw source files may go to an outside',
     'model through an agent CLI you chose, because you have removed sensitive content from them.',
     'Private chats and captures of your own agent sessions never go to an outside model or',
     'service. Read it; do not edit notes by hand.',
   ].join('\n'),
-};
+}];
 
 /**
  * A Claude Code user rules file and a `second-brain` skill, so every session knows the vault
@@ -229,8 +246,8 @@ export async function writeClaudeFiles(ctx, vault, pillars) {
     ADD_ROUTES: add.map((line) => `- ${line}`).join('\n'),
   };
   const dir = claudeDir(ctx);
-  await ctx.writeFile(path.join(dir, 'rules', 'second-brain.md'), ctx.template('second-brain/claude/rules.md', vars), { onConflict: 'ask' });
-  await ctx.writeFile(path.join(dir, 'skills', 'second-brain', 'SKILL.md'), ctx.template('second-brain/claude/SKILL.md', vars), { onConflict: 'ask' });
+  await ctx.writeFile(path.join(dir, 'rules', 'second-brain.md'), ctx.template('second-brain/claude/rules.md', vars, OUTSIDE_ALLOWED_EARLIER), { onConflict: 'ask' });
+  await ctx.writeFile(path.join(dir, 'skills', 'second-brain', 'SKILL.md'), ctx.template('second-brain/claude/SKILL.md', vars, OUTSIDE_ALLOWED_EARLIER), { onConflict: 'ask' });
 }
 
 /** A vault that is already a git repository with at least one commit keeps its own tooling and notes. */
@@ -295,7 +312,7 @@ export default {
     {
       key: 'VAULT_OUTSIDE_MODELS',
       type: 'confirm',
-      message: 'Your notes and raw files have had sensitive content removed, so agents may send them to an outside model through an agent CLI you chose? (Private chats and captures of your own agent sessions never go out.)',
+      message: 'Your notes and raw files have had sensitive content removed, so agents may send them to an outside model through an agent CLI you chose? (Files your agent workspaces write and export count as raw files and may go too. Private chats themselves never go out.)',
       default: false,
       when: (ctx) => ctx.get('VAULT_AGENT_ACCESS'),
     },

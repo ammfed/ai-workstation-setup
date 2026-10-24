@@ -358,7 +358,7 @@ test('claude files: by default both say vault content never goes to an outside m
   }
 });
 
-test('claude files: VAULT_OUTSIDE_MODELS=yes allows an outside model but keeps private chats and session captures local', async () => {
+test('claude files: VAULT_OUTSIDE_MODELS=yes allows an outside model and workspace exports but keeps private chats local', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-claude-'));
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
   try {
@@ -367,7 +367,9 @@ test('claude files: VAULT_OUTSIDE_MODELS=yes allows an outside model but keeps p
       const text = fs.readFileSync(file, 'utf8').replace(/\s+/g, ' ');
       assert.match(text, /may go to an outside model through an agent CLI you chose/, file);
       assert.match(text, /because you have removed sensitive content/, file);
-      assert.match(text, /Private chats and captures of your own agent sessions never go to an outside model or service\./, file);
+      assert.match(text, /Files that agent workspaces write and export \(reports, progress notes, memory archives, your answers\) count as raw files and may go too\./, file);
+      assert.match(text, /Private chats themselves never go to an outside model or service\./, file);
+      assert.doesNotMatch(text, /captures of your own agent sessions/, file);
       assert.doesNotMatch(text, /never send its content|Vault content never goes/, file);
       assert.doesNotMatch(text, /—|\{\{[A-Z_]+\}\}/, file);
     }
@@ -442,6 +444,56 @@ test('claude files: a copy shipped before this answer existed is replaced on a r
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
     fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+// The yes wording as PR 59 shipped it, for a copy on a machine with no shipped record.
+const PR59_RULE = `- Vault content and raw source files may go to an outside model through an agent CLI you
+  chose, because you have removed sensitive content from them. Private chats and captures of
+  your own agent sessions never go to an outside model or service.`;
+const PR59_NOTE = `It is private. Its content and the raw source files may go to an outside
+model through an agent CLI you chose, because you have removed sensitive content from them.
+Private chats and captures of your own agent sessions never go to an outside model or
+service. Read it; do not edit notes by hand.`;
+
+test('claude files: a copy rendered from the PR 59 yes wording is replaced on a rerun, an edited one is not', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-claude-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    await claudeFilesInto(home, { VAULT_OUTSIDE_MODELS: 'yes' });
+    const rulesFile = claudeFile(home, 'rules', 'second-brain.md');
+    const skillFile = claudeFile(home, 'skills', 'second-brain', 'SKILL.md');
+    const current = {
+      rules: fs.readFileSync(rulesFile, 'utf8'),
+      skill: fs.readFileSync(skillFile, 'utf8'),
+    };
+    const outsideRule = current.rules.slice(current.rules.indexOf('- Vault content and raw source files'));
+    assert.match(current.skill, /Files that agent workspaces write and export/);
+    const old = {
+      rules: current.rules.replace(outsideRule, `${PR59_RULE}\n`),
+      skill: current.skill.replace(/It is private\. Its content[\s\S]*?edit notes by hand\./, PR59_NOTE),
+    };
+    assert.notEqual(old.rules, current.rules);
+    assert.notEqual(old.skill, current.skill);
+    fs.writeFileSync(rulesFile, old.rules);
+    fs.writeFileSync(skillFile, old.skill);
+    fs.rmSync(path.join(home, '.config'), { recursive: true, force: true }); // no shipped record
+
+    const out = (await claudeFilesInto(home, { VAULT_OUTSIDE_MODELS: 'yes' })).out;
+    assert.match(out, /replaced .*rules[\\/]second-brain\.md \(it was an older version this setup shipped\)/);
+    assert.match(out, /replaced .*skills[\\/]second-brain[\\/]SKILL\.md \(it was an older version this setup shipped\)/);
+    assert.equal(fs.readFileSync(rulesFile, 'utf8'), current.rules);
+    assert.equal(fs.readFileSync(skillFile, 'utf8'), current.skill);
+
+    // A local edit to the PR 59 copy is left alone.
+    fs.writeFileSync(rulesFile, `${old.rules}- My own line.\n`);
+    fs.rmSync(path.join(home, '.config'), { recursive: true, force: true });
+    const kept = (await claudeFilesInto(home, { VAULT_OUTSIDE_MODELS: 'yes' })).out;
+    assert.match(kept, /second-brain\.md exists with different content \(a local edit/);
+    assert.match(fs.readFileSync(rulesFile, 'utf8'), /My own line/);
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
   }
 });
 
