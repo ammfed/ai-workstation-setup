@@ -13,7 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  noteDirs, notesIn, parseNote, listValue, wikilinks, vaultRoot,
+  noteDirs, notesIn, linkTargets, parseNote, listValue, wikilinks, vaultRoot,
   TYPES, STATUSES, STAGES, REQUIRED, SOURCE_KEYS, FOLDER_TYPE, DATED_DIRS,
 } from './lib-vault.mjs';
 
@@ -23,7 +23,7 @@ const args = process.argv.slice(2).filter((a) => a !== '--stage-warnings');
 const root = vaultRoot([]);
 const dirs = noteDirs(root);
 const allNotes = dirs.flatMap((d) => notesIn(root, d));
-const known = new Set(allNotes.map((rel) => path.basename(rel, '.md')));
+const known = linkTargets(root, allNotes);
 
 const targets = args.length
   ? args.map((a) => path.relative(root, path.resolve(a)))

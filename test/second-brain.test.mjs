@@ -640,6 +640,54 @@ test('housekeeping: a real contract problem still exits non-zero', () => {
   }
 });
 
+// A research track: notes in research/notes/, plus its own queue files at the top of research/.
+function addResearchTrack(root) {
+  fs.mkdirSync(path.join(root, 'research', 'notes'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'research', 'notes', 'some-slug.md'), note('Slug', 'source', 'A finding',
+    'source: https://example.com\ningested: 2026-01-01\nsha256: abc\nfiletype: html\n'));
+  fs.writeFileSync(path.join(root, 'research', 'IDEAS.md'), note('Ideas', 'source', '- [[research/notes/some-slug]]'));
+  fs.writeFileSync(path.join(root, 'research', 'reading-list.md'), '| url | kind | status |\n|---|---|---|\n');
+  fs.writeFileSync(path.join(root, 'research', 'topics.md'), '| topic | status |\n|---|---|\n');
+}
+
+test('check: links to a research note resolve by path and by bare name', () => {
+  const root = vault();
+  try {
+    addResearchTrack(root);
+    fs.writeFileSync(path.join(root, 'work', 'Gamma.md'), note('Gamma', 'topic', 'See [[research/notes/some-slug]] and [[some-slug]]'));
+    const r = node(root, 'check.mjs', []);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.doesNotMatch(r.stdout, /does not resolve/);
+  } finally {
+    removeVault(root);
+  }
+});
+
+test('check: the research track\'s own files are not flagged', () => {
+  const root = vault();
+  try {
+    addResearchTrack(root);
+    const r = node(root, 'check.mjs', []);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.doesNotMatch(r.stdout, /research/);
+  } finally {
+    removeVault(root);
+  }
+});
+
+test('check: a link to a missing research note still fails', () => {
+  const root = vault();
+  try {
+    addResearchTrack(root);
+    fs.writeFileSync(path.join(root, 'work', 'Gamma.md'), note('Gamma', 'topic', 'See [[research/notes/gone]]'));
+    const r = node(root, 'check.mjs', []);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /work[\\/]Gamma\.md: \[\[research\/notes\/gone\]\] does not resolve to any note/);
+  } finally {
+    removeVault(root);
+  }
+});
+
 test('housekeeping timer: it runs a copy kept outside the vault, and an existing vault gets nothing written', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-install-'));
   const dir = path.join(home, 'vault');
