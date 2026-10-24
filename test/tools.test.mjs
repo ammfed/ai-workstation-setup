@@ -37,7 +37,7 @@ test('a passing check keeps the step ok and removes its temporary folder', async
 
 test('a check whose output does not match fails the step', async () => {
   const { ctx, rec } = context();
-  assert.equal(await ctx.step('node', () => ctx.ensureTool(nodeTool(/43/))), undefined);
+  assert.equal(await ctx.step('node', () => ctx.ensureTool(nodeTool(/^43$/m))), undefined);
   assert.equal(rec.failures.length, 1);
   assert.match(rec.failures[0], /node: installed, but its check failed \(adds two numbers\)/);
 });
