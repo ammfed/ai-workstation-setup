@@ -38,11 +38,17 @@ const TOOLS = [
   { value: 'garden', file: 'garden.mjs', label: 'garden - one small reversible tidy-up of a few notes by your agent CLI, checked, committed, undone if anything is off' },
   { value: 'bookmarks', file: 'bookmarks.mjs', label: 'bookmarks - turn a browser bookmark export into markdown for ingestion' },
 ];
+// `earlier` is what an older version of this setup called the job, so its units can be told
+// apart from a local edit and replaced.
 const TIMERS = {
-  housekeeping: { hours: 3, about: 'check the vault and regenerate MAP.md' },
+  housekeeping: { hours: 3, about: 'check the vault and report problems', earlier: 'check the vault and regenerate MAP.md' },
   garden: { hours: 6, about: 'one garden pass over the next slice of notes' },
 };
 const TIMER_TAG = 'ai-workstation-setup second-brain';
+// The housekeeping timer runs a copy kept here, outside the vault, so a reinstall updates what
+// it runs without writing into a vault that tracks its own bin/.
+const HOUSEKEEPING_SCRIPTS = ['housekeeping.mjs', 'check.mjs', 'lib-vault.mjs'];
+export const housekeepingDir = (home) => path.join(home, '.config', 'ai-workstation-setup', 'second-brain');
 const unitQuote = (v) => `"${String(v).replace(/%/g, '%%').replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 // WorkingDirectory= takes a bare path: systemd rejects quotes there, and spaces need no escaping.
 const unitPath = (v) => String(v).replace(/%/g, '%%');
@@ -71,20 +77,27 @@ export function serviceUnit({ about, vault, script, all }) {
   ].join('\n');
 }
 
-/** Run `node bin/<script>` every few hours: a systemd user timer, or a launchd agent on macOS. */
-async function scheduleVaultJob(ctx, vault, name, script, env = {}) {
-  const { hours, about } = TIMERS[name];
-  const unit = `second-brain-${name}`;
-  const all = { PATH: process.env.PATH, VAULT_PATH: vault, ...env };
-  if (ctx.os === 'windows') {
-    return ctx.todo(`schedule \`node "${script}"\` every ${hours} hours in Task Scheduler (${about})${env.AGENT_CLI ? ', with AGENT_CLI and AGENT_CLI_ARGS set' : ''}`);
-  }
-  if (ctx.os === 'macos') {
-    const label = `local.ai-workstation-setup.${unit}`;
-    const plist = path.join(ctx.home, 'Library', 'LaunchAgents', `${label}.plist`);
-    const log = path.join(ctx.home, 'Library', 'Logs', `ai-workstation-setup-${unit}.log`);
-    const vars = Object.entries(all).map(([k, v]) => `<key>${k}</key><string>${xml(v)}</string>`).join('');
-    const content = `<?xml version="1.0" encoding="UTF-8"?>
+/** The systemd user timer that starts one vault job every few hours. */
+export function timerUnit({ about, hours }) {
+  return [
+    '[Unit]',
+    `Description=Second brain: ${about} every ${hours} hours (${TIMER_TAG})`,
+    '',
+    '[Timer]',
+    'OnBootSec=15min',
+    `OnUnitActiveSec=${hours}h`,
+    'Persistent=true',
+    '',
+    '[Install]',
+    'WantedBy=timers.target',
+    '',
+  ].join('\n');
+}
+
+/** The launchd agent that runs one vault job every few hours on macOS. */
+export function launchAgent({ label, hours, vault, script, all, log }) {
+  const vars = Object.entries(all).map(([k, v]) => `<key>${k}</key><string>${xml(v)}</string>`).join('');
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -101,12 +114,46 @@ async function scheduleVaultJob(ctx, vault, name, script, env = {}) {
 </dict>
 </plist>
 `;
-    if (await ctx.writeFile(plist, content, { onConflict: 'ask' })) {
+}
+
+// PATH is whatever the shell that ran the installer had, so it is left out of the comparison.
+const withoutPath = (text) => text
+  .replace(/^Environment="PATH=.*$/m, '')
+  .replace(/<key>PATH<\/key><string>[^<]*<\/string>/, '');
+
+/**
+ * Write a unit this setup owns. A unit that is exactly what an earlier version of this setup
+ * wrote is replaced; any other difference is a local edit and is asked about as usual.
+ */
+export async function writeUnit(ctx, file, content, earlier) {
+  const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
+  const ours = current !== null && earlier.some((text) => withoutPath(text) === withoutPath(current));
+  return ctx.writeFile(file, content, { onConflict: ours ? 'replace' : 'ask' });
+}
+
+/**
+ * Run `node <script>` every few hours: a systemd user timer, or a launchd agent on macOS.
+ * `previous` is the script an earlier version of this setup scheduled, if it was another one.
+ */
+async function scheduleVaultJob(ctx, vault, name, script, env = {}, previous = script) {
+  const { hours, about, earlier = about } = TIMERS[name];
+  const unit = `second-brain-${name}`;
+  const all = { PATH: process.env.PATH, VAULT_PATH: vault, ...env };
+  if (ctx.os === 'windows') {
+    return ctx.todo(`schedule \`node "${script}"\` every ${hours} hours in Task Scheduler (${about})${env.AGENT_CLI ? ', with AGENT_CLI and AGENT_CLI_ARGS set' : ''}`);
+  }
+  if (ctx.os === 'macos') {
+    const label = `local.ai-workstation-setup.${unit}`;
+    const plist = path.join(ctx.home, 'Library', 'LaunchAgents', `${label}.plist`);
+    const log = path.join(ctx.home, 'Library', 'Logs', `ai-workstation-setup-${unit}.log`);
+    const agent = { label, hours, vault, all, log };
+    const content = launchAgent({ ...agent, script });
+    if (await writeUnit(ctx, plist, content, [launchAgent({ ...agent, script: previous })])) {
       ctx.run(`launchctl bootout gui/$(id -u)/${label} 2>/dev/null; launchctl bootstrap gui/$(id -u) "${plist}"`);
     }
     return ctx.info(`${unit}: ${about} every ${hours} hours; logs: ${log}`);
   }
-  if (ctx.platform.simulated) return ctx.info(`would run ${path.basename(script)} every ${hours} hours as the systemd user timer ${unit}.timer`);
+  if (ctx.platform.simulated) return ctx.info(`would run ${script} every ${hours} hours as the systemd user timer ${unit}.timer`);
   if (ctx.capture('systemctl --user show-environment') === null) {
     const hint = ctx.os === 'wsl' ? ' (in WSL, turn on systemd in /etc/wsl.conf)' : '';
     if (!ctx.has('crontab')) throw new Skip(`no systemd user session and no crontab found${hint}; schedule \`node "${script}"\` yourself`);
@@ -116,21 +163,9 @@ async function scheduleVaultJob(ctx, vault, name, script, env = {}) {
   }
   const dir = path.join(ctx.home, '.config', 'systemd', 'user');
   const service = serviceUnit({ about, vault, script, all });
-  const timer = [
-    '[Unit]',
-    `Description=Second brain: ${about} every ${hours} hours (${TIMER_TAG})`,
-    '',
-    '[Timer]',
-    'OnBootSec=15min',
-    `OnUnitActiveSec=${hours}h`,
-    'Persistent=true',
-    '',
-    '[Install]',
-    'WantedBy=timers.target',
-    '',
-  ].join('\n');
-  const a = await ctx.writeFile(path.join(dir, `${unit}.service`), service, { onConflict: 'ask' });
-  const b = await ctx.writeFile(path.join(dir, `${unit}.timer`), timer, { onConflict: 'ask' });
+  const timer = timerUnit({ about, hours });
+  const a = await writeUnit(ctx, path.join(dir, `${unit}.service`), service, [serviceUnit({ about: earlier, vault, script: previous, all })]);
+  const b = await writeUnit(ctx, path.join(dir, `${unit}.timer`), timer, [timerUnit({ about: earlier, hours })]);
   const active = ctx.capture(`systemctl --user is-active ${unit}.timer`) === 'active';
   if (a || b || !active) ctx.run(`systemctl --user daemon-reload && systemctl --user enable --now ${unit}.timer`);
   else ctx.ok(`${unit}.timer is enabled`);
@@ -355,7 +390,13 @@ export default {
 
       const timers = ctx.get('VAULT_TIMERS');
       if (timers.includes('housekeeping')) {
-        await ctx.step('housekeeping timer', () => scheduleVaultJob(ctx, vault, 'housekeeping', path.join(vault, 'bin', 'housekeeping.mjs')));
+        await ctx.step('housekeeping timer', async () => {
+          const own = housekeepingDir(ctx.home);
+          for (const file of HOUSEKEEPING_SCRIPTS) {
+            await ctx.writeFile(path.join(own, file), ctx.template(`second-brain/bin/${file}`, vars), { onConflict: 'ask', mode: 0o755 });
+          }
+          return scheduleVaultJob(ctx, vault, 'housekeeping', path.join(own, 'housekeeping.mjs'), {}, path.join(vault, 'bin', 'housekeeping.mjs'));
+        });
       }
       if (timers.includes('garden')) {
         await ctx.step('garden timer', () => {
@@ -366,7 +407,7 @@ export default {
         });
       }
 
-      if (!timers.includes('housekeeping')) ctx.todo(`run \`node ${path.join(vault, 'bin', 'housekeeping.mjs')}\` on a timer every few hours (systemd --user, launchd, Task Scheduler or cron): it validates the vault and regenerates MAP.md, needs no credentials and makes no network calls`);
+      if (!timers.includes('housekeeping')) ctx.todo(`run \`node ${path.join(vault, 'bin', 'housekeeping.mjs')}\` on a timer every few hours (systemd --user, launchd, Task Scheduler or cron): it validates the vault and reports problems without writing anything, needs no credentials and makes no network calls`);
       ctx.todo(`set AGENT_CLI (and AGENT_CLI_ARGS) to the agent CLI that should read raw files, then drop files in ${rawDir} and run \`node ${path.join(vault, 'bin', 'ingest.mjs')} --dry-run\``);
     }
 
