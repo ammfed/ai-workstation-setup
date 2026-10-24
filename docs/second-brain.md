@@ -98,11 +98,13 @@ There is no search index and no embeddings. Two files make the vault readable an
 `bin/index.mjs` from every note's frontmatter plus its first line of prose. One line per
 note, grouped by folder. `MAP.md` answers "what exists", `rg` answers "where is it".
 
-`bin/housekeeping.mjs` is the unattended pass: run the checker, regenerate the map, print
-one line. Point a systemd user timer, launchd agent, Task Scheduler entry or cron job at it
-every few hours. It makes no network calls and needs no credentials, which is what makes it
-safe to leave running. It deliberately does not ingest: reading new raw material costs money
-and deserves a person nearby.
+`bin/housekeeping.mjs` is the unattended pass: run the checker and print one line. It is
+check-only and never writes `MAP.md` or any other file, so it never leaves the vault dirty for
+a job that needs it clean; `bin/index.mjs` stays the one writer of the map. A project with no
+stage yet is a warning; any other contract problem makes it exit non-zero. Point a systemd user
+timer, launchd agent, Task Scheduler entry or cron job at it every few hours. It makes no network
+calls and needs no credentials, which is what makes it safe to leave running. It deliberately
+does not ingest: reading new raw material costs money and deserves a person nearby.
 
 A search index, a knowledge graph or embeddings would all be plausible additions. None of
 them exist here, and nothing in the vault depends on one.
@@ -127,7 +129,10 @@ Picked with `VAULT_TOOLS` (all off by default), each a single Node script in `bi
 
 `VAULT_TIMERS` can also schedule `housekeeping` (every 3 hours) and `garden` (every 6 hours,
 with the agent command from `VAULT_AGENT_CMD`) as systemd user timers on Linux and WSL (a
-crontab line when no systemd user session runs) or launchd agents on macOS; on Windows it leaves a to-do for Task Scheduler. The agent CLI must
+crontab line when no systemd user session runs) or launchd agents on macOS; on Windows it leaves a to-do for Task Scheduler. The
+housekeeping timer runs a copy of the script (with `check.mjs` and `lib-vault.mjs`) kept in
+`~/.config/ai-workstation-setup/second-brain/`, outside the vault, so a reinstall updates what it
+runs without writing into the vault. The agent CLI must
 already be signed in on its own: the timer passes only the command and its flags.
 
 ## An existing vault

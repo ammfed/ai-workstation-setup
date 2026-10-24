@@ -15,7 +15,7 @@ import { appendLine } from '../templates/second-brain/bin/capture.mjs';
 import { bookmarksToMarkdown } from '../templates/second-brain/bin/bookmarks.mjs';
 import { parseStatus } from '../templates/second-brain/bin/garden.mjs';
 import { Context, detectPlatform } from '../lib/context.mjs';
-import secondBrain, { agentEnv, isExistingVault, serviceUnit, writeClaudeFiles } from '../modules/second-brain/module.mjs';
+import secondBrain, { agentEnv, housekeepingDir, isExistingVault, serviceUnit, writeClaudeFiles, writeUnit } from '../modules/second-brain/module.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const VARS = { DEFAULT_PILLAR: 'work', DEFAULT_LANG: 'en' };
@@ -446,7 +446,7 @@ test('claude files: a copy shipped before this answer existed is replaced on a r
 });
 
 // Runs the module's install for real into a temporary home; only the vault files are in play.
-async function installInto(home, vaultDir, given = {}) {
+async function installInto(home, vaultDir, given = {}, platform = {}) {
   const answers = new Map(Object.entries({
     VAULT_PATH: vaultDir,
     VAULT_RAW_DIR: path.join(home, 'raw'),
@@ -457,7 +457,7 @@ async function installInto(home, vaultDir, given = {}) {
     VAULT_APP: 'no',
     ...given,
   }));
-  const ctx = new Context({ platform: { ...detectPlatform(), home }, dryRun: false, interactive: false, answers, prompter: null, repoRoot });
+  const ctx = new Context({ platform: { ...detectPlatform(), home, ...platform }, dryRun: false, interactive: false, answers, prompter: null, repoRoot });
   ctx.beginModule('second-brain');
   for (const q of secondBrain.questions) if (!q.when || q.when(ctx)) await ctx.ask(q);
   const lines = [];
@@ -535,6 +535,109 @@ test('starter files: VAULT_REFRESH=yes writes the missing ones into an existing 
     for (const f of STARTER_FILES.filter((f) => f !== 'work/README.md')) assert.ok(fs.existsSync(path.join(dir, f)), `${f} is written`);
     assert.equal(fs.readFileSync(path.join(dir, 'work', 'README.md'), 'utf8'), 'my own readme\n', 'an existing file is untouched');
     assert.doesNotMatch(out, /starter files left out/);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('housekeeping: checks the vault and leaves MAP.md and every other file as it was', () => {
+  const root = vault();
+  try {
+    const map = path.join(root, 'MAP.md');
+    fs.writeFileSync(map, '# a map in my own format\n');
+    git(root, 'add', '.');
+    git(root, 'commit', '-qm', 'map');
+    const r = node(root, 'housekeeping.mjs', []);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /contract ok/);
+    assert.equal(fs.readFileSync(map, 'utf8'), '# a map in my own format\n');
+    assert.equal(git(root, 'status', '--porcelain', '--untracked-files=all').stdout, '');
+  } finally {
+    removeVault(root);
+  }
+});
+
+test('housekeeping: a project with no stage is a warning and exits 0', () => {
+  const root = vault();
+  try {
+    fs.mkdirSync(path.join(root, 'projects'));
+    fs.writeFileSync(path.join(root, 'projects', 'Roadmap.md'), note('Roadmap', 'project', 'Plans (captured by t, 2026-01-01)'));
+    const r = node(root, 'housekeeping.mjs', ['--quiet']);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /projects\/Roadmap\.md: warning: a project needs stage/);
+    assert.match(r.stdout, /contract ok, 1 warning\(s\)/);
+    assert.equal(node(root, 'check.mjs', []).status, 1, 'the checker on its own still flags it');
+  } finally {
+    removeVault(root);
+  }
+});
+
+test('housekeeping: a real contract problem still exits non-zero', () => {
+  const root = vault();
+  try {
+    fs.mkdirSync(path.join(root, 'projects'));
+    fs.writeFileSync(path.join(root, 'projects', 'Odd.md'), note('Odd', 'project', 'Plans', 'stage: someday\n'));
+    fs.writeFileSync(path.join(root, 'work', 'Gamma.md'), note('Gamma', 'topic', 'See [[Nowhere]]'));
+    const r = node(root, 'housekeeping.mjs', ['--quiet']);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /projects\/Odd\.md: a project needs stage/);
+    assert.match(r.stdout, /\[\[Nowhere\]\] does not resolve/);
+    assert.match(r.stdout, /contract FAILING/);
+  } finally {
+    removeVault(root);
+  }
+});
+
+test('housekeeping timer: it runs a copy kept outside the vault, and an existing vault gets nothing written', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-install-'));
+  const dir = path.join(home, 'vault');
+  try {
+    fs.mkdirSync(path.join(dir, 'work'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'work', 'Alpha.md'), note('Alpha', 'topic', 'Alpha line'));
+    fs.writeFileSync(path.join(dir, 'MAP.md'), 'my map\n');
+    git(dir, 'init', '-q');
+    git(dir, 'add', '.');
+    git(dir, 'commit', '-qm', 'start');
+    const out = await installInto(home, dir, { VAULT_TIMERS: 'housekeeping' }, { os: 'linux', simulated: true });
+    const script = path.join(housekeepingDir(home), 'housekeeping.mjs');
+    assert.ok(out.includes(`would run ${script} every 3 hours`), out);
+    for (const f of ['housekeeping.mjs', 'check.mjs', 'lib-vault.mjs']) assert.ok(fs.existsSync(path.join(housekeepingDir(home), f)), `${f} is shipped`);
+    assert.ok(!fs.existsSync(path.join(dir, 'bin')), 'nothing is written into the vault');
+    const before = git(dir, 'status', '--porcelain', '--untracked-files=all').stdout;
+    const r = spawnSync(process.execPath, [script], { cwd: dir, encoding: 'utf8', env: { ...process.env, VAULT_PATH: dir } });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /ok: 1 note\(s\)/);
+    assert.equal(git(dir, 'status', '--porcelain', '--untracked-files=all').stdout, before);
+    assert.equal(fs.readFileSync(path.join(dir, 'MAP.md'), 'utf8'), 'my map\n');
+    const unit = serviceUnit({ about: 'check the vault', vault: dir, script, all: { VAULT_PATH: dir } });
+    assert.match(unit, new RegExp(`^ExecStart=.* "${script.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"$`, 'm'));
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('housekeeping timer: a unit an earlier version wrote is replaced, an edited one is kept', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-unit-'));
+  try {
+    const ctx = new Context({ platform: { ...detectPlatform(), home }, dryRun: false, interactive: false, answers: new Map(), prompter: null, repoRoot });
+    ctx.beginModule('second-brain');
+    const dir = path.join(home, 'vault');
+    const old = serviceUnit({ about: 'check the vault and regenerate MAP.md', vault: dir, script: path.join(dir, 'bin', 'housekeeping.mjs'), all: { PATH: '/old/bin', VAULT_PATH: dir } });
+    const fresh = serviceUnit({ about: 'check the vault and report problems', vault: dir, script: path.join(housekeepingDir(home), 'housekeeping.mjs'), all: { PATH: '/new/bin', VAULT_PATH: dir } });
+    const earlier = serviceUnit({ about: 'check the vault and regenerate MAP.md', vault: dir, script: path.join(dir, 'bin', 'housekeeping.mjs'), all: { PATH: '/new/bin', VAULT_PATH: dir } });
+    const file = path.join(home, 'second-brain-housekeeping.service');
+    const log = console.log;
+    console.log = () => {};
+    try {
+      fs.writeFileSync(file, old);
+      assert.equal(await writeUnit(ctx, file, fresh, [earlier]), true);
+      assert.equal(fs.readFileSync(file, 'utf8'), fresh);
+      fs.writeFileSync(file, `${old}# my own line\n`);
+      assert.equal(await writeUnit(ctx, file, fresh, [earlier]), false);
+      assert.match(fs.readFileSync(file, 'utf8'), /# my own line/);
+    } finally {
+      console.log = log;
+    }
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
