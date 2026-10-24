@@ -12,7 +12,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Context, detectPlatform } from '../lib/context.mjs';
-import agentClis, { NO_MISTAKES_REVIEW, REVIEW_RULE_PATHS, REVIEW_RULES, noMistakesConfigPath, parseReviewModel, reviewRulesBlock, withClaudeReviewModel, withReviewRules, writeReviewRules } from '../modules/agent-clis/module.mjs';
+import agentClis, { NO_MISTAKES_REVIEW, REVIEW_RULE_PATHS, REVIEW_RULES, REVIEW_RULES_SINCE, noMistakesConfigPath, noMistakesVersion, parseReviewModel, readsGlobalReview, reviewRulesBlock, withClaudeReviewModel, withReviewRules, writeReviewRules } from '../modules/agent-clis/module.mjs';
 import claudeCode, { installReaderAgent, parseModelEfforts } from '../modules/claude-code/module.mjs';
 import backpass, { claudeModelId } from '../modules/backpass/module.mjs';
 import firstmate, { dispatchProfiles, secondmateDefault } from '../modules/firstmate/module.mjs';
@@ -28,6 +28,12 @@ function context(home, { answers = {}, dryRun = false } = {}) {
 }
 
 const question = (mod, key) => mod.questions.find((q) => q.key === key);
+
+// A context whose `no-mistakes --version` prints `version`, or fails when it is null (not installed).
+function withNoMistakes(ctx, version) {
+  ctx.capture = (cmd) => (cmd === 'no-mistakes --version' && version ? `no-mistakes version ${version} (4822244) 2026-09-26T08:30:42Z` : null);
+  return ctx;
+}
 
 test('Claude Code settings default Opus 5.5 to medium effort, and the question stays', () => {
   const q = question(claudeCode, 'CLAUDE_MODEL_EFFORTS');
@@ -146,7 +152,7 @@ test('the design review rules are asked with no-mistakes, default yes, and take 
   fs.writeFileSync(rules, '## Reviewer\n\n- Every chart has a plain title.\n\n## Sessions\n\n- Not for the reviewer.\n');
   const run = async (on) => {
     // PREFS_PRIVATE_RULES comes from the saved answers when preferences is not in this run.
-    await writeReviewRules(context(home, { answers: { PREFS_PRIVATE_RULES: rules } }), on);
+    await writeReviewRules(withNoMistakes(context(home, { answers: { PREFS_PRIVATE_RULES: rules } }), 'v1.99.0'), on);
     return fs.readFileSync(file, 'utf8');
   };
   try {
@@ -156,6 +162,65 @@ test('the design review rules are asked with no-mistakes, default yes, and take 
     assert.doesNotMatch(first, /Not for the reviewer/);
     assert.equal(await run(true), first);
     assert.equal(await run(false), 'agent: auto\n');
+  } finally {
+    if (saved === undefined) delete process.env.NM_HOME;
+    else process.env.NM_HOME = saved;
+  }
+});
+
+test('no-mistakes reads a global review: block from v1.89.0, the first release with it', () => {
+  assert.deepEqual(REVIEW_RULES_SINCE, [1, 89, 0]);
+  assert.deepEqual(noMistakesVersion(withNoMistakes(context(os.tmpdir()), 'v1.84.0')), [1, 84, 0]);
+  assert.equal(noMistakesVersion(withNoMistakes(context(os.tmpdir()), null)), null);
+  for (const v of [[1, 89, 0], [1, 89, 3], [1, 100, 1], [2, 0, 0]]) assert.equal(readsGlobalReview(v), true, v.join('.'));
+  for (const v of [[1, 84, 0], [1, 88, 9], [0, 99, 0], null]) assert.equal(readsGlobalReview(v), false, String(v));
+});
+
+test('the design review rules follow what the installed no-mistakes can read, and the config always parses', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'models-'));
+  const saved = process.env.NM_HOME;
+  process.env.NM_HOME = path.join(home, '.nm');
+  fs.mkdirSync(process.env.NM_HOME);
+  const file = path.join(home, '.nm', 'config.yaml');
+  const run = async (version, start, { dryRun = false } = {}) => {
+    if (start === null) fs.rmSync(file, { force: true });
+    else fs.writeFileSync(file, start);
+    const ctx = withNoMistakes(context(home, { dryRun }), version);
+    const said = [];
+    ctx.say = (line) => said.push(line);
+    await writeReviewRules(ctx, true);
+    return { text: fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null, said: said.join('\n') };
+  };
+  const block = reviewRulesBlock(REVIEW_RULES);
+  const commented = block.split('\n').map((l) => `# ${l}`).join('\n');
+  try {
+    // A version that reads it gets the block; one that does not, and no install at all, get none.
+    assert.equal((await run('v1.89.0', 'agent: auto\n')).text, `agent: auto\n\n${block}\n`);
+    const old = await run('v1.84.0', 'agent: auto\n');
+    assert.equal(old.text, 'agent: auto\n');
+    assert.match(old.said, /v1\.84\.0 cannot read design review rules/);
+    assert.match((await run(null, 'agent: auto\n')).said, /not installed yet/);
+    assert.equal((await run(null, null)).text, null);
+    // A dry run without no-mistakes writes nothing.
+    assert.equal((await run(null, null, { dryRun: true })).text, null);
+
+    // An active block written earlier comes out on an old version, and the rest stays; a backup is kept.
+    const active = `agent: auto\n\n${block}\n\nlog_level: info\n`;
+    assert.equal((await run('v1.84.0', active)).text, 'agent: auto\n\nlog_level: info\n');
+    assert.ok(fs.readdirSync(path.dirname(file)).some((f) => f !== 'config.yaml' && f.startsWith('config.yaml')), 'a backup of the config is kept');
+    // A block commented out by hand also comes out cleanly, and a version that reads it gets it back active.
+    assert.equal((await run('v1.84.0', `agent: auto\n\n${commented}\n`)).text, 'agent: auto\n');
+    const back = (await run('v1.99.0', `agent: auto\n\n${commented}\n\nlog_level: info\n`)).text;
+    assert.equal(back, `agent: auto\n\nlog_level: info\n\n${block}\n`);
+    assert.equal(back.match(/^review:/gm).length, 1);
+    assert.doesNotMatch(back, /^# (#|review|  )/m);
+
+    // Your own review: key is never touched, on an old version too, and no warning is given.
+    const mine = 'review:\n  path_instructions:\n    - path: "*.go"\n      instructions: mine\n';
+    const kept = await run('v1.84.0', mine);
+    assert.equal(kept.text, mine);
+    assert.match(kept.said, /has its own review rules; left untouched/);
+    assert.doesNotMatch(kept.said, /^\s*(\x1b\[[0-9;]*m)?!/m);
   } finally {
     if (saved === undefined) delete process.env.NM_HOME;
     else process.env.NM_HOME = saved;
