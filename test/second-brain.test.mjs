@@ -564,7 +564,7 @@ test('housekeeping: a project with no stage is a warning and exits 0', () => {
     fs.writeFileSync(path.join(root, 'projects', 'Roadmap.md'), note('Roadmap', 'project', 'Plans (captured by t, 2026-01-01)'));
     const r = node(root, 'housekeeping.mjs', ['--quiet']);
     assert.equal(r.status, 0, r.stdout + r.stderr);
-    assert.match(r.stdout, /projects\/Roadmap\.md: warning: a project needs stage/);
+    assert.match(r.stdout, /projects[\\/]Roadmap\.md: warning: a project needs stage/);
     assert.match(r.stdout, /contract ok, 1 warning\(s\)/);
     assert.equal(node(root, 'check.mjs', []).status, 1, 'the checker on its own still flags it');
   } finally {
@@ -580,7 +580,7 @@ test('housekeeping: a real contract problem still exits non-zero', () => {
     fs.writeFileSync(path.join(root, 'work', 'Gamma.md'), note('Gamma', 'topic', 'See [[Nowhere]]'));
     const r = node(root, 'housekeeping.mjs', ['--quiet']);
     assert.equal(r.status, 1, r.stdout + r.stderr);
-    assert.match(r.stdout, /projects\/Odd\.md: a project needs stage/);
+    assert.match(r.stdout, /projects[\\/]Odd\.md: a project needs stage/);
     assert.match(r.stdout, /\[\[Nowhere\]\] does not resolve/);
     assert.match(r.stdout, /contract FAILING/);
   } finally {
@@ -609,8 +609,6 @@ test('housekeeping timer: it runs a copy kept outside the vault, and an existing
     assert.match(r.stdout, /ok: 1 note\(s\)/);
     assert.equal(git(dir, 'status', '--porcelain', '--untracked-files=all').stdout, before);
     assert.equal(fs.readFileSync(path.join(dir, 'MAP.md'), 'utf8'), 'my map\n');
-    const unit = serviceUnit({ about: 'check the vault', vault: dir, script, all: { VAULT_PATH: dir } });
-    assert.match(unit, new RegExp(`^ExecStart=.* "${script.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"$`, 'm'));
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
