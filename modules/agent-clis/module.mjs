@@ -190,6 +190,27 @@ export const REVIEW_RULES = [
 const RULES_BEGIN = '# >>> ai-workstation-setup design review rules (rerun the installer to update; your own go under Reviewer in your private rules file)';
 const RULES_END = '# <<< ai-workstation-setup design review rules';
 
+// The global config reads a review: block from v1.89.0 on (kunchenguid/no-mistakes commit
+// 05d0ce8, "operator-owned review and document instructions"). It rejects unknown keys, so an
+// older one, such as stable v1.84.0, refuses to start with the block; it reads review rules only
+// from each repository's own .no-mistakes.yaml.
+export const REVIEW_RULES_SINCE = [1, 89, 0];
+
+/** [major, minor, patch] from `no-mistakes --version`, or null when it is not installed. */
+export function noMistakesVersion(ctx) {
+  const m = ctx.capture('no-mistakes --version')?.match(/(\d+)\.(\d+)\.(\d+)/);
+  return m ? m.slice(1, 4).map(Number) : null;
+}
+
+export function readsGlobalReview(version) {
+  if (!version) return false;
+  const at = version.findIndex((n, i) => n !== REVIEW_RULES_SINCE[i]);
+  return at === -1 || version[at] > REVIEW_RULES_SINCE[at];
+}
+
+// The lines of a block this installer wrote, also when you commented it out by hand.
+const marker = (l, m) => l.replace(/^[#\s]*/, '') === m.replace(/^[#\s]*/, '');
+
 /** The review: block holding `lines` (the generic rules plus your Reviewer lines) for every path. */
 export function reviewRulesBlock(lines) {
   const body = lines.map((l) => `        ${String(l).replace(/\s+/g, ' ').trim()}`).join('\n');
@@ -205,11 +226,12 @@ export function reviewRulesBlock(lines) {
 export function withReviewRules(text, lines) {
   const current = String(text ?? '');
   const block = lines.length ? reviewRulesBlock(lines) : '';
-  const begin = current.indexOf(RULES_BEGIN);
-  const end = current.indexOf(RULES_END, begin);
-  if (begin !== -1 && end !== -1) {
-    const before = current.slice(0, begin).replace(/\n*$/, '');
-    const after = current.slice(end + RULES_END.length).replace(/^\n*/, '');
+  const all = current.split('\n');
+  const begin = all.findIndex((l) => marker(l, RULES_BEGIN));
+  const end = begin === -1 ? -1 : all.findIndex((l, i) => i > begin && marker(l, RULES_END));
+  if (end !== -1) {
+    const before = all.slice(0, begin).join('\n').replace(/\n*$/, '');
+    const after = all.slice(end + 1).join('\n').replace(/^\n*/, '').replace(/\n*$/, '');
     const out = [before, after, block].filter(Boolean).join('\n\n');
     return out ? `${out}\n` : '';
   }
@@ -227,13 +249,24 @@ function privateReviewerLines(ctx) {
   return parsePrivateRules(fs.readFileSync(file, 'utf8')).rules.reviewer;
 }
 
-export async function writeReviewRules(ctx, on) {
+// Run after no-mistakes is installed: the block is written only when that version reads it, and
+// otherwise a block written earlier is taken out, so the config always parses.
+export async function writeReviewRules(ctx, wanted) {
   const file = noMistakesConfigPath(ctx);
   const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  const version = noMistakesVersion(ctx);
+  const on = wanted && readsGlobalReview(version);
+  if (wanted && !on) {
+    const since = `v${REVIEW_RULES_SINCE.join('.')}`;
+    ctx.info(version
+      ? `no-mistakes v${version.join('.')} cannot read design review rules in its global config (${since} and later can); rerun the installer after an upgrade`
+      : `no-mistakes is not installed yet, so the design review rules wait for a version that reads them (${since} or later); rerun the installer after it is installed`);
+  }
   const own = on ? privateReviewerLines(ctx) : [];
   const lines = on ? [...REVIEW_RULES, ...own] : [];
   const next = withReviewRules(current, lines);
   if (next === null) {
+    if (!on && version && !readsGlobalReview(version)) return ctx.warn(`${file} has its own top-level review: key, which no-mistakes v${version.join('.')} refuses to start with; move those rules into each repository's .no-mistakes.yaml or upgrade no-mistakes`);
     if (!on) return ctx.ok(`${file} has its own review rules; left untouched`);
     ctx.info(`the block to merge:\n${reviewRulesBlock(lines)}`);
     return ctx.todo(`${file} has its own review: key, so the design review rules were not added; merge the block printed above into it`);
@@ -272,7 +305,7 @@ export default {
     {
       key: 'NO_MISTAKES_PRINCIPLES',
       type: 'confirm',
-      message: 'Add design review rules to no-mistakes in every repository (button wording, visible labels, empty states, chart types, AI flags; plus the Reviewer lines of your private rules), checked when a change touches interface files?',
+      message: 'Add design review rules to no-mistakes in every repository (button wording, visible labels, empty states, chart types, AI flags; plus the Reviewer lines of your private rules), checked when a change touches interface files? Needs no-mistakes v1.89.0 or later',
       default: true,
       when: (ctx) => ctx.get('AGENT_CLIS').includes('no-mistakes'),
     },
