@@ -8,7 +8,11 @@ import { fileURLToPath } from 'node:url';
 // that holds .md files is treated as a life-area folder, so renaming or adding one
 // needs no change here.
 export const ENTITY_DIRS = ['projects', 'people', 'decisions', 'meetings', 'reviews', 'journal', 'sources'];
-export const NON_NOTE_DIRS = ['bin', 'templates', 'prompts', '.ingest', '.obsidian', '.git', '.trash', 'restricted'];
+// research/ is a separate research track, not a life area: its top-level files are queue
+// tables and a proposals list. Its notes live in research/notes/ and are link targets only,
+// see linkTargets().
+export const NON_NOTE_DIRS = ['bin', 'templates', 'prompts', '.ingest', '.obsidian', '.git', '.trash', 'restricted', 'research'];
+export const RESEARCH_NOTES_DIR = 'research/notes';
 export const SKIP_FILES = ['README.md', 'MAP.md', 'START-HERE.md', 'AGENTS.md', 'CLAUDE.md'];
 
 export const TYPES = ['source', 'topic', 'person', 'project', 'decision', 'meeting', 'daily', 'review'];
@@ -42,6 +46,20 @@ export function notesIn(root, dir) {
     .filter((f) => f.endsWith('.md') && !SKIP_FILES.includes(f))
     .sort()
     .map((f) => path.join(dir, f));
+}
+
+/**
+ * Every name a [[wikilink]] may use for a note: the bare filename of each note in `notes`
+ * and of each research note, plus a research note's vault-relative path without extension
+ * ([[research/notes/<slug>]]), the form research citations use.
+ */
+export function linkTargets(root, notes) {
+  const names = new Set(notes.map((rel) => path.basename(rel, '.md')));
+  for (const rel of notesIn(root, RESEARCH_NOTES_DIR)) {
+    names.add(path.basename(rel, '.md'));
+    names.add(rel.split(path.sep).join('/').replace(/\.md$/, ''));
+  }
+  return names;
 }
 
 /**
