@@ -105,9 +105,21 @@ test('building and the everyday habits are written in their sections, and each c
   assert.match(sectionOf(text, 'Ideas and priorities'), /"Check X" is a question, not a go-ahead to widen the work\./);
   assert.match(sectionOf(text, 'Safety'), /A statement is a claim until something shows it\./);
 
-  const off = await render({ PREFS_BUILD_WHOLE_GOAL: 'no', PREFS_MODEL_GUIDE: 'no', PREFS_HABITS: 'no' });
+  const off = await render({ PREFS_BUILD_WHOLE_GOAL: 'no', PREFS_KUN: 'no', PREFS_MODEL_GUIDE: 'no', PREFS_HABITS: 'no' });
   assert.doesNotMatch(off, /## Building/);
   assert.doesNotMatch(off, /End every reply with the next actions|"Check X"|A statement is a claim/);
+});
+
+test('the /kun rule is on by default, in sessions and worker briefs, and can be turned off', async () => {
+  const building = sectionOf(await render(), 'Building');
+  assert.match(building, /At the start of real work \(a feature, a bug, a refactor, a plan, research or an explainer\), run \/kun once/);
+  assert.match(building, /Later checks in the same session reuse that load\./);
+  assert.match(building, /Skip it for small clear tasks/);
+  assert.doesNotMatch(await render({ PREFS_KUN: 'no' }), /run \/kun once/);
+  const ctx = await answer({ PREFS_TARGETS: 'claude,firstmate' });
+  assert.equal(ctx.get('PREFS_KUN'), true);
+  assert.match(renderBriefInclude((key) => ctx.get(key)), /## Building\n\n- At the start of real work .* run \/kun once/);
+  assert.doesNotMatch(renderBriefInclude((key) => (key === 'PREFS_KUN' ? false : ctx.get(key))), /\/kun/);
 });
 
 test('the route and its build rules are off by default and each writes its own Building rule', async () => {
