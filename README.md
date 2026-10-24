@@ -143,7 +143,10 @@ without asking (a timestamped `.bak-*` copy is kept when it is). With `--yes`, a
 terminal while the install runs (it asks nothing then), a
 script or file the setup shipped is refreshed when your copy is an older version it
 shipped (known from a hash list in `~/.config/ai-workstation-setup/shipped.json` and
-from this clone's git history); a copy you edited is left alone. Your answers are
+from this clone's git history); a copy you edited is left alone. A file that an older
+version of this setup built in code rather than from a template, such as the working
+preferences files, refreshes this way only after one interactive install run has
+recorded it. Your answers are
 saved to `answers.env` (gitignored), so a re-run keeps them. At a terminal a re-run opens
 with "Welcome back! Your earlier choices are kept.", says how many new settings take their
 recommended answers, and Enter updates (type `c` to change your picks, then `d` to answer the new
