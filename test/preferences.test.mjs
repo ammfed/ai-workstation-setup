@@ -457,6 +457,34 @@ test('a real run writes the private lines into all three files, warns about an u
   }
 });
 
+test('a second unattended run with a changed answer refreshes the files this setup wrote and keeps a hand-edited one', { skip: process.platform === 'win32' }, async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const given = { PREFS_PRIVATE_RULES: path.join(home, 'missing.md') };
+    const prefsFile = path.join(home, '.claude', 'rules', 'working-preferences.md');
+    const captain = path.join(home, 'fm', 'data', 'captain.md');
+    const brief = path.join(home, 'fm', 'config', 'brief-include.md');
+    await installInto(home, { ...given, PREFS_KUN: 'no' });
+    for (const f of [prefsFile, captain, brief]) assert.doesNotMatch(fs.readFileSync(f, 'utf8'), /run \/kun once/, f);
+
+    const { out } = await installInto(home, { ...given, PREFS_KUN: 'yes' });
+    assert.doesNotMatch(out, /left untouched/, out);
+    for (const f of [prefsFile, captain, brief]) assert.match(fs.readFileSync(f, 'utf8'), /run \/kun once/, f);
+
+    // A file edited by hand since is never replaced silently.
+    const edited = `${fs.readFileSync(prefsFile, 'utf8')}- My own line.\n`;
+    fs.writeFileSync(prefsFile, edited);
+    const third = await installInto(home, { ...given, PREFS_KUN: 'no' });
+    assert.equal(fs.readFileSync(prefsFile, 'utf8'), edited);
+    assert.match(third.out, /working-preferences\.md exists with different content.*left untouched/);
+    assert.doesNotMatch(fs.readFileSync(captain, 'utf8'), /run \/kun once/);
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('without the firstmate module in the run, the saved Firstmate home is used, not ~/firstmate', { skip: process.platform === 'win32' }, async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-'));
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');

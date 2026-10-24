@@ -5,7 +5,8 @@
 #   1. copies the shipped hooks, status line and reader subagent into your Claude folder
 #      (a file you edited is replaced only when you say yes),
 #   2. merges the hook registrations into ~/.claude/settings.json: the context reminder on
-#      UserPromptSubmit, PostToolUse and SessionStart, and the update reminder,
+#      UserPromptSubmit, PostToolUse and SessionStart, and the update reminder, leaving
+#      out any reminder you answered no to in answers.env,
 #   3. sets the status line, the default model and effort, and the effort per model only
 #      where you have not set them
 #      (your own status line is replaced only when you say yes),
@@ -17,7 +18,7 @@
 # Usage: scripts/apply-to-machine.sh [--dry-run | --undo]
 #   --dry-run           print every change, ask nothing, write nothing
 #   CLAUDE_CONFIG_DIR   your Claude folder, if it is not $HOME/.claude
-# Exit status: 0 ok, 1 a step failed or no backup to undo, 2 usage error.
+# Exit status: 0 ok, 1 a step failed or no backup to undo, 2 usage error or an unreadable answers.env.
 
 set -euo pipefail
 
