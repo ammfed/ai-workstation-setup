@@ -50,12 +50,13 @@ export function notesIn(root, dir) {
 
 /**
  * Every name a [[wikilink]] may use for a note: the bare filename of each note in `notes`
- * and of each research note, plus a research note's vault-relative path without extension
- * ([[research/notes/<slug>]]), the form research citations use.
+ * and of each research note, plus its vault-relative path without extension. The path form
+ * is what research citations use ([[research/notes/<slug>]]) and what tells apart two notes
+ * that share a filename ([[people/Ada Example]]).
  */
 export function linkTargets(root, notes) {
-  const names = new Set(notes.map((rel) => path.basename(rel, '.md')));
-  for (const rel of notesIn(root, RESEARCH_NOTES_DIR)) {
+  const names = new Set();
+  for (const rel of [...notes, ...notesIn(root, RESEARCH_NOTES_DIR)]) {
     names.add(path.basename(rel, '.md'));
     names.add(rel.split(path.sep).join('/').replace(/\.md$/, ''));
   }
