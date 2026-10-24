@@ -23,7 +23,7 @@ answers file still sets any key it names either way.
 With the `firstmate` target, the module also writes Firstmate's `config/brief-include.md`, which
 Firstmate appends to every worker brief. It holds what applies: the house style with
 `PREFS_WRITING_STYLE=ste` (for what workers write to Firstmate, never the deliverable), the
-helper-model rule from `PREFS_DELEGATE_RETRIEVAL`, the build rules from `PREFS_TEST_FIRST` and
+helper-model rule from `PREFS_DELEGATE_RETRIEVAL`, the build rules from `PREFS_KUN`, `PREFS_TEST_FIRST` and
 `PREFS_GLOSSARY_ADR`, the principle checker line from `PREFS_PRINCIPLE_CHECKS`, and your private
 Everywhere and Workers lines. Nothing applies, nothing is written.
 
@@ -100,6 +100,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | --- | --- | --- |
 | `PREFS_BUILD_WHOLE_GOAL` | yes | Before something new is built, the research and the user journeys are shown on one review page. Then one builder gets the whole goal in a single brief (your words, the constraints, what done means) and runs, never fed step by step; the full validation pipeline runs once the first complete pass exists. |
 | `PREFS_ROUTE` | no | Software projects go through six steps, each with its skill: Plan, Decide, Prototype, Breakdown, Build, Ship, with short paths for a small change and a bug. [The route](route.md) describes each step. |
+| `PREFS_KUN` | yes | At the start of real work (a feature, a bug, a refactor, a plan, research or an explainer), the agent runs `/kun` once and follows the route its `ENTRY.md` gives for that kind of work. Later checks in the session reuse that load. Small clear tasks, status replies and helper subagents skip it. |
 | `PREFS_TEST_FIRST` | no | Product code is built test-first at the seams the spec names (tdd, codebase-design). Prototypes, docs and config are not test-first. |
 | `PREFS_GLOSSARY_ADR` | no | `GLOSSARY.md` and `docs/adr/` are read before building, and new terms and decision records land with the change that introduces them. The files start only when a term or a hard-to-reverse decision comes up. |
 | `PREFS_PROTOTYPE_CHECK` | no | Before you see a prototype, the agent opens it at your target screen size first, then at laptop width and, when `PREFS_PAGE_PHONE` is yes, at phone width (390 px), checks that font sizes and column positions stay the same on every tab, and fixes broken layout, unclear labels and dead ends. |

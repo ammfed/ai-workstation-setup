@@ -26,14 +26,29 @@ Every piece of work runs through some of these ten phases, in this order. Each p
 
 Phases 2 to 4 are the early phases. They run before anything is built, and the early phases gate blocks phase 5 (rule 1.1).
 
-**Skills that own no phase.** This setup installs five more skills. Each one helps inside a phase when its moment comes. None of them starts a phase or takes over from its owner.
+**Kun supervises every phase.** The kun skill (`/kun`) supervises the whole life cycle. Run `/kun` once per session, at the start of real work: name the kind of work and follow the route Kun's `ENTRY.md` gives for it (research, planning, reproduction, guardrails, implementation, validation). At the start of each phase and again before its gate, check the phase's row below against that load. Run `/kun` again only in a new session or after compaction. A check is a pass the agent runs, not a page and not a question to the owner. A finding that changes the plan goes on the phase's outcomes page. Where Kun and this playbook disagree, Kun wins, and the conflict goes on that page too. If `/kun` cannot load, say so in the status and go on with this playbook alone.
+Why: one supervisor that checks every phase against the same method catches drift early, and a supervisor that stops the work when it is offline costs more than it saves.
+
+| Phase | The /kun check |
+| --- | --- |
+| 1. Capture | Name the kind of work (an idea, a feature, a bug, a refactor or an explainer) and take Kun's route for it. Check Kun's tools list for a tool that already does the job |
+| 2. Requirements | Each round rests on research in the real project. Its cards show the key directions, and only the owner's questions stay open |
+| 3. Does it already exist | The study shows how others solved it, the proven playbooks and the common pitfalls |
+| 4. Vision | The vision file meets what Kun's vision skill asks for: each principle cites real evidence from the project, and the file says what the work will not become |
+| 5. Prototype | When a prototype shows the choice better than words, it sits on the checkpoint page. The page keeps only what is decided now |
+| 6. Breakdown | A bug starts with a reproduction item in a clean setup, which becomes the regression test. A refactor starts with a guardrails item that adds the missing tests first |
+| 7. Build | The change is the simplest one that meets the requirements. Anything the brief did not ask for is cut |
+| 8. Review | The preview page shows what validation caught and fixed, next to the outcome |
+| 9. Ship and hand over | No extra check: validation is the step Kun names. It runs through no-mistakes when the repository has it. Without it, offer to set it up, or use a fresh adversarial reviewer. The merge waits for the owner's word |
+| 10. Improve | Check Kun's tools list for one that turns repeated corrections into checks, such as backpass. Bring each proposal as a card |
+
+**Skills that own no phase.** This setup installs four more skills. Each one helps inside a phase when its moment comes. None of them starts a phase or takes over from its owner.
 
 | Skill | Use it when |
 | --- | --- |
 | find-docs | A plan or code names a library, framework or service: fetch its current docs first, never work from memory (phases 3, 5 and 7) |
 | to-questionnaire | A gap only someone else can fill, such as a colleague, a vendor or real users: turn it into a short questionnaire for that person, including the real-user try-out (rule 1.6) |
 | teach | The owner asks to learn a new skill or concept |
-| kun | The owner asks how a builder of long autonomous work would think about a problem |
 | composio-cli | The work needs an outside app the owner has connected, such as email, a calendar or a tracker |
 
 **Which phases a piece of work needs.** Pick by the kind of work, never by a guess of how long it takes.

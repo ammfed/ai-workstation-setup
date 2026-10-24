@@ -19,6 +19,10 @@ const STE_RULES = [
 // Rules written both for sessions and for Firstmate's workers, so the two never drift apart.
 const TEST_FIRST_RULE =
   'Build product code test-first at the seams the spec names (tdd, codebase-design skills when installed). Prototypes, docs and config are not test-first.';
+const KUN_RULE =
+  'At the start of real work (a feature, a bug, a refactor, a plan, research or an explainer), run /kun once (the kun skill, when installed) and follow the route its ENTRY.md gives for that kind of work. ' +
+  'Later checks in the same session reuse that load. Run it again only in a new session or after compaction. ' +
+  'Skip it for small clear tasks (a typo, a version bump, a config tweak), status replies and helper subagents.';
 const GLOSSARY_RULE =
   'Before building, read GLOSSARY.md and docs/adr/ if they exist. Add new terms and decision records in the same change that introduces them. Start these files in any project, but only when a term or a hard-to-reverse decision comes up.';
 
@@ -66,7 +70,7 @@ export function renderBriefInclude(get, { checkerPath, privateRules, tastePreset
     );
   }
   parts.push(bullets('Helper models', [delegateRule(get)]));
-  parts.push(bullets('Building', [get('PREFS_TEST_FIRST') && TEST_FIRST_RULE, get('PREFS_GLOSSARY_ADR') && GLOSSARY_RULE]));
+  parts.push(bullets('Building', [get('PREFS_KUN') && KUN_RULE, get('PREFS_TEST_FIRST') && TEST_FIRST_RULE, get('PREFS_GLOSSARY_ADR') && GLOSSARY_RULE]));
   const checker = checkerPath && (/\s/.test(checkerPath) ? JSON.stringify(checkerPath) : checkerPath);
   parts.push(
     bullets('Principle checks', [
@@ -271,6 +275,7 @@ export function renderPreferences(get, { cardsPath, decisionsPath, privateRules,
         '6 Ship: validate, open a pull request, and merge once approved (no-mistakes).',
     get('PREFS_ROUTE') &&
       'Short paths: a small clear change goes Plan, Build, Ship. A bug goes Plan, find the cause, Build with the reproduction as the regression test, Ship. Documents, review pages, research and one-off tasks do not take the route.',
+    get('PREFS_KUN') && KUN_RULE,
     get('PREFS_TEST_FIRST') && TEST_FIRST_RULE,
     get('PREFS_GLOSSARY_ADR') && GLOSSARY_RULE,
     get('PREFS_PROTOTYPE_CHECK') &&

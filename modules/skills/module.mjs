@@ -58,8 +58,10 @@ const SKILLS = [
     label:
       'workflow-playbook - a working method for long projects run with AI agents. Covers ten phases from an idea to shipped and improved, stage gates, ' +
       'a map that always shows the next step, evidence and research at every stage, four review points with checks before every page, when to ask or act, wording, briefs, ' +
-      'memory and status, a standing improve step, and the steps from a weak prototype to a liked direction, an approved journey map and an aligned rules list. Included with this setup.',
+      'memory and status, a standing improve step, and the steps from a weak prototype to a liked direction, an approved journey map and an aligned rules list. ' +
+      'Kun supervises every phase, so this also installs kun when it is not picked. Included with this setup.',
     install: (ctx) => writeBundledSkill(ctx, 'workflow-playbook'),
+    brings: ['kun'],
   },
   {
     value: 'composio-cli',
@@ -163,6 +165,11 @@ export default {
       });
       if (missing) continue;
       for (const h of s.helpers ?? []) await tallied(ctx, tally, `${h} (for ${s.value})`, () => installSkill(ctx, s.repo, h, opts));
+      // A skill this one depends on is installed even when it was not picked.
+      for (const b of (s.brings ?? []).filter((v) => !chosen.some((c) => c.value === v))) {
+        const dep = SKILLS.find((x) => x.value === b);
+        await tallied(ctx, tally, `${b} (for ${s.value})`, () => installSkill(ctx, dep.repo, b, opts));
+      }
     }
     ctx.info('the clickup module installs its own skill');
     if (!chosen.length) return;

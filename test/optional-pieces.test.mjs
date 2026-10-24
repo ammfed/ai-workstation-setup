@@ -521,11 +521,13 @@ test('the playbook sets the review stakes once per project at capture: full run 
   assert.match(rule, /an agent never lowers them on its own/);
 });
 
-test('the playbook names every skill the installer offers, once: as a phase owner or in its table of skills that own no phase', () => {
+test('the playbook names every skill the installer offers, once: as a phase owner, as the supervisor or in its table of skills that own no phase', () => {
   const text = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
   const section = text.slice(text.indexOf('## Phases'), text.indexOf('## 1. Stage gates'));
   const cells = (l) => l.split('|').slice(1, -1).map((c) => c.trim());
-  const owners = section.split('\n').filter((l) => /^\| \d+\. /.test(l)).map((l) => cells(l)[4]).join(' ');
+  const owners = section.split('\n').filter((l) => /^\| \d+\. /.test(l) && cells(l).length === 7).map((l) => cells(l)[4]).join(' ');
+  const supervisor = section.match(/^\| Phase \| The \/([\w-]+) check \|$/m)?.[1];
+  assert.equal(supervisor, 'kun', 'the phases section has a per-phase check table for its supervisor skill');
   const rest = section.slice(section.indexOf('**Skills that own no phase.**'));
   assert.ok(rest.length > 0 && section.includes('**Skills that own no phase.**'), 'the phases section has a table of skills that own no phase');
   const table = rest.slice(rest.indexOf('\n| Skill |'), rest.indexOf('\n\n', rest.indexOf('\n| Skill |')));
@@ -533,9 +535,34 @@ test('the playbook names every skill the installer offers, once: as a phase owne
   const named = (name, where) => new RegExp(`(^|[^\\w-])${name}([^\\w-]|$)`).test(where);
   const offered = skills.questions.find((q) => q.key === 'SKILLS').choices.flatMap((c) => [c.value, ...(c.helpers ?? [])]).filter((n) => n !== 'workflow-playbook');
   for (const name of offered) {
-    assert.ok(named(name, owners) !== noPhase.includes(name), `${name} is named exactly once: as a phase owner or as a skill that owns no phase`);
+    const places = [named(name, owners), noPhase.includes(name), name === supervisor].filter(Boolean).length;
+    assert.equal(places, 1, `${name} is named exactly once: as a phase owner, as the supervisor or as a skill that owns no phase`);
   }
   for (const name of noPhase) assert.ok(offered.includes(name), `${name} in the playbook is a skill the installer offers`);
+});
+
+test('the playbook gives every phase one /kun check, in phase order', () => {
+  const text = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
+  const section = text.slice(text.indexOf('## Phases'), text.indexOf('## 1. Stage gates'));
+  const cells = (l) => l.split('|').slice(1, -1).map((c) => c.trim());
+  const rows = section.split('\n').filter((l) => /^\| \d+\. /.test(l));
+  const phases = rows.filter((l) => cells(l).length === 7).map((l) => cells(l)[0]);
+  const checks = rows.filter((l) => cells(l).length === 2).map((l) => cells(l)[0]);
+  assert.equal(phases.length, 10);
+  assert.deepEqual(checks, phases, 'one /kun check row per phase, in phase order');
+});
+
+test('picking workflow-playbook installs kun with it, once, even when kun is unticked', () => {
+  const offered = skills.questions.find((x) => x.key === 'SKILLS').choices.map((c) => c.value).join(',');
+  const without = skillsDryRun(`SKILLS=tdd,workflow-playbook\nSKILLS_OFFERED=${offered}\n`);
+  assert.equal(without.code, 0, without.out);
+  assert.match(without.out, /would install: tdd, workflow-playbook, kun \(for workflow-playbook\)\n/);
+  assert.equal(without.out.match(/skills add kunchenguid\/kun --skill kun /g)?.length, 1, without.out);
+  const withKun = skillsDryRun(`SKILLS=kun,workflow-playbook\nSKILLS_OFFERED=${offered}\n`);
+  assert.match(withKun.out, /would install: kun, workflow-playbook\n/);
+  assert.equal(withKun.out.match(/skills add kunchenguid\/kun --skill kun /g)?.length, 1, withKun.out);
+  const alone = skillsDryRun(`SKILLS=tdd\nSKILLS_OFFERED=${offered}\n`);
+  assert.doesNotMatch(alone.out, /kunchenguid\/kun /);
 });
 
 test('an OpenWhispr AppImage in ~/.local/opt or ~/Applications is found', () => {

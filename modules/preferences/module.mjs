@@ -225,6 +225,7 @@ export default {
     // Building
     yes('PREFS_BUILD_WHOLE_GOAL', 'Building: show research and user journeys first, then give one builder the whole goal?'),
     yes('PREFS_ROUTE', 'Building: take software projects through six steps (plan, decide, prototype, breakdown, build, ship), each with its skill (docs/route.md)?', { default: false }),
+    yes('PREFS_KUN', 'Building: at the start of real work, run /kun once and follow its route for that kind of work (skipped for small clear tasks)?'),
     yes('PREFS_TEST_FIRST', 'Building: build product code test-first at the seams the spec names (not prototypes, docs or config)?', { default: false }),
     yes('PREFS_GLOSSARY_ADR', 'Building: read GLOSSARY.md and docs/adr before building, and add new terms and decision records with the change?', { default: false }),
     yes('PREFS_PROTOTYPE_CHECK', 'Building: check every prototype at your target screen size, then at laptop width (and phone width when review pages are checked on a phone), keep font sizes and column positions the same on every tab, and fix broken layout, unclear labels and dead ends before you see it?', { default: false }),

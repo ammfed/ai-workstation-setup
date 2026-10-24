@@ -13,7 +13,9 @@ phases from an idea to shipped and improved, stage gates, a map that always show
 next step, evidence and research at every stage, four review points with checks that run
 before any page reaches you, when to ask or act, an improve step after every merge, and
 the steps for taking a weak prototype to a liked wireframe direction, an approved
-journey map and an aligned rules list. At capture it sets the review stakes once per
+journey map and an aligned rules list. The kun skill supervises every phase: `/kun` loads once
+per session at the start of real work, each phase start and gate is checked against it,
+and the skills module installs kun whenever it installs the playbook. At capture it sets the review stakes once per
 project: public repositories and anything stakeholders see get the full review run,
 private notes and throwaway prototypes get a self-review. While a review page waits for
 your answer, the agent stands by quietly and does not prepare the next stage, unless you
