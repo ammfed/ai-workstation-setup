@@ -143,3 +143,29 @@ test('a file built in code is refreshed under --yes when the copy on disk is one
   assert.match(third.rec.skips.join('\n'), /local edit.*left untouched/);
   fs.rmSync(f.tmp, { recursive: true, force: true });
 });
+
+// While the progress screen is up at a terminal the detail goes to the notes file (ctx.sink),
+// but a local edit still has to be asked about: the screen steps aside for the question.
+for (const yes of [true, false]) {
+  test(`with the progress screen up, a local edit is asked about and ${yes ? 'replaced with a backup' : 'kept'}`, async () => {
+    const f = fixture();
+    fs.mkdirSync(path.dirname(f.target), { recursive: true });
+    fs.writeFileSync(f.target, '// my own version\n');
+    const asked = [];
+    const prompter = { confirm: async (message) => (asked.push(message), yes), release() {} };
+    const { ctx } = context(f, { interactive: true, prompter });
+    ctx.sink = fs.openSync(path.join(f.tmp, 'notes.md'), 'w');
+    const screen = [];
+    ctx.progress = { interrupt: () => screen.push('interrupt'), resume: () => screen.push('resume') };
+    assert.equal(await write(ctx, f), yes);
+    fs.closeSync(ctx.sink);
+    assert.equal(asked.length, 1);
+    assert.match(asked[0], /exists and differs/);
+    assert.deepEqual(screen, ['interrupt', 'resume']);
+    assert.equal(fs.readFileSync(f.target, 'utf8'), yes ? '// demo v2 for you\n' : '// my own version\n');
+    const backups = fs.readdirSync(path.dirname(f.target)).filter((n) => n.startsWith('demo.mjs.bak-'));
+    assert.equal(backups.length, yes ? 1 : 0);
+    if (yes) assert.equal(fs.readFileSync(path.join(path.dirname(f.target), backups[0]), 'utf8'), '// my own version\n');
+    fs.rmSync(f.tmp, { recursive: true, force: true });
+  });
+}

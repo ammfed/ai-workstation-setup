@@ -126,7 +126,8 @@ where Claude's sign-in opens your browser and any key a picked part needs (Click
 OpenRouter, Context7) is pasted hidden, or left for later with Enter. GitHub and Context7 are listed there under "Later,
 when you want them" (pick them under `c` to sign in at the end of the first run); running
 the setup again offers them. While it installs, a terminal shows one line per group with a
-word for its state (done, now, did not work) and nothing to answer; the step-by-step detail
+word for its state (done, now, did not work) and nothing to answer, except whether to replace
+a file you changed yourself (a backup is kept); the step-by-step detail
 and command output go to `setup-notes.md` in your home folder (a dry run writes it to a
 temporary folder and names it). At a terminal the last screen says "All set! Claude is
 ready." and how to start it, or "Nearly all set." naming what did not work; the summary and
