@@ -3,10 +3,11 @@ import path from 'node:path';
 import { Skip } from '../../lib/context.mjs';
 import { claudeDir } from '../../lib/claude.mjs';
 import { PRIVATE_HEADINGS, PRIVATE_RULES_DEFAULT, parsePrivateRules } from './private-rules.mjs';
-import { renderBriefInclude, renderCaptainShared, renderPreferences } from './render.mjs';
+import { renderBriefInclude, renderCaptain, renderCaptainShared, renderPreferenceSkills, renderPreferences } from './render.mjs';
 
 // Writes how you want your agents to work (status format, tone, decisions, review
-// pages, building, ideas, away mode, merges, research, quota) as a plain rules file your agents load.
+// pages, building, ideas, away mode, merges, research, quota) as a short rules file every session
+// loads, plus five skills with the rules that only some kinds of work need.
 // Every rule is a generic default you answer for; nothing here is anyone's record.
 // docs/working-preferences.md describes each question and the rule it writes.
 
@@ -86,12 +87,14 @@ const firstmateHome = (ctx) =>
 
 const TARGETS = {
   claude: {
-    label: 'claude - a Claude Code user rules file (~/.claude/rules/working-preferences.md), loaded in every session',
+    label: 'claude - a Claude Code user rules file (~/.claude/rules/working-preferences.md), loaded in every session, and five skills loaded when needed',
     file: (ctx) => path.join(claudeDir(ctx), 'rules', 'working-preferences.md'),
+    render: renderPreferences,
   },
   firstmate: {
     label: "firstmate - seed firstmate's local preferences file (data/captain.md in your Firstmate home)",
     file: (ctx) => path.join(firstmateHome(ctx), 'data', 'captain.md'),
+    render: renderCaptain,
     unsupported: { windows: 'firstmate runs in WSL; .\\install.ps1 --modules wsl sets it up there with this target' },
   },
 };
@@ -359,14 +362,21 @@ export default {
     const log = ctx.get('PREFS_DECISIONS_LOG');
     const privateRules = readPrivateRules(ctx);
     const tastePreset = readTastePreset(ctx);
-    const text = renderPreferences((key) => ctx.get(key), { cardsPath: cards, hideKitPath: cards && hideKitPath(ctx), decisionsPath: log ? ctx.path(log) : null, privateRules, tastePreset, vault: vaultSetup(ctx) });
+    const get = (key) => ctx.get(key);
+    const opts = { cardsPath: cards, hideKitPath: cards && hideKitPath(ctx), decisionsPath: log ? ctx.path(log) : null, privateRules, tastePreset, vault: vaultSetup(ctx) };
     for (const name of targets) {
       const target = TARGETS[name];
       await ctx.step(name, () => {
         const reason = ctx.forOs(target.unsupported);
         if (reason) throw new Skip(reason);
-        return ctx.writeFile(target.file(ctx), text, { onConflict: 'ask' });
+        return ctx.writeFile(target.file(ctx), target.render(get, opts), { onConflict: 'ask' });
       });
+    }
+    if (targets.includes('claude')) {
+      // The rules only some kinds of work need, as skills the agent loads when that work comes up.
+      for (const [name, text] of Object.entries(renderPreferenceSkills(get, opts))) {
+        await ctx.step(`skill ${name}`, () => ctx.writeFile(path.join(claudeDir(ctx), 'skills', name, 'SKILL.md'), text, { onConflict: 'ask' }));
+      }
     }
     if (targets.includes('firstmate') && !ctx.forOs(TARGETS.firstmate.unsupported)) {
       const home = firstmateHome(ctx);

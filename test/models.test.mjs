@@ -17,7 +17,7 @@ import claudeCode, { installReaderAgent, parseModelEfforts } from '../modules/cl
 import backpass, { claudeModelId } from '../modules/backpass/module.mjs';
 import firstmate, { dispatchProfiles, secondmateDefault } from '../modules/firstmate/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
-import { renderPreferences } from '../modules/preferences/render.mjs';
+import { renderPreferenceSkills } from '../modules/preferences/render.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -281,7 +281,8 @@ test('agy research runs on gemini-3.8-flash-high by default', async () => {
   }
   assert.equal(ctx.get('PREFS_DELEGATE_MODEL'), 'gemini-3.8-flash-high');
   assert.equal(ctx.get('PREFS_DELEGATE_FALLBACK_MODEL'), 'claude-sonnet-4-6');
-  const text = renderPreferences((key) => ctx.get(key), { cardsPath: path.join(os.tmpdir(), 'cards.html') });
+  const models = (get) => renderPreferenceSkills(get, { cardsPath: path.join(os.tmpdir(), 'cards.html') })['models-and-research'];
+  const text = models((key) => ctx.get(key));
   assert.match(text, /to `agy --model gemini-3\.8-flash-high`/);
   assert.match(text, /If it reports a Gemini quota error, use `agy --model claude-sonnet-4-6` instead\./);
 
@@ -292,8 +293,8 @@ test('agy research runs on gemini-3.8-flash-high by default', async () => {
   }
   assert.equal(other.get('PREFS_DELEGATE_MODEL'), '');
   assert.equal(other.get('PREFS_DELEGATE_FALLBACK_MODEL'), undefined);
-  assert.doesNotMatch(renderPreferences((key) => other.get(key), { cardsPath: path.join(os.tmpdir(), 'cards.html') }), /quota error/);
-  assert.match(renderPreferences((key) => other.get(key), { cardsPath: path.join(os.tmpdir(), 'cards.html') }), /to `other-cli`/);
+  assert.doesNotMatch(models((key) => other.get(key)), /quota error/);
+  assert.match(models((key) => other.get(key)), /to `other-cli`/);
 });
 
 test('second mates run on Opus 5.5 at medium with the capable profiles on Claude, else the harness default', async () => {
@@ -352,7 +353,7 @@ test('the workflow-playbook skill routes models and waits at a review page the w
   assert.match(row('Small, clear tasks'), /faster model at high effort.*failed check, re-run it on the strongest model at medium effort/);
   assert.match(routing, /above these only when the owner names it/);
 
-  const rules = renderPreferences((k) => ({ PREFS_MODEL_ROUTING: 'capable' })[k]);
+  const rules = renderPreferenceSkills((k) => ({ PREFS_MODEL_ROUTING: 'capable' })[k])['models-and-research'];
   assert.match(rules, /polish of a prototype whose look is already settled[^\n]*high effort/);
   assert.match(rules, /small, clear tasks[^\n]*faster model at high effort, and re-run it on the most capable model at medium effort after a failed check/);
 

@@ -1,4 +1,5 @@
-// Tests for the working-preferences rules: what the defaults write, how the decision,
+// Tests for the working-preferences rules: the short core file and the five on-demand skills,
+// where every rule lives (test/rule-homes.mjs), what the defaults write, how the decision,
 // grilling, status and writing-style choices change the text, how pages are opened, the one
 // phone answer, the route and its build rules, that an earlier PREFS_GRILL_ON_GAPS answer
 // carries over to PREFS_GRILL, that the card template ships its style and phone layout, and
@@ -16,7 +17,8 @@ import { Context, detectPlatform } from '../lib/context.mjs';
 import firstmate from '../modules/firstmate/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
 import { parsePrivateRules } from '../modules/preferences/private-rules.mjs';
-import { renderBriefInclude, renderCaptainShared, renderPreferences } from '../modules/preferences/render.mjs';
+import { PREFERENCE_SKILLS, renderBriefInclude, renderCaptain, renderCaptainShared, renderPreferenceSkills, renderPreferences } from '../modules/preferences/render.mjs';
+import { ALL_ON, RULE_HOMES } from './rule-homes.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CARDS = path.join(os.tmpdir(), 'decision-cards.html');
@@ -32,9 +34,16 @@ async function answer(given = {}) {
   return ctx;
 }
 
-async function render(given = {}) {
+// The core file and each skill file, by home name ('core' or the skill's name).
+async function renderHomes(given = {}, opts = { cardsPath: CARDS }) {
   const ctx = await answer(given);
-  return renderPreferences((key) => ctx.get(key), { cardsPath: CARDS });
+  const get = (key) => ctx.get(key);
+  return { core: renderPreferences(get, opts), ...renderPreferenceSkills(get, opts) };
+}
+
+// Every file joined, for checks that a rule is written somewhere or nowhere.
+async function render(given = {}) {
+  return Object.values(await renderHomes(given)).join('\n');
 }
 
 function sectionOf(text, title) {
@@ -48,17 +57,18 @@ test('the defaults ask through both the question tool and card pages, and grill 
   const ctx = await answer();
   assert.equal(ctx.get('PREFS_DECISIONS'), 'both');
   assert.equal(ctx.get('PREFS_GRILL'), 'every');
-  const decisions = sectionOf(await render(), 'Decisions');
-  assert.match(decisions, /Ask quick questions with the question tool, one at a time, a preview on every option and a recommendation\. Put larger or visual decisions on a Lavish decision-card page\./);
+  const homes = await renderHomes();
+  const decisions = sectionOf(homes.core, 'Decisions');
+  assert.match(decisions, /Ask quick questions with the question tool, one at a time, with a preview on every option and a recommendation\. Put larger or visual decisions on a Lavish decision-card page\./);
   assert.match(decisions, /Every round of questions to the user runs the grilling method/);
   assert.match(decisions, /Keep it balanced\. When the intent and the request are clear enough, go ahead without asking\./);
-  assert.match(decisions, /becomes a short questionnaire for that person/);
-  assert.match(decisions, /--no-open/, 'card-page rules still apply with both');
+  assert.match(homes['writing-for-others'], /becomes a short questionnaire for that person/);
+  assert.match(sectionOf(homes['review-pages'], 'Opening and sending'), /--no-open/, 'card-page rules still apply with both');
 });
 
 test('the default status leads with what needs the user, then what is at risk, the table and the links', async () => {
   assert.equal((await answer()).get('PREFS_STATUS'), 'needs-you');
-  const status = sectionOf(await render(), 'Reporting and status');
+  const status = sectionOf((await renderHomes())['status-and-away'], 'Status replies');
   const parts = ['one line of headline counts', 'Then NEEDS YOU: only what the user alone can do', 'Then AT RISK:', 'Then always a table with To do, Doing and Done', 'End with one Links line'];
   let at = -1;
   for (const part of parts) {
@@ -69,11 +79,11 @@ test('the default status leads with what needs the user, then what is at risk, t
   assert.match(status, /Leave out any empty part except the table/);
   assert.match(status, /Show progress as counts like "3 of 5"/);
   assert.doesNotMatch(status, /TODO, DOING, DONE|labelled YOU/, 'the older board shape is not mixed in');
-  assert.doesNotMatch(sectionOf(await render({ PREFS_STATUS: 'board' }), 'Reporting and status'), /NEEDS YOU/);
+  assert.doesNotMatch((await renderHomes({ PREFS_STATUS: 'board' }))['status-and-away'], /NEEDS YOU/);
 });
 
 test('the board status is still a choice, with a YOU block and never ME', async () => {
-  const status = sectionOf(await render({ PREFS_STATUS: 'board' }), 'Reporting and status');
+  const status = sectionOf((await renderHomes({ PREFS_STATUS: 'board' }))['status-and-away'], 'Status replies');
   assert.match(status, /TODO, DOING, DONE/);
   assert.match(status, /the user's block labelled YOU, the agent's labelled with its own role name \(for example FIRST MATE\), never ME\./);
   assert.match(status, /small text bars and boxes where they carry meaning/);
@@ -81,39 +91,39 @@ test('the board status is still a choice, with a YOU block and never ME', async 
 });
 
 test('every review page uses the card template and pages are handed over together', async () => {
-  const text = await render();
-  const pages = sectionOf(text, 'Review pages');
+  const text = (await renderHomes())['review-pages'];
+  const pages = sectionOf(text, 'Building the page');
   assert.ok(pages.includes(`Every Lavish page starts from the card template at \`${CARDS}\``));
   assert.match(pages, /overrides lavish-axi's own design default/);
   assert.match(pages, /diagram-design skill/);
-  assert.doesNotMatch(sectionOf(text, 'Decisions'), /Start each decision page from the template/, 'the template path is given once');
-  assert.match(sectionOf(text, 'Review page delivery'), /hold the links until all open work is done/);
+  assert.doesNotMatch(text, /Start each decision page from the template/, 'the template path is given once');
+  assert.match(sectionOf(text, 'Opening and sending'), /hold the links until all open work is done/);
 
-  const off = await render({ PREFS_PAGES_ALL_CARDS: 'no' });
+  const off = (await renderHomes({ PREFS_PAGES_ALL_CARDS: 'no' }))['review-pages'];
   assert.doesNotMatch(off, /Every Lavish page starts/);
-  assert.match(sectionOf(off, 'Decisions'), /Start each decision page from the template/);
+  assert.match(sectionOf(off, 'Building the page'), /Start each decision page from the template/);
   assert.doesNotMatch(await render({ PREFS_DECISIONS: 'chat' }), /Every Lavish page starts/);
 });
 
 test('building and the everyday habits are written in their sections, and each can be turned off', async () => {
-  const text = await render();
-  const building = sectionOf(text, 'Building');
+  const homes = await renderHomes();
+  const building = sectionOf(homes['running-workers'], 'Building something new');
   assert.match(building, /show the research and the user journeys on one review page/);
   assert.match(building, /Never feed a builder step by step\./);
   assert.match(building, /read that vendor's official prompting guide first/);
-  assert.match(sectionOf(text, 'Language and tone'), /End every reply with the next actions, the user's first\./);
-  assert.match(sectionOf(text, 'Ideas and priorities'), /"Check X" is a question, not a go-ahead to widen the work\./);
-  assert.match(sectionOf(text, 'Safety'), /A statement is a claim until something shows it\./);
+  assert.match(sectionOf(homes.core, 'How to reply'), /End every reply with the next actions, the user's first\./);
+  assert.match(sectionOf(homes.core, 'Focus and priorities'), /"Check X" is a question, not a go-ahead to widen the work\./);
+  assert.match(sectionOf(homes.core, 'Safety'), /A statement is a claim until something shows it\./);
 
   const off = await render({ PREFS_BUILD_WHOLE_GOAL: 'no', PREFS_KUN: 'no', PREFS_MODEL_GUIDE: 'no', PREFS_HABITS: 'no' });
-  assert.doesNotMatch(off, /## Building/);
+  assert.doesNotMatch(off, /## Building something new|run \/kun once/);
   assert.doesNotMatch(off, /End every reply with the next actions|"Check X"|A statement is a claim/);
 });
 
 test('the /kun rule is on by default, in sessions and worker briefs, and can be turned off', async () => {
-  const building = sectionOf(await render(), 'Building');
+  const building = sectionOf((await renderHomes()).core, 'Before you start');
   assert.match(building, /At the start of real work \(a feature, a bug, a refactor, a plan, research or an explainer\), run \/kun once/);
-  assert.match(building, /Later checks in the same session reuse that load\./);
+  assert.match(building, /Later checks in the same session reuse that load; run it again only in a new session or after compaction\./);
   assert.match(building, /Skip it for small clear tasks/);
   assert.doesNotMatch(await render({ PREFS_KUN: 'no' }), /run \/kun once/);
   const ctx = await answer({ PREFS_TARGETS: 'claude,firstmate' });
@@ -134,12 +144,12 @@ test('the vault-first line names only what second-brain installs, the same in th
   ];
   for (const [setup, routes] of cases) {
     const vault = { path: dir, ...setup };
-    const block = `## Past decisions\n\n- ${lead}${routes}\n`;
-    assert.equal(sectionOf(renderPreferences(get, { cardsPath: CARDS, vault }), 'Past decisions'), block);
-    assert.ok(renderBriefInclude(get, { vault }).includes(block), routes);
+    const line = `- ${lead}${routes}\n`;
+    assert.ok(sectionOf(renderPreferences(get, { cardsPath: CARDS, vault }), 'Before you start').startsWith(`## Before you start\n\n${line}`), routes);
+    assert.ok(renderBriefInclude(get, { vault }).includes(`## Past decisions\n\n${line}`), routes);
   }
   for (const text of [renderPreferences(get, { cardsPath: CARDS }), renderBriefInclude(get), renderBriefInclude(get, { vault: null })]) {
-    assert.doesNotMatch(text, /Past decisions|MAP\.md|bin\/search|bin\/related/);
+    assert.doesNotMatch(text, /Past decisions|notes vault|MAP\.md|bin\/search|bin\/related/);
   }
 });
 
@@ -152,9 +162,9 @@ test('a real run writes the vault-first line from this run\'s vault answers, or 
   const vault = path.join(home, 'my vault');
   try {
     await installInto(home, base);
-    for (const text of read()) assert.doesNotMatch(text, /Past decisions/);
+    for (const text of read()) assert.doesNotMatch(text, /notes vault/);
     await installInto(home, { ...base, VAULT_PATH: vault });
-    for (const text of read()) assert.doesNotMatch(text, /Past decisions/);
+    for (const text of read()) assert.doesNotMatch(text, /notes vault/);
     fs.mkdirSync(vault);
     await installInto(home, { ...base, VAULT_PATH: vault, VAULT_TOOLS: 'search,capture' });
     for (const text of read()) assert.ok(text.includes(`check the notes vault at \`${vault}\` for past decisions, findings and rulings on the work: read its MAP.md, then search it with bin/search.mjs or \`rg\`.`));
@@ -164,10 +174,10 @@ test('a real run writes the vault-first line from this run\'s vault answers, or 
     await installInto(home, base, { VAULT_PATH: vault, VAULT_SCRIPTS: false });
     for (const text of read()) assert.ok(text.includes(`at \`${vault}\` for past decisions, findings and rulings on the work: search it with \`rg\`.`));
     await installInto(home, base, { VAULT_PATH: vault, VAULT_SCRIPTS: true, VAULT_AGENT_ACCESS: false });
-    for (const text of read()) assert.doesNotMatch(text, /Past decisions/);
+    for (const text of read()) assert.doesNotMatch(text, /notes vault/);
     fs.mkdirSync(vault);
     await installInto(home, { ...base, VAULT_PATH: vault, VAULT_AGENT_ACCESS: 'no' });
-    for (const text of read()) assert.doesNotMatch(text, /Past decisions/);
+    for (const text of read()) assert.doesNotMatch(text, /notes vault/);
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
     fs.rmSync(home, { recursive: true, force: true });
@@ -176,22 +186,20 @@ test('a real run writes the vault-first line from this run\'s vault answers, or 
 
 test('the route and its build rules are off by default and each writes its own Building rule', async () => {
   assert.doesNotMatch(await render(), /six steps|test-first|GLOSSARY\.md|phone width/);
-  const building = sectionOf(
-    await render({ PREFS_ROUTE: 'yes', PREFS_TEST_FIRST: 'yes', PREFS_GLOSSARY_ADR: 'yes', PREFS_PROTOTYPE_CHECK: 'yes' }),
-    'Building',
-  );
+  const homes = await renderHomes({ PREFS_ROUTE: 'yes', PREFS_TEST_FIRST: 'yes', PREFS_GLOSSARY_ADR: 'yes', PREFS_PROTOTYPE_CHECK: 'yes' });
+  const building = sectionOf(homes['running-workers'], 'Building something new');
   assert.match(building, /1 Plan: .*2 Decide: .*3 Prototype: .*4 Breakdown: .*5 Build: .*6 Ship: /);
   for (const skill of ['wayfinder', 'grilling', 'to-spec', 'to-tickets', 'tdd', 'no-mistakes']) assert.ok(building.includes(skill), skill);
   assert.match(building, /a small clear change goes Plan, Build, Ship/);
   assert.match(building, /Build product code test-first at the seams the spec names/);
   assert.match(building, /Prototypes, docs and config are not test-first\./);
   assert.match(building, /read GLOSSARY\.md and docs\/adr\/ if they exist/);
-  assert.match(building, /at laptop width and at phone width \(390 px\)/);
-  assert.doesNotMatch(sectionOf(await render({ PREFS_TEST_FIRST: 'yes' }), 'Building'), /six steps|GLOSSARY|phone width/);
+  assert.match(sectionOf(homes['review-pages'], 'Building the page'), /at laptop width and at phone width \(390 px\)/);
+  assert.doesNotMatch(await render({ PREFS_TEST_FIRST: 'yes' }), /six steps|GLOSSARY|phone width/);
 });
 
 test('facts about current products come from a live, dated source, and the rule can be turned off', async () => {
-  const research = sectionOf(await render(), 'Research');
+  const research = sectionOf((await renderHomes())['models-and-research'], 'Research');
   assert.match(research, /the current leading models, tools or products come from a live source checked that day, with its date/);
   assert.match(research, /fetch each product's own pricing page and docs that day/);
   assert.match(research, /checked on the vendor's page, from a third party only, or not checked/);
@@ -199,8 +207,7 @@ test('facts about current products come from a live, dated source, and the rule 
 });
 
 test('review pages also read well on a phone, a page in a skill\'s own look is re-themed, and both can be turned off', async () => {
-  const text = await render();
-  const pages = sectionOf(text, 'Review pages');
+  const pages = sectionOf((await renderHomes())['review-pages'], 'Building the page');
   assert.match(pages, /reads well on a phone \(390 px wide\): the card and its picture stack/);
   assert.match(pages, /a wide diagram gets a phone version/);
   assert.match(pages, /and the look of boards that a skill brings with it/);
@@ -208,40 +215,44 @@ test('review pages also read well on a phone, a page in a skill\'s own look is r
 });
 
 test('one phone answer covers review pages and the prototype check', async () => {
-  const on = await render({ PREFS_PROTOTYPE_CHECK: 'yes' });
-  assert.match(sectionOf(on, 'Building'), /then at laptop width and at phone width \(390 px\)\. Check/);
+  const on = (await renderHomes({ PREFS_PROTOTYPE_CHECK: 'yes' }))['review-pages'];
+  assert.match(sectionOf(on, 'Building the page'), /then at laptop width and at phone width \(390 px\)\. Check/);
   const off = await render({ PREFS_PROTOTYPE_CHECK: 'yes', PREFS_PAGE_PHONE: 'no' });
-  assert.match(sectionOf(off, 'Building'), /at the user's target screen size first, then at laptop width\. Check that font sizes/);
+  assert.match(off, /at the user's target screen size first, then at laptop width\. Check that font sizes/);
   assert.doesNotMatch(off, /390|phone/i, 'no phone width is left anywhere');
 });
 
 test('a page is created without a tab, checked, then opened once at hand-over, and nothing opens while the user is away', async () => {
-  const decisions = sectionOf(await render(), 'Decisions');
-  assert.match(decisions, /Create review pages without launching a browser tab \(`--no-open`, or `LAVISH_AXI_NO_OPEN=1`\)/);
-  assert.match(decisions, /never re-run the open command just to refresh a page/);
-  assert.match(decisions, /Once the page is checked, open it once in the user's browser at hand-over and give the link/);
-  assert.match(decisions, /While the user is away, open nothing; the link goes into the return brief\./);
-  assert.doesNotMatch(decisions, /never open one automatically/, 'the older rule that forbade every open is gone');
+  const opening = sectionOf((await renderHomes())['review-pages'], 'Opening and sending');
+  assert.match(opening, /Create review pages without launching a browser tab \(`--no-open`, or `LAVISH_AXI_NO_OPEN=1`\)/);
+  assert.match(opening, /Never re-run the open command just to refresh a page/);
+  assert.match(opening, /Once the page is checked, open it once in the user's browser at hand-over and give the link/);
+  assert.match(opening, /While the user is away, open nothing; the link goes into the return brief\./);
+  assert.doesNotMatch(opening, /never open one automatically/, 'the older rule that forbade every open is gone');
   assert.doesNotMatch(await render({ PREFS_AWAY_MODE: 'no' }), /While the user is away, open nothing/);
   assert.doesNotMatch(await render({ PREFS_DECISIONS: 'chat' }), /open it once/);
 });
 
 test('planning effort is checked, and the agent decides process questions from the primary source', async () => {
-  const text = await render();
-  assert.match(sectionOf(text, 'AI and model use'), /check the effort level the agent doing it actually runs at\. An agent on a lower effort than these rules pick hands that work to a worker at that effort/);
+  const homes = await renderHomes();
+  const models = sectionOf(homes['models-and-research'], 'Models and effort');
+  assert.match(models, /check the effort level the agent doing it actually runs at\./);
+  assert.match(models, /An agent on a lower effort than these rules pick hands that work to a worker at that effort/);
   assert.doesNotMatch(await render({ PREFS_MODEL_ROUTING: 'economical' }), /hands that work to a worker at that effort/);
-  assert.match(sectionOf(text, 'Decisions'), /For a process or tooling question the user cannot answer, read the primary source/);
+  assert.match(sectionOf(homes.core, 'Decisions'), /For a process or tooling question the user cannot answer, read the primary source/);
   assert.doesNotMatch(await render({ PREFS_AUTONOMY: 'ask' }), /read the primary source/);
 });
 
 test('the capable model rules: research, polish, investigations and plans on high effort, a new look on extra-high, small tasks on Sonnet high', async () => {
-  const models = sectionOf(await render(), 'AI and model use');
-  assert.match(models, /Run research on the most capable model at high effort\. It plans and checks the work, hands bulk fetching to the bulk research CLI, reading and summaries to the reader subagent, and drafting to a faster model at high effort\./);
+  const models = sectionOf((await renderHomes())['models-and-research'], 'Models and effort');
+  assert.match(models, /Run research on the most capable model at high effort\./);
+  assert.match(models, /The research agent plans and checks the work\. It hands bulk fetching to the bulk research CLI, reading and summaries to the reader subagent, and drafting to a faster model at high effort\./);
   assert.match(models, /to a faster model at high effort, and re-run it on the most capable model at medium effort after a failed check\./);
   assert.doesNotMatch(models, /raise it to high after a failed check/);
   assert.match(models, /Give the design of a new frontend look that is not yet settled \(screens, look, layout, clickable journeys\) to the most capable model at extra-high effort\./);
   assert.match(models, /Give polish of a prototype whose look is already settled \(spacing, copy, states, small layout fixes, fixes from a usability check\) to the most capable model at high effort\./);
-  assert.match(models, /Give investigations, diagnosis and plans to the most capable model at high effort\. Re-run the same task at extra-high effort when the result is weak or the cause is hard to find, and fix or build at medium effort once the cause is proven or the plan is settled\./);
+  assert.match(models, /Give investigations, diagnosis and plans to the most capable model at high effort\./);
+  assert.match(models, /Re-run an investigation, diagnosis or plan at extra-high effort when the result is weak or the cause is hard to find\. Fix or build at medium effort once the cause is proven or the plan is settled\./);
   assert.doesNotMatch(models, /investigations, diagnosis and plans to the most capable model at extra-high effort/);
   assert.doesNotMatch(models, /investigation, research or design work starts/);
   assert.match(models, /Before planning, investigation or design work starts/);
@@ -250,20 +261,21 @@ test('the capable model rules: research, polish, investigations and plans on hig
 });
 
 test('a fleet checks live state, keeps work moving, and names windows by their labels; a deadline never skips a check', async () => {
-  const text = await render();
-  const fleet = sectionOf(text, 'Working with a fleet');
-  assert.match(fleet, /check its live state first/);
-  assert.match(fleet, /start the next step at once/);
-  assert.match(fleet, /Raise any wait longer than 30 minutes/);
-  assert.match(fleet, /name the window by the labels the user sees on screen/);
-  assert.match(sectionOf(text, 'Safety'), /keep every normal check and work in dependency order/);
+  const homes = await renderHomes();
+  const live = sectionOf(homes['status-and-away'], 'Live state and the queue');
+  assert.match(live, /check its live state first/);
+  assert.match(live, /start the next step at once/);
+  assert.match(live, /Raise any wait longer than 30 minutes/);
+  assert.match(sectionOf(homes['running-workers'], 'Briefing and landing'), /name the window by the labels the user sees on screen/);
+  assert.match(sectionOf(homes['running-workers'], 'Repositories and deadlines'), /keep every normal check and work in dependency order/);
   assert.doesNotMatch(await render({ PREFS_HABITS: 'no' }), /dependency order/);
 });
 
 test('every project reply ends with where the work is, and it closes the reply together with the next actions', async () => {
   const text = await render();
-  const habit = sectionOf(text, 'Language and tone');
-  const closing = sectionOf(text, 'Ideas and priorities');
+  const core = (await renderHomes()).core;
+  const habit = sectionOf(core, 'How to reply');
+  const closing = sectionOf(core, 'Focus and priorities');
   assert.match(habit, /End every reply with the next actions, the user's first\./);
   assert.match(closing, /End every project reply with one plain line that says where the work is on the map, the next step, who takes it and when\./);
   assert.match(closing, /Name the step in words, never as a count such as "step 3 of 6"\. Say when as an event or a day, not a clock time\./);
@@ -275,18 +287,106 @@ test('every project reply ends with where the work is, and it closes the reply t
   assert.match(await render({ PREFS_ORIENT: 'no' }), /End every reply with the next actions/);
 });
 
+test('the core file stays short: 40 rules or fewer, under 80 lines and about 2,000 tokens, plain bullets under a few headings, and a pointer to each skill', async () => {
+  const vault = { path: path.join(os.tmpdir(), 'vault'), scripts: true, search: true };
+  const ctx = await answer({ PREFS_DELEGATE_RETRIEVAL: 'agy' });
+  const core = renderPreferences((key) => ctx.get(key), { cardsPath: CARDS, hideKitPath: path.join(os.tmpdir(), 'hide-kit.js'), vault });
+  const lines = core.trimEnd().split('\n');
+  const headings = lines.filter((l) => l.startsWith('## '));
+  const pointers = sectionOf(core, 'Rules that load when needed').split('\n').filter((l) => l.startsWith('- '));
+  const rules = lines.filter((l) => l.startsWith('- ')).length - pointers.length;
+  assert.ok(rules <= 40, `${rules} rules`);
+  assert.ok(lines.length <= 80, `${lines.length} lines`);
+  assert.ok(core.length / 4 < 2000, `about ${Math.round(core.length / 4)} tokens`);
+  assert.ok(headings.length <= 7, headings.join(', '));
+  assert.doesNotMatch(core, /^\|/m, 'no tables');
+  assert.doesNotMatch(core, /```/, 'no code blocks');
+  assert.doesNotMatch(core, /—/, 'no em dashes');
+  assert.deepEqual(pointers.map((l) => l.slice(2, l.indexOf(':'))), Object.keys(PREFERENCE_SKILLS));
+});
+
+test('each skill file has a name, a plain description that names its triggers, and stays well under 500 lines', async () => {
+  const skills = renderPreferenceSkills((key) => ALL_ON[key] ?? (key.startsWith('PREFS_') ? true : undefined), { cardsPath: CARDS });
+  const all = await renderHomes();
+  assert.deepEqual(Object.keys(skills), Object.keys(PREFERENCE_SKILLS));
+  for (const [name, text] of Object.entries({ ...skills, ...Object.fromEntries(Object.entries(all).filter(([n]) => n !== 'core')) })) {
+    const [, front] = text.match(/^---\n([\s\S]*?)\n---\n/) || [];
+    assert.ok(front, `${name} has frontmatter`);
+    assert.match(front, new RegExp(`^name: ${name}$`, 'm'));
+    const description = front.match(/^description: (.*)$/m)[1];
+    assert.ok(description.length <= 1024 && /\bUse (before|for|when|whenever)\b/.test(description), `${name}: ${description}`);
+    assert.ok(text.split('\n').length < 500, name);
+    assert.doesNotMatch(text, /^\|/m, `${name} has no tables`);
+  }
+});
+
+test('every rule lives in exactly one home, as test/rule-homes.mjs lists, so the split loses none', async () => {
+  const yes = Object.fromEntries(preferences.questions.filter((q) => q.type === 'confirm').map((q) => [q.key, 'yes']));
+  const opts = { cardsPath: CARDS, hideKitPath: path.join(os.tmpdir(), 'hide-kit.js'), decisionsPath: path.join(os.tmpdir(), 'decisions.md'), vault: { path: path.join(os.tmpdir(), 'vault'), scripts: true, search: true } };
+  const bulletsOf = (text) => text.split('\n').filter((l) => l.startsWith('- ')).map((l) => l.slice(2));
+  const homesFor = async (given) => {
+    const homes = await renderHomes({ ...yes, ...ALL_ON, ...given }, opts);
+    const core = bulletsOf(homes.core).filter((b) => !Object.keys(PREFERENCE_SKILLS).some((n) => b.startsWith(`${n}: `)));
+    return { ...Object.fromEntries(Object.entries(homes).map(([n, t]) => [n, bulletsOf(t)])), core };
+  };
+  const says = (row) => row.says.map((p) => p.text ?? p);
+
+  // With every rule on, each bullet in each home belongs to exactly one row, and no row is missing.
+  const all = await homesFor({});
+  for (const [home, list] of Object.entries(all)) {
+    const phrases = RULE_HOMES.filter((r) => !r.when && r.home === home).flatMap(says);
+    for (const bullet of list) assert.equal(phrases.filter((p) => bullet.includes(p)).length, 1, `${home}: ${bullet}`);
+    assert.equal(list.length, phrases.length, `${home} has ${list.length} bullets for ${phrases.length} listed`);
+  }
+  // A rule that another answer switches on is written in its home under that answer.
+  for (const row of RULE_HOMES.filter((r) => r.when)) {
+    const list = (await homesFor(row.when))[row.home] ?? [];
+    for (const phrase of says(row)) assert.ok(list.some((b) => b.includes(phrase)), `${row.home} under ${JSON.stringify(row.when)}: ${phrase}`);
+  }
+  // Both reply-ending rules stay in the core file, word for word.
+  assert.ok(all.core.includes("End every reply with the next actions, the user's first."));
+  assert.ok(all.core.some((b) => b.startsWith('End every project reply with one plain line')));
+});
+
+test('captain.md holds the core rules and every skill\'s rules in one file, with no pointers to skills', async () => {
+  const ctx = await answer();
+  const get = (key) => ctx.get(key);
+  const captain = renderCaptain(get, { cardsPath: CARDS });
+  const files = [renderPreferences(get, { cardsPath: CARDS }), ...Object.values(renderPreferenceSkills(get, { cardsPath: CARDS }))];
+  const rules = files.flatMap((t) => t.split('\n').filter((l) => l.startsWith('- ') && !/^- [a-z-]+: /.test(l)));
+  for (const line of rules) assert.ok(captain.includes(line), line);
+  assert.equal(captain.split('\n').filter((l) => l.startsWith('- ')).length, rules.length);
+  assert.doesNotMatch(captain, /Rules that load when needed/);
+  for (const skill of Object.values(PREFERENCE_SKILLS)) assert.match(captain, new RegExp(`^## ${skill.title}$`, 'm'));
+});
+
+test('the skills are written only with the claude target', { skip: process.platform === 'win32' }, async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    await installInto(home, { PREFS_TARGETS: 'firstmate', PREFS_PRIVATE_RULES: path.join(home, 'missing.md') });
+    assert.ok(fs.existsSync(path.join(home, 'fm', 'data', 'captain.md')));
+    assert.ok(!fs.existsSync(path.join(home, '.claude', 'skills')), 'no skills without the claude target');
+    await installInto(home, { PREFS_TARGETS: 'claude', PREFS_PRIVATE_RULES: path.join(home, 'missing.md') });
+    for (const name of Object.keys(PREFERENCE_SKILLS)) assert.ok(fs.existsSync(path.join(home, '.claude', 'skills', name, 'SKILL.md')), name);
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('the route starts a map at once for an effort over several sessions, and wayfinder tracks it on request', async () => {
-  const building = sectionOf(await render({ PREFS_ROUTE: 'yes' }), 'Building');
+  const building = sectionOf((await renderHomes({ PREFS_ROUTE: 'yes' }))['running-workers'], 'Building something new');
   assert.match(building, /If the effort takes more than one session, start a map at once without being asked and show it\./);
   assert.match(building, /When the user types \/wayfinder, wayfinder tracks the map as tickets\./);
 });
 
 test('preparing the next stage while a review page waits is the user\'s choice, off by default', async () => {
   const line = 'While waiting, prepare the next stage, but do not start it before approval.';
-  const off = sectionOf(await render(), 'Review page delivery');
+  const off = sectionOf((await renderHomes())['review-pages'], 'Opening and sending');
   assert.match(off, /then stand by quietly until the user answers\./);
   assert.ok(!off.includes(line));
-  const on = sectionOf(await render({ PREFS_PAGE_PREPARE_NEXT: 'yes' }), 'Review page delivery');
+  const on = sectionOf((await renderHomes({ PREFS_PAGE_PREPARE_NEXT: 'yes' }))['review-pages'], 'Opening and sending');
   assert.match(on, /then stand by quietly until the user answers\./);
   assert.ok(on.includes(line));
   assert.ok(on.indexOf(line) > on.indexOf('stand by quietly'), 'the line follows the page-first rule');
@@ -297,7 +397,7 @@ test('the Simplified Technical English style is a choice that adds its rules and
   const ctx = await answer();
   assert.equal(ctx.get('PREFS_WRITING_STYLE'), 'plain');
   assert.doesNotMatch(await render(), /Simplified Technical English/);
-  const tone = sectionOf(await render({ PREFS_WRITING_STYLE: 'ste' }), 'Language and tone');
+  const tone = sectionOf((await renderHomes({ PREFS_WRITING_STYLE: 'ste' })).core, 'House style');
   assert.match(tone, /based on Simplified Technical English \(ASD-STE100\)/);
   assert.match(tone, /One instruction per sentence, as a command\. Put the condition first/);
   assert.match(tone, /20 words or fewer in steps, 25 or fewer in explanations/);
@@ -310,7 +410,7 @@ test('an earlier PREFS_GRILL_ON_GAPS answer carries over to PREFS_GRILL', async 
   assert.equal((await answer({ PREFS_GRILL_ON_GAPS: 'yes' })).get('PREFS_GRILL'), 'gaps');
   assert.equal((await answer({ PREFS_GRILL_ON_GAPS: 'no' })).get('PREFS_GRILL'), 'off');
   assert.equal((await answer({ PREFS_GRILL_ON_GAPS: 'yes', PREFS_GRILL: 'every' })).get('PREFS_GRILL'), 'every');
-  const gaps = sectionOf(await render({ PREFS_GRILL_ON_GAPS: 'yes' }), 'Decisions');
+  const gaps = sectionOf((await renderHomes({ PREFS_GRILL_ON_GAPS: 'yes' })).core, 'Decisions');
   assert.match(gaps, /only when it has a real gap/);
   assert.doesNotMatch(gaps, /Every round of questions/);
   assert.doesNotMatch(await render({ PREFS_GRILL: 'off' }), /grilling method|real gap/);
@@ -495,13 +595,21 @@ test('a real run writes the private lines into all three files, warns about an u
     assert.equal(ctx.record.failures.length, 0, out);
     const prefs = fs.readFileSync(path.join(home, '.claude', 'rules', 'working-preferences.md'), 'utf8');
     assert.match(prefs, /- Sessions rule as a paragraph\./);
-    assert.equal(fs.readFileSync(path.join(home, 'fm', 'data', 'captain.md'), 'utf8'), prefs);
+    const captain = fs.readFileSync(path.join(home, 'fm', 'data', 'captain.md'), 'utf8');
+    assert.match(captain, /- Another sessions paragraph\.\n$/, 'the private lines close captain.md too');
+    for (const name of Object.keys(PREFERENCE_SKILLS)) {
+      const skill = fs.readFileSync(path.join(home, '.claude', 'skills', name, 'SKILL.md'), 'utf8');
+      assert.match(prefs, new RegExp(`^- ${name}: `, 'm'), `the core file points to ${name}`);
+      // captain.md holds every skill's rules, so Firstmate needs no skills.
+      for (const line of skill.split('\n').filter((l) => l.startsWith('- '))) assert.ok(captain.includes(line), line);
+      assert.doesNotMatch(skill, /Sessions rule|Everywhere rule/, 'private lines stay in the core file');
+    }
     const brief = fs.readFileSync(path.join(home, 'fm', 'config', 'brief-include.md'), 'utf8');
     assert.match(brief, /- Workers rule\./);
     assert.ok(brief.includes(path.join(home, '.claude', 'skills', 'workflow-playbook', 'principles', 'bin', 'principle-check.mjs')), 'the brief names the installed checker');
     assert.match(fs.readFileSync(path.join(home, 'fm', 'data', 'captain-shared.md'), 'utf8'), /- Second mates rule\./);
     const again = (await installInto(home, { PREFS_PRIVATE_RULES: file })).out;
-    assert.equal((again.match(/is already up to date/g) || []).length, 4, again);
+    assert.equal((again.match(/is already up to date/g) || []).length, 4 + Object.keys(PREFERENCE_SKILLS).length, again);
     assert.doesNotMatch(again, /wrote|created/i);
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
@@ -606,7 +714,7 @@ test('turning the taste preset on writes its rules into the rules file and its E
     const prefs = fs.readFileSync(path.join(home, '.claude', 'rules', 'working-preferences.md'), 'utf8');
     const taste = sectionOf(prefs, 'Taste preset');
     for (const line of [...rules.everywhere, ...rules.sessions]) assert.ok(taste.includes(`- ${line}`), line);
-    assert.equal(fs.readFileSync(path.join(home, 'fm', 'data', 'captain.md'), 'utf8'), prefs);
+    assert.ok(fs.readFileSync(path.join(home, 'fm', 'data', 'captain.md'), 'utf8').includes(taste.trimEnd()), 'captain.md has the same taste section');
     const brief = sectionOf(fs.readFileSync(path.join(home, 'fm', 'config', 'brief-include.md'), 'utf8'), 'Taste preset');
     for (const line of rules.everywhere) assert.ok(brief.includes(`- ${line}`), line);
     for (const line of rules.sessions) assert.ok(!brief.includes(line), `a session habit stays out of worker briefs: ${line}`);
@@ -646,13 +754,14 @@ test('the card template carries an exact copy of the hide tray, docked under the
 });
 
 test('the review-page rules tell every prototype, slide or doc page to carry the hide tray', () => {
-  const text = renderPreferences((key) => ({ PREFS_DECISIONS: 'both' })[key], { cardsPath: CARDS, hideKitPath: '/x/hide-kit.js' });
-  assert.match(sectionOf(text, 'Review pages'), /Every Lavish prototype, slide or doc page carries the hide tray[^\n]*`\/x\/hide-kit\.js`[^\n]*`HideKit\.attach\(document\.body\)`/);
-  const none = renderPreferences((key) => ({ PREFS_DECISIONS: 'tool' })[key], { cardsPath: null, hideKitPath: null });
+  const text = renderPreferenceSkills((key) => ({ PREFS_DECISIONS: 'both' })[key], { cardsPath: CARDS, hideKitPath: '/x/hide-kit.js' })['review-pages'];
+  assert.match(sectionOf(text, 'Building the page'), /Every Lavish prototype, slide or doc page carries the hide tray[^\n]*`\/x\/hide-kit\.js`[^\n]*`HideKit\.attach\(document\.body\)`/);
+  const get = (key) => ({ PREFS_DECISIONS: 'tool' })[key];
+  const none = [renderPreferences(get, { cardsPath: null, hideKitPath: null }), ...Object.values(renderPreferenceSkills(get, { cardsPath: null, hideKitPath: null }))].join('\n');
   assert.doesNotMatch(none, /hide tray/);
 });
 
-test('a dry run plans the card template and the hide tray script', { skip: process.platform === 'win32' }, () => {
+test('a dry run plans the card template, the hide tray script and the five preference skills', { skip: process.platform === 'win32' }, () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-kit-'));
   try {
     const answers = path.join(home, 'answers.env');
@@ -666,7 +775,10 @@ test('a dry run plans the card template and the hide tray script', { skip: proce
     const dir = path.join(home, '.config', 'ai-workstation-setup');
     assert.ok(r.stdout.includes(`would write ${path.join(dir, 'decision-cards.html')}`), r.stdout);
     assert.ok(r.stdout.includes(`would write ${path.join(dir, 'hide-kit.js')}`), r.stdout);
-    assert.ok(!fs.existsSync(dir), 'a dry run writes nothing');
+    for (const name of Object.keys(PREFERENCE_SKILLS)) {
+      assert.ok(r.stdout.includes(`would write ${path.join(home, '.claude', 'skills', name, 'SKILL.md')}`), `${name}: ${r.stdout}`);
+    }
+    assert.ok(!fs.existsSync(dir) && !fs.existsSync(path.join(home, '.claude')), 'a dry run writes nothing');
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
@@ -681,7 +793,7 @@ test('a real run writes the hide tray script next to the card template', { skip:
     const dir = path.join(home, '.config', 'ai-workstation-setup');
     assert.equal(fs.readFileSync(path.join(dir, 'hide-kit.js'), 'utf8'), fs.readFileSync(KIT, 'utf8'));
     assert.match(fs.readFileSync(path.join(dir, 'decision-cards.html'), 'utf8'), /HIDE-KIT START/);
-    assert.match(fs.readFileSync(path.join(home, '.claude', 'rules', 'working-preferences.md'), 'utf8'), new RegExp(`paste \`${path.join(dir, 'hide-kit.js').replace(/[.\\]/g, '\\$&')}\``));
+    assert.match(fs.readFileSync(path.join(home, '.claude', 'skills', 'review-pages', 'SKILL.md'), 'utf8'), new RegExp(`Paste \`${path.join(dir, 'hide-kit.js').replace(/[.\\]/g, '\\$&')}\``));
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
     fs.rmSync(home, { recursive: true, force: true });
