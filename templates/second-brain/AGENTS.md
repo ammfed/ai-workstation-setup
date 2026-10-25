@@ -23,6 +23,7 @@ Entity folders hold one fixed `type` each:
 - `journal/` - one note per day, filename `YYYY-MM-DD.md` (`type: daily`)
 - `reviews/` - periodic review notes, filename starts `YYYY-MM-DD ` (`type: review`)
 - `sources/` - one note per raw file ingested (`type: source`, plus the provenance keys below)
+- `preferences/` - optional, one note per project on how to work on it (`type: preference`)
 
 Everything else:
 
@@ -32,6 +33,8 @@ Everything else:
 - `bin/` - the vault's scripts (index, check, ingest, housekeeping, and the optional tools)
 - `prompts/` - the prompts the scripts hand to your agent CLI, one per job
 - `.ingest/ledger.tsv` - what has been ingested; the first `bin/ingest.mjs` run creates it
+- `maps/`, `docs/`, `data/`, `systemd/`, `tests/`, `.cache/` - optional folders for generated
+  maps, housekeeping docs and the vault's own jobs; they hold no notes and `bin/check.mjs` skips them
 
 `START-HERE.md`, `MAP.md`, `AGENTS.md`, `CLAUDE.md` and a folder's own `README.md` carry no note
 frontmatter, and `bin/check.mjs` skips them. Raw source files live **outside** this vault, under
@@ -60,7 +63,7 @@ Every note under a life-area folder or an entity folder MUST open with this fron
 
 ```yaml
 title:    <string>
-type:     source|topic|person|project|decision|meeting|daily|review
+type:     source|topic|person|project|decision|meeting|daily|review|preference
 status:   draft|current|superseded|archived
 pillar:   [{{PILLARS_INLINE}}]   # list, at least one value
 lang:     {{LANGS}}

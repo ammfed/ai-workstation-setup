@@ -7,15 +7,20 @@ import { fileURLToPath } from 'node:url';
 // Folders that hold notes but are not life areas. Anything else at the top level
 // that holds .md files is treated as a life-area folder, so renaming or adding one
 // needs no change here.
-export const ENTITY_DIRS = ['projects', 'people', 'decisions', 'meetings', 'reviews', 'journal', 'sources'];
+// preferences/ is optional: a grown vault keeps one preference note per project there.
+export const ENTITY_DIRS = ['projects', 'people', 'decisions', 'meetings', 'reviews', 'journal', 'sources', 'preferences'];
 // research/ is a separate research track, not a life area: its top-level files are queue
 // tables and a proposals list. Its notes live in research/notes/ and are link targets only,
-// see linkTargets().
-export const NON_NOTE_DIRS = ['bin', 'templates', 'prompts', '.ingest', '.obsidian', '.git', '.trash', 'restricted', 'research'];
+// see linkTargets(). A grown vault also keeps generated maps/ and housekeeping docs/, and the
+// data/, systemd/, tests/ and .cache/ of its own jobs; none of them hold notes.
+export const NON_NOTE_DIRS = [
+  'bin', 'templates', 'prompts', '.ingest', '.obsidian', '.git', '.trash', 'restricted', 'research',
+  'maps', 'docs', 'data', 'systemd', 'tests', '.cache',
+];
 export const RESEARCH_NOTES_DIR = 'research/notes';
 export const SKIP_FILES = ['README.md', 'MAP.md', 'START-HERE.md', 'AGENTS.md', 'CLAUDE.md'];
 
-export const TYPES = ['source', 'topic', 'person', 'project', 'decision', 'meeting', 'daily', 'review'];
+export const TYPES = ['source', 'topic', 'person', 'project', 'decision', 'meeting', 'daily', 'review', 'preference'];
 export const STATUSES = ['draft', 'current', 'superseded', 'archived'];
 export const STAGES = ['idea', 'active', 'on-hold', 'done'];
 export const REQUIRED = ['title', 'type', 'status', 'pillar', 'lang', 'created', 'updated'];
@@ -25,6 +30,7 @@ export const SOURCE_KEYS = ['source', 'ingested', 'sha256', 'filetype'];
 export const FOLDER_TYPE = {
   people: 'person', projects: 'project', decisions: 'decision',
   meetings: 'meeting', journal: 'daily', reviews: 'review', sources: 'source',
+  preferences: 'preference',
 };
 
 export const DATED_DIRS = ['meetings', 'journal', 'reviews'];
