@@ -205,7 +205,7 @@ export async function writeClaudeFiles(ctx, vault, pillars) {
   // bin/search only when it is there or this run writes it.
   const searchTool = tools.includes('search')
     && (fs.existsSync(path.join(vault, 'bin', 'search')) || !isExistingVault(vault) || ctx.get('VAULT_REFRESH'));
-  const search = `- Search it with \`rg -i "phrase" "${vault}"\`${searchTool ? `, or ${bin('search', '"terms"')} for ranked\n  results (narrow with \`--type\` or \`--folder\`)` : ''}.`;
+  const search = `- Search it with \`rg -i "phrase" "${vault}"\`${searchTool ? `, or ${searchCommand(vault)} for ranked\n  results (narrow with \`--type\` or \`--folder\`)` : ''}.`;
   const edit = [
     scripts
       ? `- Read only: do not edit vault notes by hand. Its own scripts (${writers}) write it, and\n  ${contract} is the contract if a task needs a change there.`
@@ -234,6 +234,21 @@ export async function writeClaudeFiles(ctx, vault, pillars) {
   const dir = claudeDir(ctx);
   await ctx.writeFile(path.join(dir, 'rules', 'second-brain.md'), ctx.template('second-brain/claude/rules.md', vars, earlier), { onConflict: 'ask' });
   ctx.removeShipped(path.join(dir, 'skills', 'second-brain', 'SKILL.md'), SKILL_RETIRED);
+}
+
+/**
+ * The command the rule gives for the vault's bin/search. The node entry this setup ships is run
+ * as `node "<file>"`, which also works on Windows. A bin/search the vault wrote itself (a bash
+ * script, say) has no node shebang, so it is called by its own path, as it is meant to be run.
+ * A file this run is about to write is the node entry.
+ */
+export function searchCommand(vault) {
+  const file = path.join(vault, 'bin', 'search');
+  let first = '#!/usr/bin/env node';
+  try {
+    first = fs.readFileSync(file, 'utf8').split(/\r?\n/, 1)[0];
+  } catch { /* not there yet: this run writes the node entry */ }
+  return /^#!.*\bnode\b/.test(first) ? `\`node "${file}" "terms"\`` : `\`"${file}" "terms"\``;
 }
 
 /** A vault that is already a git repository with at least one commit keeps its own tooling and notes. */

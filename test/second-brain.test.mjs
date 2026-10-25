@@ -376,6 +376,34 @@ test('claude files: in an existing vault the rule names bin/search only when the
   }
 });
 
+test('claude files: a bin/search that is not a node script is called by its own path, the shipped node entry by node', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-claude-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const dir = path.join(home, 'my vault');
+    const file = path.join(dir, 'bin', 'search');
+    fs.mkdirSync(path.join(dir, 'bin'), { recursive: true });
+    git(dir, 'init', '-q');
+    const rules = claudeFile(home, 'rules', 'second-brain.md');
+    const searchLine = () => fs.readFileSync(rules, 'utf8').split('\n').find((l) => l.includes('Search it with'));
+
+    fs.writeFileSync(file, '#!/usr/bin/env bash\nexec python3 "$(dirname "$0")/search.py" "$@"\n');
+    git(dir, 'add', '.');
+    git(dir, 'commit', '-qm', 'start');
+    await claudeFilesInto(home);
+    assert.ok(searchLine().includes(`\`"${file}" "terms"\``), 'the bash script is called by its path');
+    assert.doesNotMatch(searchLine(), /node/, 'no node prefix for a bash script');
+
+    fs.rmSync(path.join(home, '.claude'), { recursive: true });
+    fs.writeFileSync(file, '#!/usr/bin/env node\n// the vault\'s own node entry\n');
+    await claudeFilesInto(home);
+    assert.ok(searchLine().includes(`\`node "${file}" "terms"\``), 'a node script keeps the node prefix');
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('claude files: by default the rule says vault content never goes to an outside model or service', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-claude-'));
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
