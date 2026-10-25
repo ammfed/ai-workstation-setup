@@ -401,7 +401,7 @@ Why: one supervisor that checks every phase against the same method catches drif
 
    Why: a rebuild that forgets one ruling repeats the mistake that ruling fixed, and a compaction without a save loses what the owner taught.
 2. **Status the owner can act on.**
-   - Follow the status-and-away skill for the order, the headline counts and the Links line.
+   - Follow the status-and-away skill for status replies.
 
    Why: a status built from memory hides stalls, and a long status buries the owner's asks.
 

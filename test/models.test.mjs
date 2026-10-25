@@ -372,7 +372,7 @@ test('the workflow-playbook skill points to the rule skills for merges, status a
   assert.match(skill, /Merge follows the merge rule in working-preferences\.md\./);
   assert.doesNotMatch(skill, /if the owner has granted that/);
   const status = skill.slice(skill.indexOf('2. **Status the owner can act on.**'), skill.indexOf('## 9.'));
-  assert.match(status, /status-and-away skill for the order, the headline counts and the Links line/);
+  assert.match(status, /Follow the status-and-away skill for status replies\./);
   assert.match(skill, /a strong model from another family through an agent CLI this setup installed/);
   assert.doesNotMatch(skill, /ChatGPT/);
   assert.match(skill, /`docs\/route\.md` in the setup repository/);
