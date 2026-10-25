@@ -57,6 +57,12 @@ function checkerPath(ctx) {
   return (ctx.values.SKILLS || []).includes('workflow-playbook') || fs.existsSync(file) ? file : null;
 }
 
+// The vault folder when the second-brain module runs now or has a saved answer, else null.
+function vaultPath(ctx) {
+  const vault = ctx.values.VAULT_PATH ?? ctx.answers.get('VAULT_PATH');
+  return vault ? ctx.path(vault) : null;
+}
+
 function cardsPath(ctx) {
   return path.join(ctx.home, '.config', 'ai-workstation-setup', 'decision-cards.html');
 }
@@ -340,7 +346,7 @@ export default {
     const log = ctx.get('PREFS_DECISIONS_LOG');
     const privateRules = readPrivateRules(ctx);
     const tastePreset = readTastePreset(ctx);
-    const text = renderPreferences((key) => ctx.get(key), { cardsPath: cards, decisionsPath: log ? ctx.path(log) : null, privateRules, tastePreset });
+    const text = renderPreferences((key) => ctx.get(key), { cardsPath: cards, decisionsPath: log ? ctx.path(log) : null, privateRules, tastePreset, vaultPath: vaultPath(ctx) });
     for (const name of targets) {
       const target = TARGETS[name];
       await ctx.step(name, () => {
@@ -353,7 +359,7 @@ export default {
       const home = firstmateHome(ctx);
       // config/brief-include.md (Firstmate's docs/configuration.md "Home brief include") is appended
       // to every worker brief: house style, helper model, build rules, principle checker, taste preset, private lines.
-      const brief = renderBriefInclude((key) => ctx.get(key), { checkerPath: checkerPath(ctx), privateRules, tastePreset });
+      const brief = renderBriefInclude((key) => ctx.get(key), { checkerPath: checkerPath(ctx), privateRules, tastePreset, vaultPath: vaultPath(ctx) });
       if (brief) await ctx.step('firstmate worker briefs', () => ctx.writeFile(path.join(home, 'config', 'brief-include.md'), brief, { onConflict: 'ask' }));
       // data/captain-shared.md in the main home is copied read-only into every second-mate home.
       const shared = renderCaptainShared(privateRules);

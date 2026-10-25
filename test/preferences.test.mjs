@@ -122,6 +122,35 @@ test('the /kun rule is on by default, in sessions and worker briefs, and can be 
   assert.doesNotMatch(renderBriefInclude((key) => (key === 'PREFS_KUN' ? false : ctx.get(key))), /\/kun/);
 });
 
+test('the vault-first line is in the session rules and the worker brief only when a vault is configured', async () => {
+  const ctx = await answer({ PREFS_TARGETS: 'claude,firstmate' });
+  const get = (key) => ctx.get(key);
+  const vault = path.join(os.tmpdir(), 'notes vault');
+  const line = `Before you start, check the notes vault at \`${vault}\` for past decisions, findings and rulings on the work: read its MAP.md, then use bin/search and bin/related there.`;
+  const prefs = renderPreferences(get, { cardsPath: CARDS, vaultPath: vault });
+  assert.equal(sectionOf(prefs, 'Past decisions'), `## Past decisions\n\n- ${line}\n`);
+  assert.ok(renderBriefInclude(get, { vaultPath: vault }).includes(`## Past decisions\n\n- ${line}\n`));
+  for (const text of [renderPreferences(get, { cardsPath: CARDS }), renderBriefInclude(get), renderBriefInclude(get, { vaultPath: null })]) {
+    assert.doesNotMatch(text, /Past decisions|MAP\.md|bin\/related/);
+  }
+});
+
+test('a real run writes the vault-first line into the rules, the second-brain-free brief stays without it', { skip: process.platform === 'win32' }, async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  const files = [path.join(home, '.claude', 'rules', 'working-preferences.md'), path.join(home, 'fm', 'config', 'brief-include.md')];
+  try {
+    await installInto(home, { PREFS_PRIVATE_RULES: path.join(home, 'missing.md') });
+    for (const f of files) assert.doesNotMatch(fs.readFileSync(f, 'utf8'), /Past decisions/, f);
+    const vault = path.join(home, 'my vault');
+    await installInto(home, { PREFS_PRIVATE_RULES: path.join(home, 'missing.md'), VAULT_PATH: vault });
+    for (const f of files) assert.ok(fs.readFileSync(f, 'utf8').includes(`check the notes vault at \`${vault}\``), f);
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('the route and its build rules are off by default and each writes its own Building rule', async () => {
   assert.doesNotMatch(await render(), /six steps|test-first|GLOSSARY\.md|phone width/);
   const building = sectionOf(
