@@ -36,6 +36,12 @@ appends to `daily-sync.log` (rotated at 512 KB). A quiet run's report is one lin
 daily-sync 2026-01-05 07:30: all quiet (6 check(s), no model calls)
 ```
 
+With a `vault` step, the report ends with one line that counts the agent sessions of the last 7
+days that made a tool call naming the vault, such as
+`vault use: 18 of 451 agent sessions in the last 7 days`. It reads the local Claude session logs
+(`~/.claude/projects`, or `vault.sessionLogs`), keeps only the two counts and copies nothing
+from a session. With no logs it says so instead of printing zero.
+
 When something changed, something new needs you, or anything failed, the same report is
 piped to your `notify` command (for example Firstmate's inbox: `fm-inbox.sh note -`). Drift
 that was already reported is listed as `(still)` and sent again only every `remindDays`.
@@ -52,15 +58,22 @@ passes after a FAILED one sends a short `recovered` note, so the failure does no
 
 | System | How | A missed run |
 | --- | --- | --- |
-| Linux, WSL with systemd | `~/.config/systemd/user/daily-sync.timer`, `Persistent=true` | runs at the next login (or boot, with `loginctl enable-linger`) |
-| Linux or WSL without systemd | a crontab line marked `# ai-workstation-setup daily-sync` (in WSL, cron itself must be started: [docs/windows-wsl.md](windows-wsl.md#systemd-and-the-cron-fallback)) | reported as FAILED by the next run |
+| Linux, WSL with systemd | `~/.config/systemd/user/daily-sync.timer`, `Persistent=true`, plus `daily-sync-catchup.timer` at 09:30 | runs at the next login (or boot, with `loginctl enable-linger`) |
+| Linux or WSL without systemd | crontab lines marked `# ai-workstation-setup daily-sync`, the second one at 09:30 (in WSL, cron itself must be started: [docs/windows-wsl.md](windows-wsl.md#systemd-and-the-cron-fallback)) | the 09:30 run covers it; else reported as FAILED by the next run |
 | macOS | `~/Library/LaunchAgents/local.ai-workstation-setup.daily-sync.plist` | runs on wake; after power-off, reported by the next run |
 | Windows | the installer prints the `schtasks` command to add it | reported by the next run |
+
+The 09:30 catch-up (systemd and cron, when the daily time is earlier than 09:30) runs
+`daily-sync.mjs --catch-up`: it does nothing when a run already succeeded that day, so it only
+starts when the morning run failed or never happened. A run waits first, for at most
+`networkWaitSec` (300 by default; `0` turns it off), until the host of each repo it pulls or
+pushes resolves, because a run at boot can start before DNS works. After the wait it goes on and
+the steps that need the network report their own failure.
 
 ## Pausing and removing it
 
 - Pause: create an empty file named `off` next to `config.json`; delete it to resume.
-- systemd: `systemctl --user disable --now daily-sync.timer`
+- systemd: `systemctl --user disable --now daily-sync.timer daily-sync-catchup.timer`
 - cron: remove the marked line with `crontab -e`
 - macOS: `launchctl bootout gui/$(id -u)/local.ai-workstation-setup.daily-sync`
 - The session-start check is the `daily-sync.mjs --status` entry under `hooks.SessionStart` in
@@ -115,6 +128,12 @@ Paths may start with `~`.
   in the command, or the limit does not apply. The report counts the lines the command prints
   that start `ingesting:` or `ingest (` (for the model-call count) or `<name> failed on:` (for failed files), so
   a daily script should pass the ingest's own output through.
+- When every ingest attempt of a run fails (no success, at least one attempt), the run is
+  `FAILED` with one line, exits non-zero and does not count as a success. When only some fail,
+  the line reads `ingested 3 of 5` and each failed file is listed under "Needs you".
+- When the newest `.eml` file or the newest `bookmarks*.html` export in `vault.rawDir` is more
+  than `vault.staleSourceDays` (14) days old, "Needs you" gets one line naming the source, its
+  age and the action: export a fresh copy into that folder.
 - `vault.limit` is the most raw files a run processes (`DAILY_SYNC_INGEST_LIMIT`, 50 by
   default). Each file is an agent run; the rest wait for the next day. The whole run is
   stopped after `vault.timeoutMin` minutes (120 by default), and the report then says how many
