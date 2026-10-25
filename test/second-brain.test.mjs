@@ -799,11 +799,11 @@ test('housekeeping timer: a unit an earlier version wrote is replaced, an edited
 });
 
 // A grown vault: per-project preference notes in preferences/, plus generated maps/ and
-// housekeeping docs/ (and data/, systemd/, tests/, .cache/) that carry no note frontmatter.
+// housekeeping docs/ and job data/ that carry no note frontmatter.
 function addGrownFolders(root) {
   fs.mkdirSync(path.join(root, 'preferences'));
   fs.writeFileSync(path.join(root, 'preferences', 'Example Project.md'), note('Example Project', 'preference', 'Keep replies short.'));
-  for (const d of ['maps', 'docs', 'data', 'systemd', 'tests', '.cache']) {
+  for (const d of ['maps', 'docs', 'data']) {
     fs.mkdirSync(path.join(root, d));
     fs.writeFileSync(path.join(root, d, 'notes.md'), '# Generated\n\n- a line with no frontmatter\n');
   }
@@ -815,7 +815,7 @@ test('check: a grown vault with preferences/, maps/ and docs/ checks clean', () 
     addGrownFolders(root);
     const r = node(root, 'check.mjs', []);
     assert.equal(r.status, 0, r.stdout + r.stderr);
-    assert.doesNotMatch(r.stdout, /maps|docs|data|systemd|tests|\.cache|preference/);
+    assert.doesNotMatch(r.stdout, /maps|docs|data|preference/);
   } finally {
     removeVault(root);
   }

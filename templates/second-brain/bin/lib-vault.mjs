@@ -11,11 +11,11 @@ import { fileURLToPath } from 'node:url';
 export const ENTITY_DIRS = ['projects', 'people', 'decisions', 'meetings', 'reviews', 'journal', 'sources', 'preferences'];
 // research/ is a separate research track, not a life area: its top-level files are queue
 // tables and a proposals list. Its notes live in research/notes/ and are link targets only,
-// see linkTargets(). A grown vault also keeps generated maps/ and housekeeping docs/, and the
-// data/, systemd/, tests/ and .cache/ of its own jobs; none of them hold notes.
+// see linkTargets(). A grown vault also keeps generated maps/, housekeeping docs/ and the
+// data/ of its own jobs; none of them hold notes.
 export const NON_NOTE_DIRS = [
   'bin', 'templates', 'prompts', '.ingest', '.obsidian', '.git', '.trash', 'restricted', 'research',
-  'maps', 'docs', 'data', 'systemd', 'tests', '.cache',
+  'maps', 'docs', 'data',
 ];
 export const RESEARCH_NOTES_DIR = 'research/notes';
 export const SKIP_FILES = ['README.md', 'MAP.md', 'START-HERE.md', 'AGENTS.md', 'CLAUDE.md'];
