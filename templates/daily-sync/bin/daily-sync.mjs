@@ -420,7 +420,9 @@ function vaultUse(v) {
   const logs = expandHome(v.sessionLogs || path.join(os.homedir(), '.claude', 'projects'));
   const vp = expandHome(v.path);
   const since = Date.now() - 7 * 24 * HOUR;
-  const named = new RegExp(`(?:${[vp, tilde(vp)].map(escapeRe).join('|')})(?![\\w-])`);
+  // The logs are JSON, where a Windows path has its backslashes doubled, so both spellings are looked for.
+  const spellings = [...new Set([vp, tilde(vp)].flatMap((p) => [p, JSON.stringify(p).slice(1, -1)]))];
+  const named = new RegExp(`(?:${spellings.map(escapeRe).join('|')})(?![\\w-])`);
   let sessions = 0;
   let used = 0;
   try {
