@@ -48,3 +48,16 @@ same run: `bin/check.mjs` fails on a link that resolves to nothing.
 
 Run `node bin/check.mjs` and fix anything it reports. A run that leaves the vault failing its
 own contract is a failed run.
+
+## How this job runs
+
+`bin/ingest.mjs` runs you once per new file, then records the file in `.ingest/ledger.tsv`:
+
+- A file whose sha256 is already in the ledger under another name is a duplicate. It is
+  ledgered `duplicate-of:<original>` without a second agent run.
+- A file whose path was ledgered before but now hashes differently is a revision: you update
+  the existing `sources/` note in place (mode `revision`), and the row is ledgered `updated`.
+- A file you do not finish within `--timeout` is ledgered `failed` and the run goes on;
+  `--retry-failed` takes it again.
+- With `--deadline` (or `$INGEST_DEADLINE`, which the daily sync sets) no file starts after that
+  time, and a file cut off by it is left for the next run.

@@ -89,3 +89,19 @@ git remote add upstream https://github.com/ammfed/ai-workstation-setup
 | no upstream | A fork without the template as a remote | Say yes when asked, or pass `--add-upstream` |
 
 Run `./update.sh --help` for every option.
+
+## For agents
+
+An agent that updates a person's clone follows these steps:
+
+1. Run `./update.sh --dry-run --yes` (on Windows, `update.ps1`). It picks `upstream`, else
+   `origin` when origin is the template, and fetches that remote's default branch.
+2. On exit 0, run `./update.sh --yes`, then `./install.sh --dry-run --yes`. Show the plan
+   (new questions are listed with their defaults) before a real install.
+3. Exit 1 is a refusal: dirty, diverged, wrong branch, a fork without upstream, or upstream
+   adding a path the person already has. Relay the reason and the options it printed; the
+   person decides.
+4. For a fork, add the template as `upstream` only with the person's consent
+   (`--add-upstream`).
+5. Never force, reset, stash, merge, rebase, delete or move the person's files or commits to
+   make an update go through, and never edit or commit `answers.env`.
