@@ -5,7 +5,9 @@ A review page is an HTML page an agent serves with
 answer it in the browser, instead of reading a long chat reply. The `preferences` module
 installs a decision-card template for this (`decision-cards.html`) when you pick
 `PREFS_DECISIONS=both` (the default) or `cards`; with `PREFS_PAGES_ALL_CARDS` every review
-page starts from it, not only decisions. This page is the loop an agent follows with it.
+page starts from it, not only decisions. Next to it the module writes a hide tray script
+(`hide-kit.js`), so you can mark parts of a page for removal. This page is the loop an agent
+follows with them.
 
 ## The loop
 
@@ -65,3 +67,28 @@ blocked, the page simply stays light.
 
 The comment block at the top of the template lists the visual rules (bars on one scale,
 "3 of 10" before percentages, never colour alone, and so on).
+
+## Hiding parts of a page
+
+The hide tray lets you show the agent what to clean up by hiding it, instead of describing it.
+It works on prototypes, slides and docs as well as card pages.
+
+1. **Hide a part.** Press **Pick** in the tray and click the part, or hover it and press **H**.
+   Click the page once first so it has keyboard focus. A hidden part stays where it was, faint
+   with a dashed outline, so you can still see what you took out. Press **Escape** to stop
+   picking.
+2. **Change your mind.** Press **H** on a faint part, or **Unhide** next to it in the tray.
+   **Unhide all** clears the list.
+3. **Send the list.** **Send to agent** queues one "remove these" message in Lavish's
+   Conversation panel; send it from there as usual. The agent removes the parts from the
+   page and says what it removed. Without Lavish, the button copies the list instead.
+
+The list survives the agent's edits and a reload. On a card page the tray sits under the
+canvas, works on the picture there, and keeps a separate list for each card and option.
+
+**For agents.** The card template already carries the tray. Every other Lavish page carries it
+too: paste `~/.config/ai-workstation-setup/hide-kit.js` into a script at the end of the page
+body (Lavish serves only the page's own folder), then call `HideKit.attach(document.body)`.
+`HideKit.attach(root, { mode: 'vanish' })` takes hidden parts out of the page instead of
+leaving them faint. The tray cannot add a button to Lavish's own top bar, and an exported or
+shared copy of the page does not keep what was hidden.
