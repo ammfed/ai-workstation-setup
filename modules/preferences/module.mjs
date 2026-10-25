@@ -365,7 +365,7 @@ export default {
     if (targets.includes('firstmate') && !ctx.forOs(TARGETS.firstmate.unsupported)) {
       const home = firstmateHome(ctx);
       // config/brief-include.md (Firstmate's docs/configuration.md "Home brief include") is appended
-      // to every worker brief: house style, helper model, build rules, principle checker, taste preset, private lines.
+      // to every worker brief: house style, vault-first line, helper model, build rules, principle checker, taste preset, private lines.
       const brief = renderBriefInclude((key) => ctx.get(key), { checkerPath: checkerPath(ctx), privateRules, tastePreset, vault: vaultSetup(ctx) });
       if (brief) await ctx.step('firstmate worker briefs', () => ctx.writeFile(path.join(home, 'config', 'brief-include.md'), brief, { onConflict: 'ask' }));
       // data/captain-shared.md in the main home is copied read-only into every second-mate home.
