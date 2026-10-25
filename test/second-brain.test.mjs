@@ -688,6 +688,23 @@ test('check: a link to a missing research note still fails', () => {
   }
 });
 
+test('check: a folder-style link to any existing note resolves, a missing one still fails', () => {
+  const root = vault();
+  try {
+    fs.writeFileSync(path.join(root, 'work', 'Gamma.md'), note('Gamma', 'topic', 'See [[work/Alpha]]'));
+    const ok = node(root, 'check.mjs', []);
+    assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+    assert.doesNotMatch(ok.stdout, /does not resolve/);
+
+    fs.writeFileSync(path.join(root, 'work', 'Gamma.md'), note('Gamma', 'topic', 'See [[work/Missing]]'));
+    const bad = node(root, 'check.mjs', []);
+    assert.equal(bad.status, 1, bad.stdout + bad.stderr);
+    assert.match(bad.stdout, /work[\\/]Gamma\.md: \[\[work\/Missing\]\] does not resolve to any note/);
+  } finally {
+    removeVault(root);
+  }
+});
+
 test('housekeeping timer: it runs a copy kept outside the vault, and an existing vault gets nothing written', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-install-'));
   const dir = path.join(home, 'vault');
