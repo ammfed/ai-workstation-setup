@@ -12,7 +12,7 @@ These rules come from a long project that was restarted several times. Every res
 
 ## Phases, from an idea to shipped and improved
 
-Every piece of work runs through some of these ten phases, in this order. Each phase has one owner, so two skills never do the same job. The route column is the step of the software route (`docs/route.md` in this setup) that the phase belongs to, so the two never disagree. A gate is an item only the owner closes (rule 2.5).
+Every piece of work runs through some of these ten phases, in this order. Each phase has one owner, so two skills never do the same job. The route column is the step of the software route (`docs/route.md` in the setup repository) that the phase belongs to, so the two never disagree. A gate is an item only the owner closes (rule 2.5).
 
 | Phase | Route step | Goal | Leads | Owner | Hands to | The next phase starts when |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -159,7 +159,7 @@ Why: one supervisor that checks every phase against the same method catches drif
    Why: an item with neither stalls without anyone noticing, and a habit the owner never approved is work they did not choose.
 7. **Ask a few questions, then keep going.**
    - Ask the owner only the few questions that set the direction, each with a recommendation.
-   - When a choice can be undone, go ahead on the recommendation and fold in the answer when it comes.
+   - Inside a stage, when a choice can be undone, go ahead on the recommendation and fold in the answer when it comes.
    - When it cannot, hold only that branch and keep the rest moving.
    - Decisions only the owner can make (dates, money, people, taste, anything hard to undo) and every merge never start on their own.
 
@@ -328,7 +328,7 @@ Why: one supervisor that checks every phase against the same method catches drif
 2. **Keep work moving.**
    - Act on anything the owner is not blocking.
    - Keep a pass to what the owner named, and ask before widening it.
-   - Merge low-risk paperwork (notes, records, prototypes) once checks pass, if the owner has granted that.
+   - Merge follows the merge rule in working-preferences.md.
    - Product code, sign-in, real data and anything risky wait for the owner's word.
 
    Why: asking for approval on things the owner cannot judge wastes their time, and widening a pass changes things they did not choose.
@@ -344,7 +344,7 @@ Why: one supervisor that checks every phase against the same method catches drif
 ## 6. Wording
 
 1. **A second model checks every text a person will read.**
-   - Before handover, send the wording to a strong second model (for example ChatGPT) with full context: what the page is, who reads it, the tone, and what must not change.
+   - Before handover, send the wording to a strong model from another family through an agent CLI this setup installed with full context: what the page is, who reads it, the tone, and what must not change.
    - Use its wording unless it breaks a fact, a name, a rule or wording the owner already approved.
    - Never send private material, only your own wording.
 
@@ -368,8 +368,8 @@ Why: one supervisor that checks every phase against the same method catches drif
    | Job | Model and effort |
    | --- | --- |
    | Building, and anything not named below | The strongest model at medium effort |
-   | Research, investigations, diagnosis and plans | The strongest model at high effort. Re-run at the highest effort when the result is weak or the cause is hard to find, then build at medium once the cause is proven or the plan is settled |
-   | A new look that is not settled yet (screens, layout, clickable journeys) | The strongest model at the highest effort |
+   | Research, investigations, diagnosis and plans | The strongest model at high effort. Re-run at extra-high effort when the result is weak or the cause is hard to find, then build at medium once the cause is proven or the plan is settled |
+   | A new look that is not settled yet (screens, layout, clickable journeys) | The strongest model at extra-high effort |
    | Polish of a look that is already settled (spacing, copy, states, small layout fixes) | The strongest model at high effort |
    | Small, clear tasks (a bug with a clear reproduction, a docs or copy edit, a version bump, a config tweak) | A faster model at high effort. After a failed check, re-run it on the strongest model at medium effort |
    | Bulk fetching, reading and summaries | Cheap helpers: a fetcher finds the information, a reader on the fastest model summarizes it, and a faster model at high effort drafts |
@@ -401,10 +401,7 @@ Why: one supervisor that checks every phase against the same method catches drif
 
    Why: a rebuild that forgets one ruling repeats the mistake that ruling fixed, and a compaction without a save loses what the owner taught.
 2. **Status the owner can act on.**
-   - Lead with what needs the owner, then what is at risk, then a short table of to do, doing and done.
-   - Check live state before saying anything is in progress.
-   - Give a link for every finished item.
-   - No clock times, and no narration of your own steps.
+   - Follow the status-and-away skill for the order, the headline counts and the Links line.
 
    Why: a status built from memory hides stalls, and a long status buries the owner's asks.
 
