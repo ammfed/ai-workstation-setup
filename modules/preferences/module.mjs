@@ -363,7 +363,7 @@ export default {
     const privateRules = readPrivateRules(ctx);
     const tastePreset = readTastePreset(ctx);
     const get = (key) => ctx.get(key);
-    const opts = { cardsPath: cards, hideKitPath: cards && hideKitPath(ctx), decisionsPath: log ? ctx.path(log) : null, privateRules, tastePreset, vault: vaultSetup(ctx) };
+    const opts = { cardsPath: cards, hideKitPath: cards && hideKitPath(ctx), decisionsPath: log ? ctx.path(log) : null, privateRules, tastePreset };
     for (const name of targets) {
       const target = TARGETS[name];
       await ctx.step(name, () => {

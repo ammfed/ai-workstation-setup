@@ -124,9 +124,6 @@ export const RULE_HOMES = [
   row('A review page is for a genuine decision', PAGES, ['A review page is for a genuine decision', 'do not get a review page']),
   row('Decisions go to the user only at genuine forks', WORKERS, ['only at genuine forks', 'is never escalated as a decision']),
 
-  // Past decisions
-  row('Before you start, check the notes vault', 'core'),
-
   // Building
   row('Before building something new', WORKERS),
   row('Then give one builder the whole goal', WORKERS),

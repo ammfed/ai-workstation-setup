@@ -132,32 +132,34 @@ test('the /kun rule is on by default, in sessions and worker briefs, and can be 
   assert.doesNotMatch(renderBriefInclude((key) => (key === 'PREFS_KUN' ? false : ctx.get(key))), /\/kun/);
 });
 
-test('the vault-first line names only what second-brain installs, the same in the session rules and the worker brief', async () => {
+test('the vault-first line goes to the worker brief only, and names bin/search.mjs only when second-brain installed it', async () => {
   const ctx = await answer({ PREFS_TARGETS: 'claude,firstmate' });
   const get = (key) => ctx.get(key);
   const dir = path.join(os.tmpdir(), 'notes vault');
-  const lead = `Before you start, check the notes vault at \`${dir}\` for past decisions, findings and rulings on the work: `;
+  const lead = `Before you start, check the notes vault at \`${dir}\` for past decisions, findings and rulings on the work: find a note by its folder and file name, or `;
+  const tail = ' Trust the newest dated line, and check an open item against the live tracker before you act on it.';
   const cases = [
-    [{ scripts: true, search: false }, 'read its MAP.md, then search it with `rg`.'],
-    [{ scripts: true, search: true }, 'read its MAP.md, then search it with bin/search.mjs or `rg`.'],
+    [{ scripts: true, search: false }, 'search it with `rg`.'],
+    [{ scripts: true, search: true }, 'search it with `rg` or `bin/search.mjs`.'],
     [{ scripts: false, search: false }, 'search it with `rg`.'],
   ];
   for (const [setup, routes] of cases) {
     const vault = { path: dir, ...setup };
-    const line = `- ${lead}${routes}\n`;
-    assert.ok(sectionOf(renderPreferences(get, { cardsPath: CARDS, vault }), 'Before you start').startsWith(`## Before you start\n\n${line}`), routes);
-    assert.ok(renderBriefInclude(get, { vault }).includes(`## Past decisions\n\n${line}`), routes);
+    assert.ok(renderBriefInclude(get, { vault }).includes(`## Past decisions\n\n- ${lead}${routes}${tail}\n`), routes);
+    // Sessions get these lines from the second-brain rules file, so the session rules leave them out.
+    assert.doesNotMatch(renderPreferences(get, { cardsPath: CARDS, vault }), /notes vault|bin\/search/);
   }
   for (const text of [renderPreferences(get, { cardsPath: CARDS }), renderBriefInclude(get), renderBriefInclude(get, { vault: null })]) {
     assert.doesNotMatch(text, /Past decisions|notes vault|MAP\.md|bin\/search|bin\/related/);
   }
 });
 
-test('a real run writes the vault-first line from this run\'s vault answers, or a saved vault only when its folder exists, and never when agents are kept out', { skip: process.platform === 'win32' }, async () => {
+test('a real run writes the brief\'s vault-first line from this run\'s vault answers, or a saved vault only when its folder exists, and never when agents are kept out', { skip: process.platform === 'win32' }, async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-'));
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
   const files = [path.join(home, '.claude', 'rules', 'working-preferences.md'), path.join(home, 'fm', 'config', 'brief-include.md')];
   const read = () => files.map((f) => fs.readFileSync(f, 'utf8'));
+  const brief = () => read()[1];
   const base = { PREFS_PRIVATE_RULES: path.join(home, 'missing.md') };
   const vault = path.join(home, 'my vault');
   try {
@@ -167,12 +169,13 @@ test('a real run writes the vault-first line from this run\'s vault answers, or 
     for (const text of read()) assert.doesNotMatch(text, /notes vault/);
     fs.mkdirSync(vault);
     await installInto(home, { ...base, VAULT_PATH: vault, VAULT_TOOLS: 'search,capture' });
-    for (const text of read()) assert.ok(text.includes(`check the notes vault at \`${vault}\` for past decisions, findings and rulings on the work: read its MAP.md, then search it with bin/search.mjs or \`rg\`.`));
+    assert.ok(brief().includes(`check the notes vault at \`${vault}\` for past decisions, findings and rulings on the work: find a note by its folder and file name, or search it with \`rg\` or \`bin/search.mjs\`.`));
+    assert.doesNotMatch(read()[0], /notes vault/);
     fs.rmSync(vault, { recursive: true });
     await installInto(home, base, { VAULT_PATH: vault, VAULT_SCRIPTS: true, VAULT_TOOLS: [] });
-    for (const text of read()) assert.ok(text.includes(`at \`${vault}\` for past decisions, findings and rulings on the work: read its MAP.md, then search it with \`rg\`.`));
+    assert.ok(brief().includes(`at \`${vault}\` for past decisions, findings and rulings on the work: find a note by its folder and file name, or search it with \`rg\`.`));
     await installInto(home, base, { VAULT_PATH: vault, VAULT_SCRIPTS: false });
-    for (const text of read()) assert.ok(text.includes(`at \`${vault}\` for past decisions, findings and rulings on the work: search it with \`rg\`.`));
+    assert.match(brief(), /search it with `rg`\. Trust/);
     await installInto(home, base, { VAULT_PATH: vault, VAULT_SCRIPTS: true, VAULT_AGENT_ACCESS: false });
     for (const text of read()) assert.doesNotMatch(text, /notes vault/);
     fs.mkdirSync(vault);

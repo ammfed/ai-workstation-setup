@@ -172,82 +172,64 @@ async function scheduleVaultJob(ctx, vault, name, script, env = {}, previous = s
   ctx.info(`${unit}: logs with journalctl --user -u ${unit}; stop it with: systemctl --user disable --now ${unit}.timer`);
 }
 
-// What the rules file and skill say about sending vault content to an outside model. The
-// default is the strict rule; the other is for a person who has removed sensitive content.
-const OUTSIDE_STRICT = {
-  rule: '- Vault content never goes to an outside model or service.',
-  note: 'It is private: never send its content to an\noutside model or service. Read it; do not edit notes by hand.',
-};
-const OUTSIDE_ALLOWED = {
-  rule: [
-    '- Vault content and raw source files may go to an outside model through an agent CLI you',
-    '  chose, because you have removed sensitive content from them. Files that agent workspaces',
-    '  write and export (reports, progress notes, memory archives, your answers) count as raw files',
-    '  and may go too. Private chats themselves never go to an outside model or service.',
-  ].join('\n'),
-  note: [
-    'It is private. Its content and the raw source files may go to an outside',
-    'model through an agent CLI you chose, because you have removed sensitive content from them.',
-    'Files that agent workspaces write and export (reports, progress notes, memory archives, your',
-    'answers) count as raw files and may go too. Private chats themselves never go to an outside',
-    'model or service. Read it; do not edit notes by hand.',
-  ].join('\n'),
-};
-// The allowed wording as PR 59 shipped it. A copy rendered from it still counts as a version this
-// setup shipped, so a reinstall replaces it even when the shipped record is missing.
-const OUTSIDE_ALLOWED_EARLIER = [{
-  OUTSIDE_RULE: [
-    '- Vault content and raw source files may go to an outside model through an agent CLI you',
-    '  chose, because you have removed sensitive content from them. Private chats and captures of',
-    '  your own agent sessions never go to an outside model or service.',
-  ].join('\n'),
-  OUTSIDE_NOTE: [
-    'It is private. Its content and the raw source files may go to an outside',
-    'model through an agent CLI you chose, because you have removed sensitive content from them.',
-    'Private chats and captures of your own agent sessions never go to an outside model or',
-    'service. Read it; do not edit notes by hand.',
-  ].join('\n'),
-}];
+// What the rules file says about sending vault content to an outside model. The default is the
+// strict rule; the other is for a person who has removed sensitive content.
+const OUTSIDE_STRICT = '- Vault content never goes to an outside model or service.';
+const OUTSIDE_ALLOWED = [
+  '- Vault content and raw source files may go to an outside model through an agent CLI you',
+  '  chose, because you have removed sensitive content from them. Files that agent workspaces',
+  '  write and export (reports, progress notes, memory archives, your answers) count as raw files',
+  '  and may go too. Private chats themselves never go to an outside model or service.',
+].join('\n');
+// The allowed wording as PR 59 shipped it.
+const OUTSIDE_ALLOWED_PR59 = [
+  '- Vault content and raw source files may go to an outside model through an agent CLI you',
+  '  chose, because you have removed sensitive content from them. Private chats and captures of',
+  '  your own agent sessions never go to an outside model or service.',
+].join('\n');
+
+const SKILL_RETIRED = 'the second-brain rules file now carries its lines';
 
 /**
- * A Claude Code user rules file and a `second-brain` skill, so every session knows the vault
- * exists, is private, and how to read it. Both name only the scripts this run installs.
+ * A Claude Code user rules file, always loaded, so every session knows the vault exists, is
+ * private, and how to read it. It names only the scripts this run installs. The `second-brain`
+ * skill it once came with was never called, so a copy this setup shipped is removed.
  */
 export async function writeClaudeFiles(ctx, vault, pillars) {
   const scripts = ctx.get('VAULT_SCRIPTS');
   const tools = scripts ? ctx.get('VAULT_TOOLS') : [];
-  const bin = (file, args = '') => `\`node "${path.join(vault, 'bin', file)}"${args && ` ${args}`}\``;
-  const find = [
-    scripts && `\`${path.join(vault, 'MAP.md')}\` lists every note, one line each, grouped by folder, with type, stage and life area. \`START-HERE.md\` explains the layout.`,
-    tools.includes('search') && `${bin('search.mjs', '"terms"')} ranks notes by those words. Narrow with \`--type project|person|decision|meeting|source|topic\` or \`--folder F\`.`,
-    `\`rg -l "phrase" "${vault}"\` finds exact text.`,
-  ].filter(Boolean);
-  const add = [
-    scripts && `Raw files go in \`${ctx.get('VAULT_RAW_DIR')}\`, outside the vault; ${bin('ingest.mjs')} reads them into notes.`,
-    tools.includes('capture') && `For a single fact with no file, ${bin('capture.mjs', '"text"')} writes it the vault's way.`,
-    `Read \`${path.join(vault, 'AGENTS.md')}\` first: it is the contract every note follows.`,
-  ].filter(Boolean);
-  const writers = ['ingest.mjs', ...(tools.includes('capture') ? ['capture.mjs'] : [])].map((f) => `\`bin/${f}\``).join(', ');
+  const bin = (file, args) => `\`node "${path.join(vault, 'bin', file)}" ${args}\``;
   const contract = `\`${path.join(vault, 'AGENTS.md')}\``;
-  const outside = ctx.get('VAULT_OUTSIDE_MODELS') ? OUTSIDE_ALLOWED : OUTSIDE_STRICT;
+  const writers = ['ingest.mjs', ...(tools.includes('capture') ? ['capture.mjs'] : [])].map((f) => `\`bin/${f}\``).join(', ');
+  const search = `- Search it with \`rg -i "phrase" "${vault}"\`${tools.includes('search') ? `, or ${bin('search.mjs', '"terms"')} for ranked\n  results (narrow with \`--type\` or \`--folder\`)` : ''}.`;
+  const edit = [
+    scripts
+      ? `- Read only: do not edit vault notes by hand. Its own scripts (${writers}) write it, and\n  ${contract} is the contract if a task needs a change there.`
+      : `- Read only: do not edit vault notes by hand. ${contract} is the contract if a task needs a\n  change there.`,
+    tools.includes('capture') && `- To add one fact that came with no file, run ${bin('capture.mjs', '"text"')}.`,
+  ].filter(Boolean).join('\n');
   const vars = {
     VAULT_PATH: vault,
-    OUTSIDE_RULE: outside.rule,
-    OUTSIDE_NOTE: outside.note,
-    PILLARS: pillars.map((p) => `\`${p}/\``).join(', '),
-    FIND_RULE: scripts
-      ? `- Read \`${path.join(vault, 'MAP.md')}\` to find a note, then ${tools.includes('search') ? '`bin/search.mjs` in that folder, or ' : ''}\`rg\`.`
-      : '- Search it with `rg`; the folder names say what each note is.',
-    EDIT_RULE: scripts
-      ? `- Do not edit vault notes by hand. Its own scripts (${writers}) write it; follow\n  ${contract} if a task needs a change there.`
-      : `- Do not edit vault notes by hand; follow ${contract} if a task needs a change there.`,
-    SCRIPTS_NOTE: scripts ? `Run the vault's scripts with absolute paths, for example ${bin('index.mjs')}.\n\n` : '',
-    FIND_ROUTES: find.map((line, i) => `${i + 1}. ${line}`).join('\n'),
-    ADD_ROUTES: add.map((line) => `- ${line}`).join('\n'),
+    FOLDERS: [
+      '`projects/`, `people/`, `decisions/`, `meetings/` and `reviews/` (dated names),',
+      `  \`journal/\` (one per day), \`sources/\` (one per raw file), and topics in ${pillars.map((p) => `\`${p}/\``).join(', ')}`,
+    ].join('\n'),
+    FIND_RULE: search,
+    EDIT_RULE: edit,
+    OUTSIDE_RULE: ctx.get('VAULT_OUTSIDE_MODELS') ? OUTSIDE_ALLOWED : OUTSIDE_STRICT,
   };
+  // The find and edit lines as PRs 56 to 59 shipped them, so a copy rendered from them still
+  // counts as a version this setup shipped when the shipped record is missing.
+  const earlierFind = scripts
+    ? `- Read \`${path.join(vault, 'MAP.md')}\` to find a note, then ${tools.includes('search') ? '`bin/search.mjs` in that folder, or ' : ''}\`rg\`.`
+    : '- Search it with `rg`; the folder names say what each note is.';
+  const earlierEdit = scripts
+    ? `- Do not edit vault notes by hand. Its own scripts (${writers}) write it; follow\n  ${contract} if a task needs a change there.`
+    : `- Do not edit vault notes by hand; follow ${contract} if a task needs a change there.`;
+  const earlier = [{ FIND_RULE: earlierFind, EDIT_RULE: earlierEdit }, { FIND_RULE: earlierFind, EDIT_RULE: earlierEdit, OUTSIDE_RULE: OUTSIDE_ALLOWED_PR59 }];
   const dir = claudeDir(ctx);
-  await ctx.writeFile(path.join(dir, 'rules', 'second-brain.md'), ctx.template('second-brain/claude/rules.md', vars, OUTSIDE_ALLOWED_EARLIER), { onConflict: 'ask' });
-  await ctx.writeFile(path.join(dir, 'skills', 'second-brain', 'SKILL.md'), ctx.template('second-brain/claude/SKILL.md', vars, OUTSIDE_ALLOWED_EARLIER), { onConflict: 'ask' });
+  await ctx.writeFile(path.join(dir, 'rules', 'second-brain.md'), ctx.template('second-brain/claude/rules.md', vars, earlier), { onConflict: 'ask' });
+  ctx.removeShipped(path.join(dir, 'skills', 'second-brain', 'SKILL.md'), SKILL_RETIRED);
 }
 
 /** A vault that is already a git repository with at least one commit keeps its own tooling and notes. */
@@ -308,7 +290,7 @@ export default {
       when: (ctx) => isExistingVault(ctx.get('VAULT_PATH')),
     },
     { key: 'VAULT_GIT', type: 'confirm', message: 'Track the vault with git?', default: true },
-    { key: 'VAULT_AGENT_ACCESS', type: 'confirm', message: 'Give agents access (obsidian-axi, OBSIDIAN_VAULT, a Claude Code session hook, and a Claude Code rules file and skill that point to the vault)?', default: true },
+    { key: 'VAULT_AGENT_ACCESS', type: 'confirm', message: 'Give agents access (obsidian-axi, OBSIDIAN_VAULT, a Claude Code session hook, and a Claude Code rules file that points to the vault)?', default: true },
     {
       key: 'VAULT_OUTSIDE_MODELS',
       type: 'confirm',
@@ -453,7 +435,7 @@ export default {
       await ctx.step('RAW_DIR', () => ctx.setUserEnv('RAW_DIR', rawDir));
       await ctx.step('Claude Code env', () => setClaudeEnv(ctx, 'OBSIDIAN_VAULT', vault));
       await ctx.step('Claude Code hook', () => addSessionStartHook(ctx, 'obsidian-axi'));
-      await ctx.step('Claude Code rules and skill', () => writeClaudeFiles(ctx, vault, pillars));
+      await ctx.step('Claude Code rules file', () => writeClaudeFiles(ctx, vault, pillars));
     }
 
     if (ctx.get('VAULT_APP')) {

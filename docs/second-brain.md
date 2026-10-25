@@ -143,32 +143,40 @@ the optional tools. They would show up as untracked files in a vault that has it
 tooling, and a job that needs a clean vault (the daily sync's ingest) would then skip its
 run. The skipped steps say so in the install output. Everything else still runs: the
 contract files that are missing, the git step, the timers, the agent access and the Claude
-Code rules file and skill.
+Code rules file.
 
 To add the missing starter files anyway, answer `VAULT_REFRESH=yes`. Files that already
 exist are still never replaced.
 
 ## Telling Claude Code about the vault
 
-With `VAULT_AGENT_ACCESS` (on by default), the module also writes two Claude Code files, with
-your vault path filled in:
+With `VAULT_AGENT_ACCESS` (on by default), the module also writes
+`~/.claude/rules/second-brain.md`, a Claude Code user rules file loaded in every session, with
+your vault path filled in. It is about eight short lines: the vault exists and is private, look
+there first for past decisions and history, find a note by its folder and file name, `rg` or
+`bin/search.mjs`, trust the newest dated line and follow `status: superseded`, check open items
+against the live tracker, do not edit notes by hand (with the `bin/capture.mjs` line when that
+tool is installed), and what may leave the machine (see below). It names only the scripts and
+tools you installed.
 
-- `~/.claude/rules/second-brain.md`, a user rules file loaded in every session. It says the
-  vault exists and is private, to look there first for past decisions and history, to find
-  notes through `MAP.md` and search, not to edit notes by hand, and what may leave the machine
-  (see below).
-- `~/.claude/skills/second-brain/SKILL.md`, a `second-brain` skill with the read routes: how
-  to find a note, how to read provenance and superseded lines, and how new material gets in.
+Earlier versions also installed a `second-brain` skill with the same read routes. Sessions
+never called it, so the rules file now carries its lines and the skill is retired. On a rerun,
+`~/.claude/skills/second-brain/SKILL.md` is removed when it is a copy this setup shipped (a
+backup, `SKILL.md.bak-<time>`, stays next to it). A copy you edited is left in place, and the
+install summary lists a to-do to delete it by hand.
 
-By default both say vault content never goes to an outside model or service. Answer
+By default the rule says vault content never goes to an outside model or service. Answer
 `VAULT_OUTSIDE_MODELS=yes` (default `no`) if you have removed sensitive content from your notes
 and raw files and want agents to send them to an outside model through an agent CLI you chose.
-Both files then say so. They also say that files agent workspaces write and export (reports,
+The rule then says so. It also says that files agent workspaces write and export (reports,
 progress notes, memory archives, your answers) count as raw files and may go too, and that
 private chats themselves never go to an outside model or service. The question is only asked when
-`VAULT_AGENT_ACCESS` is on. On a rerun, a copy of either file that an earlier version of this
-setup shipped is replaced with the new wording (the old one is backed up); an edited copy is
-left alone.
+`VAULT_AGENT_ACCESS` is on.
 
-Both name only the scripts and tools you installed. Like every other file the installer
-writes, a copy you have edited is left alone on a rerun, and a replaced one is backed up first.
+On a rerun, a copy of the rules file that an earlier version of this setup shipped is replaced
+with the new wording, and the old one is backed up. Like every other file the installer writes,
+a copy you have edited is left alone.
+
+The preferences module's worker brief (Firstmate's `brief-include.md`) carries one matching
+vault line with the same search tool. The session rules file `working-preferences.md` no longer
+repeats it, since this rules file is loaded in the same sessions.

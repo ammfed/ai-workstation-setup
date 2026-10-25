@@ -46,7 +46,7 @@ answers file still sets any key it names either way.
 With the `firstmate` target, the module also writes Firstmate's `config/brief-include.md`, which
 Firstmate appends to every worker brief. It holds what applies: the house style with
 `PREFS_WRITING_STYLE=ste` (for what workers write to Firstmate, never the deliverable), the
-vault-first line (also in the core file) when second-brain runs or its saved vault folder
+vault-first line (sessions get it from the second-brain rules file instead) when second-brain runs or its saved vault folder
 exists and agents have access, naming only the routes it installs, the helper-model rule from
 `PREFS_DELEGATE_RETRIEVAL`, the build rules from `PREFS_KUN`, `PREFS_TEST_FIRST` and
 `PREFS_GLOSSARY_ADR`, the principle checker line from `PREFS_PRINCIPLE_CHECKS`, and your private

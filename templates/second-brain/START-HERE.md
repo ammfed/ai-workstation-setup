@@ -48,12 +48,26 @@ the archive and the notes still say what was in it, and when.
 ## Daily use
 
 1. Drop new material into `$RAW_DIR`.
-2. `node bin/ingest.mjs --dry-run`, then `node bin/ingest.mjs`, to have your agent CLI read each
-   new file once and write it into the vault.
-3. `node bin/check.mjs` to validate frontmatter and links, then `node bin/index.mjs` to
-   regenerate `MAP.md`. `node bin/housekeeping.mjs` does both, and is the thing to put on a timer.
-4. Capture anything that did not arrive as a file straight into `journal/YYYY-MM-DD.md`, and
-   sweep it into a real note at your next review.
+2. Have your agent CLI read each new file once and write it into the vault:
+
+   ```sh
+   node bin/ingest.mjs --dry-run      # list what would be ingested
+   node bin/ingest.mjs --limit 1      # ingest one file, for a quick check
+   node bin/ingest.mjs                # ingest everything not yet in the ledger
+   node bin/ingest.mjs --file "/path/to/one/file"
+   node bin/ingest.mjs --timeout 30   # stop the agent on one file after 30 minutes (the default)
+   ```
+
+   Each new file gets one agent run from `prompts/ingest.md`, then a row in
+   `.ingest/ledger.tsv`. The agent is the CLI `$AGENT_CLI` names, with `$AGENT_CLI_ARGS`.
+3. `node bin/check.mjs` validates frontmatter and links (`node bin/check.mjs people/*.md` checks
+   just those notes), and `node bin/index.mjs` regenerates `MAP.md`. `node bin/housekeeping.mjs`
+   does both, prints one summary line, makes no network calls and needs no credentials, so it is
+   the thing to put on a timer. Run it by hand after a batch of edits too.
+4. Capture anything that did not arrive as a file straight into `journal/YYYY-MM-DD.md`, or with
+   `bin/capture.mjs` when it is installed, and sweep it into a real note at your next review.
+5. When `bin/garden.mjs` is installed, it has your agent CLI make a few notes clearer without
+   changing any fact. `prompts/garden.md` says how a pass runs and what it undoes.
 
 ## Writing a note by hand
 
@@ -69,3 +83,7 @@ rg -i "some topic" .                   # anything, anywhere
 rg -l "source: report.pdf" sources/    # which note covers a given raw file
 rg -l "type: project" projects/        # every project
 ```
+
+When `bin/search.mjs` is installed, `node bin/search.mjs some topic` ranks the notes that match
+best, title matches first. Narrow it with `--type project` or `--folder people`. It reads the
+notes on every run and keeps no index.

@@ -269,7 +269,7 @@ test('the systemd service writes WorkingDirectory as a bare path that systemd ac
   assert.equal(r.status, 0, r.stdout + r.stderr);
 });
 
-// Writes the Claude Code rules file and skill for real into a temporary home.
+// Writes the Claude Code rules file for real into a temporary home.
 async function claudeFilesInto(home, given = {}, root = repoRoot) {
   const answers = new Map(Object.entries({ VAULT_PATH: path.join(home, 'my vault'), VAULT_TOOLS: 'search,capture', ...given }));
   const ctx = new Context({ platform: { ...detectPlatform(), home }, dryRun: false, interactive: false, answers, prompter: null, repoRoot: root });
@@ -286,28 +286,30 @@ async function claudeFilesInto(home, given = {}, root = repoRoot) {
   return { out: lines.join('\n'), vault: ctx.get('VAULT_PATH') };
 }
 
-test('claude files: the rules file and skill land with the vault path filled in, and an edited copy is left alone', async () => {
+const claudeFile = (home, ...parts) => path.join(home, '.claude', ...parts);
+
+test('claude files: the rules file carries the short vault rule with the vault path filled in, and an edited copy is left alone', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-claude-'));
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
   try {
     const { out, vault } = await claudeFilesInto(home);
-    const rules = path.join(home, '.claude', 'rules', 'second-brain.md');
-    const skill = path.join(home, '.claude', 'skills', 'second-brain', 'SKILL.md');
-    for (const file of [rules, skill]) {
-      const text = fs.readFileSync(file, 'utf8');
-      assert.ok(text.includes(vault), `${file} names the vault`);
-      assert.doesNotMatch(text, /\{\{[A-Z_]+\}\}/, `${file} has no unfilled placeholder`);
-      assert.match(text, /never (goes|send its content) to an outside model or service|outside\s+model or service/);
-      assert.doesNotMatch(text, /—/, 'no em dashes');
+    const rules = claudeFile(home, 'rules', 'second-brain.md');
+    const text = fs.readFileSync(rules, 'utf8');
+    assert.ok(text.includes(vault), 'names the vault');
+    assert.doesNotMatch(text, /\{\{[A-Z_]+\}\}/, 'no unfilled placeholder');
+    assert.doesNotMatch(text, /—/, 'no em dashes');
+    assert.doesNotMatch(text, /skill|MAP\.md lists every note/, 'no pointer to a retired skill or a stale MAP.md claim');
+    const bulletsOf = text.split('\n').filter((l) => l.startsWith('- '));
+    assert.ok(bulletsOf.length <= 8, `about 8 bullets, got ${bulletsOf.length}`);
+    for (const phrase of ['Look there first', 'folder and file name', '`work/`, `home/`', 'Trust the newest dated line', '`status: superseded`', 'live\n  tracker', 'Read only', 'never goes to an outside model or service']) {
+      assert.ok(text.includes(phrase), phrase);
     }
-    const skillText = fs.readFileSync(skill, 'utf8');
-    assert.match(skillText, /^---\nname: second-brain\ndescription: .+\n---\n/);
-    assert.ok(skillText.includes(path.join(vault, 'bin', 'search.mjs')) && skillText.includes(path.join(vault, 'bin', 'capture.mjs')));
-    assert.match(skillText, /`work\/`, `home\/`/);
+    assert.ok(text.includes(path.join(vault, 'bin', 'search.mjs')) && text.includes(path.join(vault, 'bin', 'capture.mjs')));
+    assert.ok(!fs.existsSync(claudeFile(home, 'skills', 'second-brain', 'SKILL.md')), 'no skill is written');
     assert.match(out, /wrote .*second-brain\.md/);
 
     // A rerun with the same answers changes nothing; a local edit survives a rerun.
-    assert.equal((await claudeFilesInto(home)).out.match(/is already up to date/g).length, 2);
+    assert.equal((await claudeFilesInto(home)).out.match(/is already up to date/g).length, 1);
     fs.appendFileSync(rules, '- My own line.\n');
     const again = (await claudeFilesInto(home)).out;
     assert.match(again, /second-brain\.md exists with different content \(a local edit, not a version this setup shipped\); left untouched/);
@@ -323,35 +325,26 @@ test('claude files: only the scripts that were installed are named', async () =>
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
   try {
     await claudeFilesInto(home, { VAULT_TOOLS: '' });
-    const skill = fs.readFileSync(path.join(home, '.claude', 'skills', 'second-brain', 'SKILL.md'), 'utf8');
-    assert.doesNotMatch(skill, /search\.mjs|capture\.mjs/);
-    assert.match(skill, /MAP\.md/);
+    const rules = fs.readFileSync(claudeFile(home, 'rules', 'second-brain.md'), 'utf8');
+    assert.doesNotMatch(rules, /search\.mjs|capture\.mjs/);
+    assert.match(rules, /`bin\/ingest\.mjs`\) write it/);
     fs.rmSync(path.join(home, '.claude'), { recursive: true });
     await claudeFilesInto(home, { VAULT_SCRIPTS: 'no' });
-    for (const file of [path.join('rules', 'second-brain.md'), path.join('skills', 'second-brain', 'SKILL.md')]) {
-      assert.doesNotMatch(fs.readFileSync(path.join(home, '.claude', file), 'utf8'), /bin\/|MAP\.md/, file);
-    }
+    assert.doesNotMatch(fs.readFileSync(claudeFile(home, 'rules', 'second-brain.md'), 'utf8'), /bin\/|MAP\.md/);
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
 
-const claudeFile = (home, ...parts) => path.join(home, '.claude', ...parts);
-
-test('claude files: by default both say vault content never goes to an outside model or service', async () => {
+test('claude files: by default the rule says vault content never goes to an outside model or service', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-claude-'));
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
   try {
     await claudeFilesInto(home);
     const rules = fs.readFileSync(claudeFile(home, 'rules', 'second-brain.md'), 'utf8');
-    const skill = fs.readFileSync(claudeFile(home, 'skills', 'second-brain', 'SKILL.md'), 'utf8');
     assert.match(rules, /^- Vault content never goes to an outside model or service\.$/m);
-    assert.match(skill, /never send its content to an\noutside model or service/);
-    for (const text of [rules, skill]) {
-      assert.doesNotMatch(text, /may go to an outside model|private chats/i);
-      assert.doesNotMatch(text, /\{\{[A-Z_]+\}\}/);
-    }
+    assert.doesNotMatch(rules, /may go to an outside model|private chats/i);
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
     fs.rmSync(home, { recursive: true, force: true });
@@ -363,16 +356,12 @@ test('claude files: VAULT_OUTSIDE_MODELS=yes allows an outside model and workspa
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
   try {
     await claudeFilesInto(home, { VAULT_OUTSIDE_MODELS: 'yes' });
-    for (const file of [claudeFile(home, 'rules', 'second-brain.md'), claudeFile(home, 'skills', 'second-brain', 'SKILL.md')]) {
-      const text = fs.readFileSync(file, 'utf8').replace(/\s+/g, ' ');
-      assert.match(text, /may go to an outside model through an agent CLI you chose/, file);
-      assert.match(text, /because you have removed sensitive content/, file);
-      assert.match(text, /Files that agent workspaces write and export \(reports, progress notes, memory archives, your answers\) count as raw files and may go too\./, file);
-      assert.match(text, /Private chats themselves never go to an outside model or service\./, file);
-      assert.doesNotMatch(text, /captures of your own agent sessions/, file);
-      assert.doesNotMatch(text, /never send its content|Vault content never goes/, file);
-      assert.doesNotMatch(text, /—|\{\{[A-Z_]+\}\}/, file);
-    }
+    const text = fs.readFileSync(claudeFile(home, 'rules', 'second-brain.md'), 'utf8').replace(/\s+/g, ' ');
+    assert.match(text, /may go to an outside model through an agent CLI you chose/);
+    assert.match(text, /because you have removed sensitive content/);
+    assert.match(text, /Files that agent workspaces write and export \(reports, progress notes, memory archives, your answers\) count as raw files and may go too\./);
+    assert.match(text, /Private chats themselves never go to an outside model or service\./);
+    assert.doesNotMatch(text, /captures of your own agent sessions|Vault content never goes|—|\{\{[A-Z_]+\}\}/);
     assert.equal(secondBrain.questions.find((x) => x.key === 'VAULT_OUTSIDE_MODELS').default, false);
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
@@ -380,7 +369,7 @@ test('claude files: VAULT_OUTSIDE_MODELS=yes allows an outside model and workspa
   }
 });
 
-// The rules file and skill as PR 56 shipped them, before the outside-models answer existed.
+// The rules file as PR 56 shipped it, before the outside-models answer existed.
 const SHIPPED_RULES = `# Second brain
 
 Your knowledge vault is \`{{VAULT_PATH}}\`: plain Markdown notes on your work and life
@@ -392,10 +381,12 @@ Your knowledge vault is \`{{VAULT_PATH}}\`: plain Markdown notes on your work an
 {{EDIT_RULE}}
 - Vault content never goes to an outside model or service.
 `;
-const SHIPPED_SKILL = fs.readFileSync(path.join(repoRoot, 'templates', 'second-brain', 'claude', 'SKILL.md'), 'utf8')
-  .replace('{{OUTSIDE_NOTE}}', 'It is private: never send its content to an\noutside model or service. Read it; do not edit notes by hand.');
+// The yes wording as PR 59 shipped it.
+const PR59_RULE = `- Vault content and raw source files may go to an outside model through an agent CLI you
+  chose, because you have removed sensitive content from them. Private chats and captures of
+  your own agent sessions never go to an outside model or service.`;
 
-test('claude files: a copy shipped before this answer existed is replaced on a rerun, an edited one is not', async () => {
+test('claude files: a rules file shipped by PR 56 or PR 59 is replaced on a rerun even without a shipped record, an edited one is not', async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-claude-'));
   const home = path.join(tmp, 'home');
   const clone = path.join(tmp, 'clone');
@@ -405,92 +396,71 @@ test('claude files: a copy shipped before this answer existed is replaced on a r
   };
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
   try {
-    // A throwaway clone whose history shipped the old wording, then the current template.
+    // A throwaway clone whose history shipped the PR 56 wording, the PR 59 one, then the current template.
     const dir = path.join(clone, 'templates', 'second-brain', 'claude');
     fs.mkdirSync(dir, { recursive: true });
     fs.mkdirSync(home);
     git('init', '-q');
     fs.writeFileSync(path.join(dir, 'rules.md'), SHIPPED_RULES);
-    fs.writeFileSync(path.join(dir, 'SKILL.md'), SHIPPED_SKILL);
     git('add', '.');
-    git('commit', '-qm', 'old');
-    for (const f of ['rules.md', 'SKILL.md']) fs.copyFileSync(path.join(repoRoot, 'templates', 'second-brain', 'claude', f), path.join(dir, f));
+    git('commit', '-qm', 'pr56');
+    fs.writeFileSync(path.join(dir, 'rules.md'), SHIPPED_RULES.replace('- Vault content never goes to an outside model or service.', '{{OUTSIDE_RULE}}'));
+    git('commit', '-qam', 'pr59');
+    fs.copyFileSync(path.join(repoRoot, 'templates', 'second-brain', 'claude', 'rules.md'), path.join(dir, 'rules.md'));
     git('commit', '-qam', 'new');
 
-    // The old files on a machine, written the way the old installer wrote them (no shipped record).
+    // The old file on a machine, written the way the old installer wrote it (no shipped record).
     const vault = path.join(home, 'my vault');
     const rulesFile = claudeFile(home, 'rules', 'second-brain.md');
-    const skillFile = claudeFile(home, 'skills', 'second-brain', 'SKILL.md');
     const oldRules = SHIPPED_RULES
       .replace('{{VAULT_PATH}}', vault)
       .replace('{{FIND_RULE}}', `- Read \`${path.join(vault, 'MAP.md')}\` to find a note, then \`bin/search.mjs\` in that folder, or \`rg\`.`)
       .replace('{{EDIT_RULE}}', `- Do not edit vault notes by hand. Its own scripts (\`bin/ingest.mjs\`, \`bin/capture.mjs\`) write it; follow\n  \`${path.join(vault, 'AGENTS.md')}\` if a task needs a change there.`);
-    fs.mkdirSync(path.dirname(rulesFile), { recursive: true });
-    fs.writeFileSync(rulesFile, oldRules);
+    for (const [old, outside] of [[oldRules, 'no'], [oldRules.replace('- Vault content never goes to an outside model or service.', PR59_RULE), 'yes']]) {
+      fs.rmSync(path.join(home, '.config'), { recursive: true, force: true });
+      fs.mkdirSync(path.dirname(rulesFile), { recursive: true });
+      fs.writeFileSync(rulesFile, old);
+      const out = (await claudeFilesInto(home, { VAULT_OUTSIDE_MODELS: outside }, clone)).out;
+      assert.match(out, /replaced .*rules[\\/]second-brain\.md \(it was an older version this setup shipped\)/, outside);
+      assert.match(fs.readFileSync(rulesFile, 'utf8'), /Trust the newest dated line/);
 
-    const out = (await claudeFilesInto(home, { VAULT_OUTSIDE_MODELS: 'yes' }, clone)).out;
-    assert.match(out, /replaced .*rules[\\/]second-brain\.md \(it was an older version this setup shipped\)/);
-    const rules = fs.readFileSync(rulesFile, 'utf8');
-    assert.match(rules, /may go to an outside model/);
-    assert.doesNotMatch(rules, /^- Vault content never goes/m);
+      // A local edit to an old copy is left alone.
+      fs.rmSync(path.join(home, '.config'), { recursive: true, force: true });
+      fs.writeFileSync(rulesFile, `${old}- My own line.\n`);
+      const kept = (await claudeFilesInto(home, { VAULT_OUTSIDE_MODELS: outside }, clone)).out;
+      assert.match(kept, /second-brain\.md exists with different content \(a local edit/);
+      assert.match(fs.readFileSync(rulesFile, 'utf8'), /My own line/);
+    }
     assert.ok(fs.readdirSync(path.dirname(rulesFile)).some((f) => f.startsWith('second-brain.md.bak-')), 'the old file is backed up');
-
-    // A local edit to an old copy is left alone.
-    fs.writeFileSync(rulesFile, `${oldRules}- My own line.\n`);
-    const kept = (await claudeFilesInto(home, { VAULT_OUTSIDE_MODELS: 'yes' }, clone)).out;
-    assert.match(kept, /second-brain\.md exists with different content \(a local edit/);
-    assert.match(fs.readFileSync(rulesFile, 'utf8'), /My own line/);
-    assert.ok(fs.existsSync(skillFile));
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
 
-// The yes wording as PR 59 shipped it, for a copy on a machine with no shipped record.
-const PR59_RULE = `- Vault content and raw source files may go to an outside model through an agent CLI you
-  chose, because you have removed sensitive content from them. Private chats and captures of
-  your own agent sessions never go to an outside model or service.`;
-const PR59_NOTE = `It is private. Its content and the raw source files may go to an outside
-model through an agent CLI you chose, because you have removed sensitive content from them.
-Private chats and captures of your own agent sessions never go to an outside model or
-service. Read it; do not edit notes by hand.`;
-
-test('claude files: a copy rendered from the PR 59 yes wording is replaced on a rerun, an edited one is not', async () => {
+test('claude files: a second-brain skill this setup shipped is removed with a backup, an edited one stays with a to-do', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-claude-'));
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
   try {
-    await claudeFilesInto(home, { VAULT_OUTSIDE_MODELS: 'yes' });
-    const rulesFile = claudeFile(home, 'rules', 'second-brain.md');
     const skillFile = claudeFile(home, 'skills', 'second-brain', 'SKILL.md');
-    const current = {
-      rules: fs.readFileSync(rulesFile, 'utf8'),
-      skill: fs.readFileSync(skillFile, 'utf8'),
-    };
-    const outsideRule = current.rules.slice(current.rules.indexOf('- Vault content and raw source files'));
-    assert.match(current.skill, /Files that agent workspaces write and export/);
-    const old = {
-      rules: current.rules.replace(outsideRule, `${PR59_RULE}\n`),
-      skill: current.skill.replace(/It is private\. Its content[\s\S]*?edit notes by hand\./, PR59_NOTE),
-    };
-    assert.notEqual(old.rules, current.rules);
-    assert.notEqual(old.skill, current.skill);
-    fs.writeFileSync(rulesFile, old.rules);
-    fs.writeFileSync(skillFile, old.skill);
-    fs.rmSync(path.join(home, '.config'), { recursive: true, force: true }); // no shipped record
+    const shipped = '---\nname: second-brain\ndescription: Read routes into your vault.\n---\n\nThe vault is plain Markdown.\n';
+    // The installer recorded every copy it wrote in its shipped manifest, which predates the skill.
+    const ctx = new Context({ platform: { ...detectPlatform(), home }, dryRun: false, interactive: false, answers: new Map(), prompter: null, repoRoot });
+    fs.mkdirSync(path.dirname(skillFile), { recursive: true });
+    fs.writeFileSync(skillFile, shipped);
+    ctx.recordShipped(skillFile, shipped);
 
-    const out = (await claudeFilesInto(home, { VAULT_OUTSIDE_MODELS: 'yes' })).out;
-    assert.match(out, /replaced .*rules[\\/]second-brain\.md \(it was an older version this setup shipped\)/);
-    assert.match(out, /replaced .*skills[\\/]second-brain[\\/]SKILL\.md \(it was an older version this setup shipped\)/);
-    assert.equal(fs.readFileSync(rulesFile, 'utf8'), current.rules);
-    assert.equal(fs.readFileSync(skillFile, 'utf8'), current.skill);
+    const out = (await claudeFilesInto(home)).out;
+    assert.match(out, /removed .*skills[\\/]second-brain[\\/]SKILL\.md \(the second-brain rules file now carries its lines\)/);
+    assert.ok(!fs.existsSync(skillFile));
+    assert.ok(fs.readdirSync(path.dirname(skillFile)).some((f) => f.startsWith('SKILL.md.bak-')), 'a backup is kept');
+    assert.doesNotMatch((await claudeFilesInto(home)).out, /SKILL\.md/, 'a rerun has nothing to remove');
 
-    // A local edit to the PR 59 copy is left alone.
-    fs.writeFileSync(rulesFile, `${old.rules}- My own line.\n`);
-    fs.rmSync(path.join(home, '.config'), { recursive: true, force: true });
-    const kept = (await claudeFilesInto(home, { VAULT_OUTSIDE_MODELS: 'yes' })).out;
-    assert.match(kept, /second-brain\.md exists with different content \(a local edit/);
-    assert.match(fs.readFileSync(rulesFile, 'utf8'), /My own line/);
+    // A copy with local edits is not one this setup shipped: it stays, and the user gets a to-do.
+    fs.writeFileSync(skillFile, `${shipped}- My own line.\n`);
+    const kept = (await claudeFilesInto(home)).out;
+    assert.match(kept, /to do: .*SKILL\.md is retired .* left in place; delete it by hand/);
+    assert.match(fs.readFileSync(skillFile, 'utf8'), /My own line/);
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
     fs.rmSync(home, { recursive: true, force: true });

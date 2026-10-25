@@ -25,12 +25,13 @@ const KUN_RULE =
   'At the start of real work (a feature, a bug, a refactor, a plan, research or an explainer), run /kun once (the kun skill, when installed) and follow the route its ENTRY.md gives for that kind of work. ' +
   'Later checks in the same session reuse that load; run it again only in a new session or after compaction. ' +
   'Skip it for small clear tasks (a typo, a version bump, a config tweak), status replies and helper subagents.';
-// Written to sessions and workers alike, and only when a vault is configured. It names only what
-// second-brain installs there: MAP.md with the vault scripts, bin/search with the search tool.
+// Written to worker briefs only when a vault is configured; sessions get the same lines from the
+// second-brain rules file. It names the search tool that rules file names, bin/search.mjs, only
+// when second-brain installed it.
 function vaultRule(vault) {
   if (!vault) return null;
-  const find = `search it with ${vault.search ? 'bin/search.mjs or ' : ''}\`rg\``;
-  return `Before you start, check the notes vault at \`${vault.path}\` for past decisions, findings and rulings on the work: ${vault.scripts ? `read its MAP.md, then ${find}` : find}.`;
+  const search = `search it with \`rg\`${vault.search ? ' or `bin/search.mjs`' : ''}`;
+  return `Before you start, check the notes vault at \`${vault.path}\` for past decisions, findings and rulings on the work: find a note by its folder and file name, or ${search}. Trust the newest dated line, and check an open item against the live tracker before you act on it.`;
 }
 const GLOSSARY_RULE =
   'Before building, read GLOSSARY.md and docs/adr/ if they exist. Add new terms and decision records in the same change that introduces them. Start these files in any project, but only when a term or a hard-to-reverse decision comes up.';
@@ -153,7 +154,7 @@ export const PREFERENCE_SKILLS = {
 
 // Every rule, placed in its home: 'core' or one of PREFERENCE_SKILLS. Each home keeps its
 // sections in the order they are added; empty sections and empty homes are left out.
-function placeRules(get, { cardsPath, hideKitPath, decisionsPath, vault } = {}) {
+function placeRules(get, { cardsPath, hideKitPath, decisionsPath } = {}) {
   const homes = {};
   const add = (home, title, lines) => {
     const kept = lines.filter(Boolean);
@@ -264,7 +265,7 @@ function placeRules(get, { cardsPath, hideKitPath, decisionsPath, vault } = {}) 
     'Say plainly when something was reasoned about rather than tested.',
   ]);
 
-  add('core', 'Before you start', [vaultRule(vault), get('PREFS_KUN') && KUN_RULE]);
+  add('core', 'Before you start', [get('PREFS_KUN') && KUN_RULE]);
 
   // writing-for-others
   add('writing-for-others', 'Writing as the user', [
