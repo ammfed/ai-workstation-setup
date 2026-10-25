@@ -23,9 +23,13 @@ const KUN_RULE =
   'At the start of real work (a feature, a bug, a refactor, a plan, research or an explainer), run /kun once (the kun skill, when installed) and follow the route its ENTRY.md gives for that kind of work. ' +
   'Later checks in the same session reuse that load. Run it again only in a new session or after compaction. ' +
   'Skip it for small clear tasks (a typo, a version bump, a config tweak), status replies and helper subagents.';
-// Written to sessions and workers alike, and only when a vault is configured.
-const vaultRule = (vault) =>
-  `Before you start, check the notes vault at \`${vault}\` for past decisions, findings and rulings on the work: read its MAP.md, then use bin/search and bin/related there.`;
+// Written to sessions and workers alike, and only when a vault is configured. It names only what
+// second-brain installs there: MAP.md with the vault scripts, bin/search with the search tool.
+function vaultRule(vault) {
+  if (!vault) return null;
+  const find = `search it with ${vault.search ? 'bin/search.mjs or ' : ''}\`rg\``;
+  return `Before you start, check the notes vault at \`${vault.path}\` for past decisions, findings and rulings on the work: ${vault.scripts ? `read its MAP.md, then ${find}` : find}.`;
+}
 const GLOSSARY_RULE =
   'Before building, read GLOSSARY.md and docs/adr/ if they exist. Add new terms and decision records in the same change that introduces them. Start these files in any project, but only when a term or a hard-to-reverse decision comes up.';
 
@@ -57,7 +61,7 @@ function tasteSection(tastePreset, also) {
 // build rules, the principle checker before done, the taste preset's Everywhere lines when it is on,
 // and the private Everywhere and Workers lines.
 // Empty when none of them applies. `checkerPath` is the installed principle checker, or null.
-export function renderBriefInclude(get, { checkerPath, privateRules, tastePreset, vaultPath } = {}) {
+export function renderBriefInclude(get, { checkerPath, privateRules, tastePreset, vault } = {}) {
   const parts = [];
   if (get('PREFS_WRITING_STYLE') === 'ste') {
     parts.push(
@@ -72,7 +76,7 @@ export function renderBriefInclude(get, { checkerPath, privateRules, tastePreset
       ].join('\n'),
     );
   }
-  parts.push(bullets('Past decisions', [vaultPath && vaultRule(vaultPath)]));
+  parts.push(bullets('Past decisions', [vaultRule(vault)]));
   parts.push(bullets('Helper models', [delegateRule(get)]));
   parts.push(bullets('Building', [get('PREFS_KUN') && KUN_RULE, get('PREFS_TEST_FIRST') && TEST_FIRST_RULE, get('PREFS_GLOSSARY_ADR') && GLOSSARY_RULE]));
   const checker = checkerPath && (/\s/.test(checkerPath) ? JSON.stringify(checkerPath) : checkerPath);
@@ -109,7 +113,7 @@ ${lines.map((l) => `- ${l}`).join('\n')}
 `;
 }
 
-export function renderPreferences(get, { cardsPath, decisionsPath, privateRules, tastePreset, vaultPath } = {}) {
+export function renderPreferences(get, { cardsPath, decisionsPath, privateRules, tastePreset, vault } = {}) {
   const sections = [];
   const section = (title, lines) => {
     const kept = lines.filter(Boolean);
@@ -263,7 +267,7 @@ export function renderPreferences(get, { cardsPath, decisionsPath, privateRules,
     'Decisions go to the user only at genuine forks. Act on work that nothing blocks. A permission prompt, a refused tool call or a command that needs running by hand is never escalated as a decision: state the blocker once in one line and stop.',
   ] : []);
 
-  section('Past decisions', [vaultPath && vaultRule(vaultPath)]);
+  section('Past decisions', [vaultRule(vault)]);
 
   section('Building', [
     get('PREFS_BUILD_WHOLE_GOAL') &&

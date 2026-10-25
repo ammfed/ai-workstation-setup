@@ -122,29 +122,47 @@ test('the /kun rule is on by default, in sessions and worker briefs, and can be 
   assert.doesNotMatch(renderBriefInclude((key) => (key === 'PREFS_KUN' ? false : ctx.get(key))), /\/kun/);
 });
 
-test('the vault-first line is in the session rules and the worker brief only when a vault is configured', async () => {
+test('the vault-first line names only what second-brain installs, the same in the session rules and the worker brief', async () => {
   const ctx = await answer({ PREFS_TARGETS: 'claude,firstmate' });
   const get = (key) => ctx.get(key);
-  const vault = path.join(os.tmpdir(), 'notes vault');
-  const line = `Before you start, check the notes vault at \`${vault}\` for past decisions, findings and rulings on the work: read its MAP.md, then use bin/search and bin/related there.`;
-  const prefs = renderPreferences(get, { cardsPath: CARDS, vaultPath: vault });
-  assert.equal(sectionOf(prefs, 'Past decisions'), `## Past decisions\n\n- ${line}\n`);
-  assert.ok(renderBriefInclude(get, { vaultPath: vault }).includes(`## Past decisions\n\n- ${line}\n`));
-  for (const text of [renderPreferences(get, { cardsPath: CARDS }), renderBriefInclude(get), renderBriefInclude(get, { vaultPath: null })]) {
-    assert.doesNotMatch(text, /Past decisions|MAP\.md|bin\/related/);
+  const dir = path.join(os.tmpdir(), 'notes vault');
+  const lead = `Before you start, check the notes vault at \`${dir}\` for past decisions, findings and rulings on the work: `;
+  const cases = [
+    [{ scripts: true, search: false }, 'read its MAP.md, then search it with `rg`.'],
+    [{ scripts: true, search: true }, 'read its MAP.md, then search it with bin/search.mjs or `rg`.'],
+    [{ scripts: false, search: false }, 'search it with `rg`.'],
+  ];
+  for (const [setup, routes] of cases) {
+    const vault = { path: dir, ...setup };
+    const block = `## Past decisions\n\n- ${lead}${routes}\n`;
+    assert.equal(sectionOf(renderPreferences(get, { cardsPath: CARDS, vault }), 'Past decisions'), block);
+    assert.ok(renderBriefInclude(get, { vault }).includes(block), routes);
+  }
+  for (const text of [renderPreferences(get, { cardsPath: CARDS }), renderBriefInclude(get), renderBriefInclude(get, { vault: null })]) {
+    assert.doesNotMatch(text, /Past decisions|MAP\.md|bin\/search|bin\/related/);
   }
 });
 
-test('a real run writes the vault-first line into the rules, the second-brain-free brief stays without it', { skip: process.platform === 'win32' }, async () => {
+test('a real run writes the vault-first line from this run\'s vault answers, or a saved vault only when its folder exists', { skip: process.platform === 'win32' }, async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-'));
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
   const files = [path.join(home, '.claude', 'rules', 'working-preferences.md'), path.join(home, 'fm', 'config', 'brief-include.md')];
+  const read = () => files.map((f) => fs.readFileSync(f, 'utf8'));
+  const base = { PREFS_PRIVATE_RULES: path.join(home, 'missing.md') };
+  const vault = path.join(home, 'my vault');
   try {
-    await installInto(home, { PREFS_PRIVATE_RULES: path.join(home, 'missing.md') });
-    for (const f of files) assert.doesNotMatch(fs.readFileSync(f, 'utf8'), /Past decisions/, f);
-    const vault = path.join(home, 'my vault');
-    await installInto(home, { PREFS_PRIVATE_RULES: path.join(home, 'missing.md'), VAULT_PATH: vault });
-    for (const f of files) assert.ok(fs.readFileSync(f, 'utf8').includes(`check the notes vault at \`${vault}\``), f);
+    await installInto(home, base);
+    for (const text of read()) assert.doesNotMatch(text, /Past decisions/);
+    await installInto(home, { ...base, VAULT_PATH: vault });
+    for (const text of read()) assert.doesNotMatch(text, /Past decisions/);
+    fs.mkdirSync(vault);
+    await installInto(home, { ...base, VAULT_PATH: vault, VAULT_TOOLS: 'search,capture' });
+    for (const text of read()) assert.ok(text.includes(`check the notes vault at \`${vault}\` for past decisions, findings and rulings on the work: read its MAP.md, then search it with bin/search.mjs or \`rg\`.`));
+    fs.rmSync(vault, { recursive: true });
+    await installInto(home, base, { VAULT_PATH: vault, VAULT_SCRIPTS: true, VAULT_TOOLS: [] });
+    for (const text of read()) assert.ok(text.includes(`at \`${vault}\` for past decisions, findings and rulings on the work: read its MAP.md, then search it with \`rg\`.`));
+    await installInto(home, base, { VAULT_PATH: vault, VAULT_SCRIPTS: false });
+    for (const text of read()) assert.ok(text.includes(`at \`${vault}\` for past decisions, findings and rulings on the work: search it with \`rg\`.`));
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
     fs.rmSync(home, { recursive: true, force: true });
@@ -449,13 +467,13 @@ function capture(fn) {
 }
 
 // Runs the module for real into a temporary home, as the throwaway HOME install test would.
-async function installInto(home, given) {
+async function installInto(home, given, values = {}) {
   const answers = new Map(Object.entries({ PREFS_TARGETS: 'claude,firstmate', PREFS_DECISIONS: 'chat', ...given }));
   const ctx = new Context({ platform: { ...detectPlatform(), home }, dryRun: false, interactive: false, answers, prompter: null, repoRoot });
   ctx.beginModule('preferences');
   for (const q of preferences.questions) if (!q.when || q.when(ctx)) await ctx.ask(q);
   // Answers of the firstmate and skills modules, which run before this one.
-  Object.assign(ctx.values, { FIRSTMATE_HOME: path.join(home, 'fm'), SKILLS: ['workflow-playbook'] });
+  Object.assign(ctx.values, { FIRSTMATE_HOME: path.join(home, 'fm'), SKILLS: ['workflow-playbook'] }, values);
   const out = await capture(() => preferences.install(ctx));
   return { out, ctx };
 }
