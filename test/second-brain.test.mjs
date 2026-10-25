@@ -77,7 +77,7 @@ test('search: bin/search runs the same search as bin/search.mjs, exit status inc
     const viaScript = node(root, 'search.mjs', ['garden', '--json']);
     assert.equal(viaEntry.status, 0, viaEntry.stderr);
     assert.equal(viaEntry.stdout, viaScript.stdout);
-    assert.deepEqual(JSON.parse(viaEntry.stdout).map((h) => h.path), ['work/Garden plans.md']);
+    assert.deepEqual(JSON.parse(viaEntry.stdout).map((h) => h.path), [path.join('work', 'Garden plans.md')]);
     assert.equal(node(root, 'search', []).status, 2, 'no query exits 2, as search.mjs does');
   } finally {
     removeVault(root);
