@@ -48,10 +48,14 @@ into the clone and leaves every other setting alone.
 The preferences module adds two more with the `firstmate` target. `config/brief-include.md`,
 which Firstmate appends to every worker brief (its docs/configuration.md, "Home brief
 include"), carries the standing worker rules that apply ([what it holds](working-preferences.md)).
+The same rules go into each local second-mate home's `config/brief-include.md` as a marked
+block, keeping that home's own lines.
 `data/captain-shared.md` gets that file's Everywhere and Second mates lines,
 only when there are any ([Your private rules](working-preferences.md#your-private-rules)).
 
 Each file is written only when it differs, and a changed file is never replaced without asking.
+The one exception is the generated block in a second-mate home's include: a re-run refreshes
+that block without asking and keeps a backup of the file.
 
 ## Second mates
 

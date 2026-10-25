@@ -52,6 +52,13 @@ exists and agents have access, naming only the routes it installs, the helper-mo
 `PREFS_GLOSSARY_ADR`, the principle checker line from `PREFS_PRINCIPLE_CHECKS`, and your private
 Everywhere and Workers lines. Nothing applies, nothing is written. The split does not change it.
 
+Firstmate reads that file only in the home it belongs to, so the module also writes the same
+lines into `config/brief-include.md` of every local second-mate home listed in the main home's
+`data/secondmates.md` (a home without its `.fm-secondmate-home` marker is skipped). There the
+lines go in a block between two `ai-workstation-setup` comment markers: lines the home wrote
+itself stay around the block, a re-run replaces only the block, and a dry run lists each file.
+Keep your own edits outside the block. A home added later gets the lines on the next run.
+
 Your own rules that are not generic go in a private rules file outside the clone; see
 [Your private rules](#your-private-rules).
 
