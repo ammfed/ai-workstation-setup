@@ -47,10 +47,8 @@ into the clone and leaves every other setting alone.
 
 The preferences module adds two more with the `firstmate` target. `config/brief-include.md`,
 which Firstmate appends to every worker brief (its docs/configuration.md, "Home brief
-include"), carries the standing worker rules that apply: the plain-English house style with
-`PREFS_WRITING_STYLE=ste`, the helper-model rule, the build rules, the principle checker to run
-before reporting done (`PREFS_PRINCIPLE_CHECKS`), and the Everywhere and Workers lines of your
-private rules file. `data/captain-shared.md` gets that file's Everywhere and Second mates lines,
+include"), carries the standing worker rules that apply ([what it holds](working-preferences.md)).
+`data/captain-shared.md` gets that file's Everywhere and Second mates lines,
 only when there are any ([Your private rules](working-preferences.md#your-private-rules)).
 
 Each file is written only when it differs, and a changed file is never replaced without asking.
