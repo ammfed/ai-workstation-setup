@@ -143,7 +143,7 @@ test('the vault-first line names only what second-brain installs, the same in th
   }
 });
 
-test('a real run writes the vault-first line from this run\'s vault answers, or a saved vault only when its folder exists', { skip: process.platform === 'win32' }, async () => {
+test('a real run writes the vault-first line from this run\'s vault answers, or a saved vault only when its folder exists, and never when agents are kept out', { skip: process.platform === 'win32' }, async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-'));
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
   const files = [path.join(home, '.claude', 'rules', 'working-preferences.md'), path.join(home, 'fm', 'config', 'brief-include.md')];
@@ -163,6 +163,11 @@ test('a real run writes the vault-first line from this run\'s vault answers, or 
     for (const text of read()) assert.ok(text.includes(`at \`${vault}\` for past decisions, findings and rulings on the work: read its MAP.md, then search it with \`rg\`.`));
     await installInto(home, base, { VAULT_PATH: vault, VAULT_SCRIPTS: false });
     for (const text of read()) assert.ok(text.includes(`at \`${vault}\` for past decisions, findings and rulings on the work: search it with \`rg\`.`));
+    await installInto(home, base, { VAULT_PATH: vault, VAULT_SCRIPTS: true, VAULT_AGENT_ACCESS: false });
+    for (const text of read()) assert.doesNotMatch(text, /Past decisions/);
+    fs.mkdirSync(vault);
+    await installInto(home, { ...base, VAULT_PATH: vault, VAULT_AGENT_ACCESS: 'no' });
+    for (const text of read()) assert.doesNotMatch(text, /Past decisions/);
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
     fs.rmSync(home, { recursive: true, force: true });

@@ -58,13 +58,14 @@ function checkerPath(ctx) {
 }
 
 // The vault and what second-brain installs in it, from this run's answers, else from saved
-// answers whose folder exists on disk; null without a vault.
+// answers whose folder exists on disk; null without a vault or when agents are kept out of it.
 function vaultSetup(ctx) {
   const now = 'VAULT_PATH' in ctx.values;
   const answer = (key) => (now ? ctx.values[key] : ctx.answers.get(key));
   const dir = answer('VAULT_PATH') && ctx.path(answer('VAULT_PATH'));
-  if (!dir || (!now && !fs.existsSync(dir))) return null;
-  const scripts = /^(y|yes|true|1)$/i.test(String(answer('VAULT_SCRIPTS') ?? true));
+  const on = (key) => /^(y|yes|true|1)$/i.test(String(answer(key) ?? true));
+  if (!dir || (!now && !fs.existsSync(dir)) || !on('VAULT_AGENT_ACCESS')) return null;
+  const scripts = on('VAULT_SCRIPTS');
   const tools = scripts ? String(answer('VAULT_TOOLS') ?? '').split(',').map((s) => s.trim()) : [];
   return { path: dir, scripts, search: tools.includes('search') };
 }
