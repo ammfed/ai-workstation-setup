@@ -531,7 +531,7 @@ test('the playbook names every skill the installer offers, once: as a phase owne
   const rest = section.slice(section.indexOf('**Skills that own no phase.**'));
   assert.ok(rest.length > 0 && section.includes('**Skills that own no phase.**'), 'the phases section has a table of skills that own no phase');
   const table = rest.slice(rest.indexOf('\n| Skill |'), rest.indexOf('\n\n', rest.indexOf('\n| Skill |')));
-  const noPhase = table.split('\n').filter((l) => l.startsWith('| ') && !l.startsWith('| Skill |') && !l.startsWith('| ---')).map((l) => cells(l)[0]);
+  const noPhase = table.split('\n').filter((l) => l.startsWith('| ') && !l.startsWith('| Skill |') && !l.startsWith('| ---')).map((l) => cells(l)[0].replace(/ \(owner starts it\)$/, ''));
   const named = (name, where) => new RegExp(`(^|[^\\w-])${name}([^\\w-]|$)`).test(where);
   const offered = skills.questions.find((q) => q.key === 'SKILLS').choices.flatMap((c) => [c.value, ...(c.helpers ?? [])]).filter((n) => n !== 'workflow-playbook');
   for (const name of offered) {

@@ -150,3 +150,25 @@ test('the shipped card template and ledger board pass the checker with --phone',
     assert.doesNotMatch(r.stdout, /\b(L3|L10) fail/, path.relative(repoRoot, file));
   }
 });
+
+test('the playbook and the route name each owner-only skill only with the note that the owner starts it', () => {
+  // These skills set disable-model-invocation upstream, so no agent can start them.
+  const ownerOnly = ['wayfinder', 'to-spec', 'to-tickets', 'to-questionnaire', 'teach'];
+  const files = [
+    { file: path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), note: 'owner starts it', rule: /start only when the owner types/, skills: ownerOnly },
+    { file: path.join(repoRoot, 'docs', 'route.md'), note: 'you start it', rule: /start only when you type/, skills: ['wayfinder', 'to-spec', 'to-tickets'] },
+  ];
+  for (const { file, note, rule, skills } of files) {
+    const text = fs.readFileSync(file, 'utf8');
+    const ruleText = text.split('\n\n').find((p) => rule.test(p));
+    assert.ok(ruleText, `${path.relative(repoRoot, file)} has the owner-only rule`);
+    for (const name of skills) {
+      assert.ok(ruleText.includes(`\`/${name}\``), `the rule names /${name}`);
+      for (const line of text.split('\n').filter((l) => l.startsWith('|'))) {
+        const named = line.match(new RegExp(`(?<![\\w/-])${name}(?![\\w-])`, 'g')) ?? [];
+        const noted = line.match(new RegExp(`(?<![\\w/-])${name} \\(${note}\\)`, 'g')) ?? [];
+        assert.equal(noted.length, named.length, `${name} carries "(${note})": ${line}`);
+      }
+    }
+  }
+});

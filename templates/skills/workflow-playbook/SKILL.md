@@ -16,18 +16,22 @@ Every piece of work runs through some of these ten phases, in this order. Each p
 
 | Phase | Route step | Goal | Leads | Owner | Hands to | The next phase starts when |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1. Capture | Plan | Write the idea down, judge whether it fits and when, pick the phases from the table below and set the review stakes once (rule 2.8) | The coordinator | wayfinder | A map with every phase of the path queued as an item (rule 2.4) | The map is written. The first item has no blocker |
+| 1. Capture | Plan | Write the idea down, judge whether it fits and when, pick the phases from the table below and set the review stakes once (rule 2.8) | The coordinator | wayfinder (owner starts it) | A map with every phase of the path queued as an item (rule 2.4) | The map is written. The first item has no blocker |
 | 2. Requirements | Decide | Turn a vague goal into requirements the owner agrees with | A skill, in rounds with the owner | grilling, with domain-modeling in a repo | Requirements, and a glossary in a repo | The owner agrees to the last round (gate) |
 | 3. Does it already exist | Decide | Find products, tools or people that already do this | A research worker, beside phase 2 | research | A report and one card: build, reuse or stop | The card is answered in the next requirements round |
 | 4. Vision | Decide | Fix the destination and the test for which later ideas to accept | A skill, with the owner | vision | A vision file, once per project | The owner approves it. This closes the early phases gate |
-| 5. Prototype | Prototype | Settle the look and the flow, then write the spec | Workers build, the owner judges | prototype with section 10, then to-spec | The approved prototype link and the spec | The owner approves the checkpoint page (gate) |
-| 6. Breakdown | Breakdown | Cut the spec into items, one worker each | The coordinator | to-tickets | Items with blockers, including the fixed items (rule 1.6) | Each item starts as soon as its blockers clear |
+| 5. Prototype | Prototype | Settle the look and the flow, then write the spec | Workers build, the owner judges | prototype with section 10, then to-spec (owner starts it) | The approved prototype link and the spec | The owner approves the checkpoint page (gate) |
+| 6. Breakdown | Breakdown | Cut the spec into items, one worker each | The coordinator | to-tickets (owner starts it) | Items with blockers, including the fixed items (rule 1.6) | Each item starts as soon as its blockers clear |
 | 7. Build | Build | Build each item, test-first where it pays | Workers | tdd, codebase-design | A pull request with a labelled preview | Green checks file the review item |
 | 8. Review | Ship | The owner's review of what will ship, after the checks | The owner | a review page (section 4) | Keep, Change or Discard answers | The owner says to merge |
 | 9. Ship and hand over | Ship | Merge, link the result, name who runs it | The coordinator, on the owner's word | no-mistakes | The merged result and the handover item | The merge files the improve item |
 | 10. Improve | After Ship | Turn what slowed the work into rules and checks | The coordinator prepares, the owner approves | this playbook, section 9 | Proposal cards | A standing item, approved once |
 
 Phases 2 to 4 are the early phases. They run before anything is built, and the early phases gate blocks phase 5 (rule 1.1).
+
+**Skills only the owner can start.** wayfinder, to-spec, to-tickets, to-questionnaire and teach start only when the owner types `/wayfinder`, `/to-spec`, `/to-tickets`, `/to-questionnaire` or `/teach`. An agent cannot start them. Until the owner types the command, the coordinator does that phase itself with the same output (the map, the spec, items with blockers, the questionnaire) and offers the command in one line.
+
+Why: a phase that waits for a skill no agent can start stalls with nobody doing it.
 
 **Kun supervises every phase.** The kun skill (`/kun`) supervises the whole life cycle.
 
@@ -59,8 +63,8 @@ Why: one supervisor that checks every phase against the same method catches drif
 | Skill | Use it when |
 | --- | --- |
 | find-docs | A plan or code names a library, framework or service: fetch its current docs first, never work from memory (phases 3, 5 and 7) |
-| to-questionnaire | A gap only someone else can fill, such as a colleague, a vendor or real users: turn it into a short questionnaire for that person, including the real-user try-out (rule 1.6) |
-| teach | The owner asks to learn a new skill or concept |
+| to-questionnaire (owner starts it) | A gap only someone else can fill, such as a colleague, a vendor or real users: turn it into a short questionnaire for that person, including the real-user try-out (rule 1.6) |
+| teach (owner starts it) | The owner asks to learn a new skill or concept |
 | composio-cli | The work needs an outside app the owner has connected, such as email, a calendar or a tracker |
 
 **Which phases a piece of work needs.** Pick by the kind of work, never by a guess of how long it takes.

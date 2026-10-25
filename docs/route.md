@@ -34,12 +34,16 @@ agent-clis module adds them to no-mistakes' review rules (`NO_MISTAKES_PRINCIPLE
 
 | Step | What happens | Skill |
 | --- | --- | --- |
-| 1. Plan | Write the idea down, judge whether it fits and when, and say so in one line. If the effort takes more than one session, the agent starts a map at once and shows the goal, the stages, where the work is and the next step. | wayfinder |
+| 1. Plan | Write the idea down, judge whether it fits and when, and say so in one line. If the effort takes more than one session, the agent starts a map at once and shows the goal, the stages, where the work is and the next step. | wayfinder (you start it) |
 | 2. Decide | Ask the questions that settle the open decisions, one round at a time, each with a recommendation. Record the answers, the new terms and any hard-to-reverse decision. | grilling, with domain-modeling for `GLOSSARY.md` and `docs/adr/` |
-| 3. Prototype | Write a short spec that names the seams the tests will hold. When the look or the flow needs judging, build a throwaway prototype. Nothing is built for real before the spec is approved. | to-spec, prototype (with wayfinder) |
-| 4. Breakdown | Cut a spec too big for one change into tickets, each with what blocks it. Skip this when one change can hold the spec. | to-tickets |
+| 3. Prototype | Write a short spec that names the seams the tests will hold. When the look or the flow needs judging, build a throwaway prototype. Nothing is built for real before the spec is approved. | to-spec (you start it), prototype, wayfinder (you start it) |
+| 4. Breakdown | Cut a spec too big for one change into tickets, each with what blocks it. Skip this when one change can hold the spec. | to-tickets (you start it) |
 | 5. Build | One builder takes the whole spec and builds it test-first at the seams the spec names. | tdd, codebase-design |
 | 6. Ship | Validate the change, open a pull request, and merge it once you approve. | no-mistakes |
+
+wayfinder, to-spec and to-tickets start only when you type `/wayfinder`, `/to-spec` or
+`/to-tickets`. Until then the agent does that step itself with the same output (the map,
+the spec, tickets with blockers) and offers the command in one line.
 
 ## Short paths
 
