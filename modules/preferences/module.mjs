@@ -74,6 +74,11 @@ function cardsPath(ctx) {
   return path.join(ctx.home, '.config', 'ai-workstation-setup', 'decision-cards.html');
 }
 
+// The hide tray script, written next to the card template for prototype, slide and doc pages.
+function hideKitPath(ctx) {
+  return path.join(ctx.home, '.config', 'ai-workstation-setup', 'hide-kit.js');
+}
+
 // The Firstmate home: this run's answer when the firstmate module runs too, else the saved one,
 // so `--modules preferences` alone still writes into the home Firstmate reads, not ~/firstmate.
 const firstmateHome = (ctx) =>
@@ -348,12 +353,13 @@ export default {
     const cards = cardsOn(ctx) ? cardsPath(ctx) : null;
     if (cards) {
       await ctx.step('decision-card template', () => ctx.writeFile(cards, ctx.template('preferences/decision-cards.html'), { onConflict: 'ask' }));
+      await ctx.step('hide tray script', () => ctx.writeFile(hideKitPath(ctx), ctx.template('preferences/hide-kit.js'), { onConflict: 'ask' }));
     }
 
     const log = ctx.get('PREFS_DECISIONS_LOG');
     const privateRules = readPrivateRules(ctx);
     const tastePreset = readTastePreset(ctx);
-    const text = renderPreferences((key) => ctx.get(key), { cardsPath: cards, decisionsPath: log ? ctx.path(log) : null, privateRules, tastePreset, vault: vaultSetup(ctx) });
+    const text = renderPreferences((key) => ctx.get(key), { cardsPath: cards, hideKitPath: cards && hideKitPath(ctx), decisionsPath: log ? ctx.path(log) : null, privateRules, tastePreset, vault: vaultSetup(ctx) });
     for (const name of targets) {
       const target = TARGETS[name];
       await ctx.step(name, () => {

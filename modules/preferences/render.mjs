@@ -113,7 +113,7 @@ ${lines.map((l) => `- ${l}`).join('\n')}
 `;
 }
 
-export function renderPreferences(get, { cardsPath, decisionsPath, privateRules, tastePreset, vault } = {}) {
+export function renderPreferences(get, { cardsPath, hideKitPath, decisionsPath, privateRules, tastePreset, vault } = {}) {
   const sections = [];
   const section = (title, lines) => {
     const kept = lines.filter(Boolean);
@@ -233,6 +233,8 @@ export function renderPreferences(get, { cardsPath, decisionsPath, privateRules,
       `Every Lavish page starts from the card template at \`${cardsPath}\`: decisions, reports, plans, explainers and lessons alike. One card at a time, a visual beside it, minimal text. A card with nothing to choose has a Next button instead of options.`,
     allCards && "This overrides lavish-axi's own design default and the look of boards that a skill brings with it. Use another look only when the user names one.",
     allCards && 'For a diagram on a page, use the diagram-design skill.',
+    cards && hideKitPath &&
+      `Every Lavish prototype, slide or doc page carries the hide tray, so the user can hide parts and send the list back as "remove these": paste \`${hideKitPath}\` into a script just before </body> and call \`HideKit.attach(document.body)\`. The card template already has it.`,
     cards && get('PREFS_PAGE_SIDE_BY_SIDE') &&
       'Lay a decision page out horizontally: the decision card on one side and a canvas showing the current decision visually on the other. Never stack them vertically.',
     cards && get('PREFS_PAGE_FLIP_PREVIEWS') &&

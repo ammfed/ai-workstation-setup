@@ -202,6 +202,11 @@ section at the end of each file, so edit them in your private file, not in the w
   the review-page rules: a full-width header, the card beside a canvas, and buttons to flip
   between every option's preview. It is light by default, with a small switch to go dark.
   [Review pages](review-pages.md) describes the loop and the card fields.
+- **Hide tray**: next to the card template the module writes
+  `~/.config/ai-workstation-setup/hide-kit.js`. The card template already carries it, and the
+  rules tell agents to paste it into every prototype, slide or doc page they open in Lavish. You
+  pick parts of the page, they stay faint, and Send to agent asks the agent to remove them.
+  [Review pages](review-pages.md#hiding-parts-of-a-page) says how to use it.
 - **No surprise tabs**: agent-clis sets `LAVISH_AXI_NO_OPEN=1` (`LAVISH_NO_OPEN`), so review
   pages never open browser tabs on their own. The agent opens a checked page once, on
   purpose, when it hands it over, and shares the link in chat.

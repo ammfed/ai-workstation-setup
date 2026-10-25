@@ -618,3 +618,72 @@ test('turning the taste preset on writes its rules into the rules file and its E
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
+
+// The hide tray (templates/preferences/hide-kit.js): its own file, inlined in the card template.
+const KIT = path.join(repoRoot, 'templates/preferences/hide-kit.js');
+
+test('the hide tray script is valid JavaScript, faint by default, and safe to inline', () => {
+  const r = spawnSync(process.execPath, ['--check', KIT], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  const kit = fs.readFileSync(KIT, 'utf8');
+  assert.match(kit, /const mode = opts\.mode \|\| 'ghost';/, 'hidden parts stay faint unless a page asks otherwise');
+  assert.match(kit, /\[data-hk-hidden="ghost"\]\{opacity:\.18!important;outline:2px dashed/);
+  assert.match(kit, /tag: 'hide-list'/);
+  assert.match(kit, /setAttribute\('data-lavish-ui', ''\)/, 'Lavish leaves the tray out of annotation and snapshots');
+  // Lavish inserts its own script at the first closing body tag, even inside a comment, and a
+  // closing script tag would end the inlined block early.
+  assert.doesNotMatch(kit, /<\/?(body|head|script)\b/i);
+});
+
+test('the card template carries an exact copy of the hide tray, docked under the canvas', () => {
+  const html = fs.readFileSync(path.join(repoRoot, 'templates/preferences/decision-cards.html'), 'utf8');
+  const m = html.match(/\/\/ HIDE-KIT START \(a copy of hide-kit\.js\)\n([\s\S]*?)\/\/ HIDE-KIT END\n/);
+  assert.ok(m, 'the inlined block is marked');
+  assert.equal(m[1], fs.readFileSync(KIT, 'utf8'), 'the inlined copy matches templates/preferences/hide-kit.js');
+  assert.match(html, /<div class="hide-slot" id="hide-slot"><\/div>/);
+  assert.match(html, /HideKit\.attach\(\$\('canvas'\), \{\s*trayParent: \$\('hide-slot'\)/);
+  assert.match(html, /hideKit\.refresh\(\);\n\}/, 'a redrawn canvas gets its hidden parts back');
+});
+
+test('the review-page rules tell every prototype, slide or doc page to carry the hide tray', () => {
+  const text = renderPreferences((key) => ({ PREFS_DECISIONS: 'both' })[key], { cardsPath: CARDS, hideKitPath: '/x/hide-kit.js' });
+  assert.match(sectionOf(text, 'Review pages'), /Every Lavish prototype, slide or doc page carries the hide tray[^\n]*`\/x\/hide-kit\.js`[^\n]*`HideKit\.attach\(document\.body\)`/);
+  const none = renderPreferences((key) => ({ PREFS_DECISIONS: 'tool' })[key], { cardsPath: null, hideKitPath: null });
+  assert.doesNotMatch(none, /hide tray/);
+});
+
+test('a dry run plans the card template and the hide tray script', { skip: process.platform === 'win32' }, () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-kit-'));
+  try {
+    const answers = path.join(home, 'answers.env');
+    fs.writeFileSync(answers, 'MODULES=preferences\nPREFS_TARGETS=claude\nPREFS_DECISIONS=both\n');
+    const r = spawnSync(process.execPath, [path.join(repoRoot, 'lib/installer.mjs'), '--dry-run', '--yes', '--platform', 'linux', '--answers', answers], {
+      encoding: 'utf8',
+      env: { ...process.env, HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), NO_COLOR: '1' },
+      stdin: 'ignore',
+    });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    const dir = path.join(home, '.config', 'ai-workstation-setup');
+    assert.ok(r.stdout.includes(`would write ${path.join(dir, 'decision-cards.html')}`), r.stdout);
+    assert.ok(r.stdout.includes(`would write ${path.join(dir, 'hide-kit.js')}`), r.stdout);
+    assert.ok(!fs.existsSync(dir), 'a dry run writes nothing');
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('a real run writes the hide tray script next to the card template', { skip: process.platform === 'win32' }, async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-kit-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const { ctx } = await installInto(home, { PREFS_TARGETS: 'claude', PREFS_DECISIONS: 'both' });
+    assert.equal(ctx.record.failures.length, 0);
+    const dir = path.join(home, '.config', 'ai-workstation-setup');
+    assert.equal(fs.readFileSync(path.join(dir, 'hide-kit.js'), 'utf8'), fs.readFileSync(KIT, 'utf8'));
+    assert.match(fs.readFileSync(path.join(dir, 'decision-cards.html'), 'utf8'), /HIDE-KIT START/);
+    assert.match(fs.readFileSync(path.join(home, '.claude', 'rules', 'working-preferences.md'), 'utf8'), new RegExp(`paste \`${path.join(dir, 'hide-kit.js').replace(/[.\\]/g, '\\$&')}\``));
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});

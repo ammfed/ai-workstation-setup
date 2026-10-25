@@ -55,7 +55,7 @@ brackets; nothing is vendored. Items marked optional are off until you pick them
 
 **Browser and review**
 - [chrome-devtools-axi](https://github.com/kunchenguid/chrome-devtools-axi) and `research-browser`, a visible Chrome with its own profile and debugging port that belongs to your agents (agent-clis).
-- [lavish-axi](https://github.com/kunchenguid/lavish-axi) review pages that never open tabs on their own, and a one-decision-at-a-time card page template (agent-clis, preferences; [review pages](docs/review-pages.md)).
+- [lavish-axi](https://github.com/kunchenguid/lavish-axi) review pages that never open tabs on their own, a one-decision-at-a-time card page template, and a hide tray for marking what to remove: pick parts of a prototype, slide or doc page, see them go faint, and send the list to the agent (agent-clis, preferences; [review pages](docs/review-pages.md)).
 - Optional [Lavish Library](https://github.com/ammfed/lavish-library), a local page to find and reopen every review page; its Open button opens a tab even while agents keep the no-open setting (extras).
 - By hand, if you want it: the [Claude in Chrome](https://code.claude.com/docs/en/chrome) extension for your own browser, claude.ai connectors (such as Claude Docs) turned on in your claude.ai settings, and plugins from the Anthropic plugin directory (such as Refero for design references) picked with `/plugin` in Claude Code.
 
