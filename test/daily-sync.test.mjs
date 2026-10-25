@@ -44,6 +44,8 @@ fs.writeFileSync(path.join(helpers, 'print.cjs'), 'console.log(process.argv.slic
 fs.writeFileSync(path.join(helpers, 'slow.cjs'), "require('fs').writeFileSync(process.argv[2], String(process.env.INGEST_DEADLINE)); console.log('ingesting: one'); setTimeout(() => {}, 60000);");
 // `say.cjs <line>...` prints each argument on its own line.
 fs.writeFileSync(path.join(helpers, 'say.cjs'), 'console.log(process.argv.slice(2).join("\\n"));');
+// `sayerr.cjs <line>...` prints each argument on its own line to stderr, as the vault's bash ingest does.
+fs.writeFileSync(path.join(helpers, 'sayerr.cjs'), 'console.error(process.argv.slice(2).join("\\n"));');
 // `lines.cjs <text> <count>` prints the text <count> times, one per line.
 fs.writeFileSync(path.join(helpers, 'lines.cjs'), 'for (let i = 0; i < Number(process.argv[3]); i += 1) console.log(`${process.argv[2]} f${i}`);');
 // Stand-ins for clickup-axi and a TickTick CLI, printing the shapes the real ones print.
@@ -126,7 +128,7 @@ test('a quiet run writes a one-line report, sends nothing and calls no model', (
   const j = job({ vault: vault(rawFolder()) });
   const r = j.run();
   assert.equal(r.code, 0, r.out);
-  assert.match(j.latest(), /^daily-sync \d{4}-\d\d-\d\d \d\d:\d\d: all quiet \(1 check\(s\), no model calls\)\nvault use: no agent session logs found in .* for the last 7 days$/);
+  assert.match(j.latest(), /^daily-sync \d{4}-\d\d-\d\d \d\d:\d\d: all quiet \(2 check\(s\), no model calls\)\nvault use: no agent session logs found in .* for the last 7 days$/);
   assert.deepEqual(j.notified(), []);
   assert.equal(j.modelCalls(), 0);
   assert.ok(j.state().lastSuccess);
@@ -465,6 +467,47 @@ test('a run where only some ingest attempts failed counts the successes and list
   assert.match(note, /vault: ingested 1 of 2 new raw file\(s\) with the vault's own agent/);
   assert.match(note, /vault: ingest could not process b;/);
   assert.ok(j.state().lastSuccess);
+});
+
+test('a day with only `ingest: FAILED <file>: <reason>` lines on stderr is FAILED too', () => {
+  const failing = ['ingest: FAILED a.txt: agent exited 1', 'ingest: FAILED b.txt: agent exited 1'];
+  const j = job({ vault: { ...vault(rawFolder(), 'would ingest: a'), run: node('sayerr.cjs', ...failing) } });
+  const r = j.run();
+  assert.equal(r.code, 1, r.out);
+  const [note] = j.notified();
+  assert.match(note, /^FAILED /);
+  assert.match(note, /Failed:\n- vault: every ingest attempt failed \(2 of 2\), so nothing was ingested \(a\.txt, b\.txt\)/);
+  assert.equal(j.state().lastSuccess, undefined);
+});
+
+test('a mixed day of both failure formats reports "N of M"', () => {
+  const lines = ['ingest (new)  a.txt', 'ingest (new)  b.txt', 'ingest (new)  c.txt', 'ingest: FAILED b.txt: agent exited 1', 'agent failed on: c.txt'];
+  const j = job({ vault: { ...vault(rawFolder(), 'would ingest: a'), run: node('sayerr.cjs', ...lines) } });
+  assert.equal(j.run().code, 0);
+  const [note] = j.notified();
+  assert.doesNotMatch(note, /^FAILED /);
+  assert.match(note, /vault: ingested 1 of 3 new raw file\(s\)/);
+  assert.match(note, /vault: ingest could not process b\.txt;/);
+  assert.match(note, /vault: ingest could not process c\.txt;/);
+});
+
+test('the vault health check reports a failing bin/status or bin/lint and skips a vault without them', { skip: process.platform === 'win32' }, () => {
+  const bare = path.join(tmp, `vault${++n}`);
+  fs.mkdirSync(bare);
+  const quiet = job({ vault: { ...vault(rawFolder()), path: bare } });
+  const q = quiet.run();
+  assert.equal(q.code, 0, q.out);
+  assert.doesNotMatch(q.out + (quiet.notified()[0] || ''), /vault:(stuck|lint)|lint found problems/);
+
+  const full = path.join(tmp, `vault${++n}`);
+  fs.mkdirSync(path.join(full, 'bin'), { recursive: true });
+  fs.writeFileSync(path.join(full, 'bin', 'status'), '#!/bin/sh\necho "a run has been stuck for 3 days"\nexit 1\n', { mode: 0o755 });
+  fs.writeFileSync(path.join(full, 'bin', 'lint'), '#!/bin/sh\necho "2 broken links"\nexit 1\n', { mode: 0o755 });
+  const sick = job({ vault: { ...vault(rawFolder()), path: full } });
+  assert.equal(sick.run().code, 0);
+  const [note] = sick.notified();
+  assert.match(note, /vault: a run has been stuck for 3 days/);
+  assert.match(note, /vault: lint found problems: 2 broken links/);
 });
 
 test('--catch-up does nothing when a run already succeeded today, and runs when none did', () => {
