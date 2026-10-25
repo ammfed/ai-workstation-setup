@@ -472,10 +472,36 @@ test('a card with based ends with one "Based on" line, and a card without it ren
   assert.equal(basedOn({ based: 'the owner\'s notes & a usability study' }), '<p class="based">Based on: the owner\'s notes &amp; a usability study</p>');
   assert.equal(basedOn({}), '');
   assert.equal(basedOn({ based: '' }), '');
-  // Both card kinds, with options and without, end with the line after the Next button.
-  const ends = html.match(/id="next"[^>]*>Next<\/button>\n\s*\$\{basedOn\(c\)\}`;/g) || [];
-  assert.equal(ends.length, 2);
-  assert.match(html, /\.based\{[^}]*\}/);
+  // Run the page script against a small fake DOM and render real cards with and without based.
+  const pageScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).find((s) => s.includes('function drawCard'));
+  const elements = new Map();
+  const element = () => ({
+    innerHTML: '', textContent: '', hidden: false, disabled: false, value: '', style: {}, dataset: {},
+    addEventListener() {}, setAttribute() {}, querySelector: () => null, querySelectorAll: () => [], close() {}, showModal() {},
+  });
+  const document = {
+    documentElement: { dataset: {} },
+    getElementById: (id) => elements.get(id) || elements.set(id, element()).get(id),
+    querySelector: () => null,
+  };
+  const page = vm.createContext({
+    document, location: { pathname: '/cards.html' }, localStorage: { getItem: () => null, setItem() {} },
+    window: { addEventListener() {} }, setTimeout() {}, HideKit: { attach: () => ({ refresh() {} }) },
+  });
+  vm.runInContext(pageScript, page);
+  const render = (card) => {
+    vm.runInContext('CARDS.length = 0; CARDS.push(card); index = 0; drawCard();', Object.assign(page, { card }));
+    return document.getElementById('card').innerHTML.trim();
+  };
+  const line = '<p class="based">Based on: two interviews &amp; the logs</p>';
+  const withOptions = render({ id: 'a', title: 'A', question: 'Which?', options: [['x', 'X'], ['y', 'Y']], rec: 'x', based: 'two interviews & the logs' });
+  assert.ok(withOptions.endsWith(line), withOptions);
+  const content = render({ id: 'b', title: 'B', body: '<p>Plan</p>', based: 'two interviews & the logs' });
+  assert.ok(content.endsWith(line), content);
+  const without = render({ id: 'c', title: 'C', question: 'Which?', options: [['x', 'X']] });
+  assert.doesNotMatch(without, /Based on/);
+  assert.ok(without.endsWith('<button type="button" class="primary" id="next" disabled>Next</button>'), without);
+  assert.doesNotMatch(render({ id: 'd', title: 'D', body: '<p>Plan</p>' }), /Based on/);
 });
 
 test('the card template is light by default with a guarded dark switch', () => {
