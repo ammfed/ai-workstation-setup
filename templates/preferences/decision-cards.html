@@ -18,6 +18,7 @@
     every option's preview, and the canvas follows the option you select;
   - a card with no options (a report, plan or explainer step) has a Next button instead;
   - a short "why" stays closed until opened;
+  - a card can end with one short "Based on" line that names the types of sources behind it;
   - answers are queued, shown in a one-screen recap, then sent together;
   - a banner says when no agent is listening (the page was opened without lavish-axi);
   - what is already decided sits below, collapsed;
@@ -122,6 +123,7 @@ button.primary:disabled{opacity:.4;cursor:not-allowed}
 .headline .num{font-size:40px;font-weight:800;line-height:1;color:var(--accent-deep);white-space:nowrap}
 .headline .cap{color:var(--muted)}
 .evidence{background:var(--accent-soft);border-radius:12px;padding:8px 12px;margin:10px 0 0;font-size:15px}
+.based{color:var(--muted);font-size:14px;margin:12px 0 0}
 .decided{margin-top:22px}
 .decided summary{font-family:var(--head);font-weight:600}
 .decided table{width:100%;border-collapse:collapse;margin-top:10px;font-size:15px}
@@ -433,8 +435,9 @@ dialog.zoom button{position:sticky;top:0;float:right;font:inherit;font-size:14px
 // previews { value: HTML or inline SVG }, one per option, optional previewsTall { value: ... }
 // with a vertical version of a wide diagram for phones, optional headline { num: '3 of 5',
 // cap: 'checks passing' } shown before the options, optional evidence: one sentence shown
-// above "Why". A card without options is a content card: give it body (short HTML) and
-// preview (one visual); it gets a Next button.
+// above "Why", optional based: one short line naming the types of sources behind the card,
+// shown last as "Based on: ...". A card without options is a content card: give it body
+// (short HTML) and preview (one visual); it gets a Next button.
 const lines = (x, y, n, w) => Array.from({ length: n }, (_, i) => `<rect x="${x}" y="${y + i * 22}" width="${w}" height="8" rx="4" fill="currentColor" opacity=".25"/>`).join('');
 const onePage = `<svg viewBox="0 0 320 220" role="img" aria-label="One page with a summary table">
   <rect x="1" y="1" width="318" height="218" rx="10" fill="none" stroke="currentColor" opacity=".3"/>
@@ -456,6 +459,7 @@ const CARDS = [
     headline: { num: '2 of 3', cap: 'readers stop after the first screen' },
     evidence: 'The summary table answers the first question without scrolling.',
     why: 'Most readers stop after the first screen, so the summary goes first.',
+    based: 'reader feedback and last month\'s reading times',
     previews: { 'one-page': onePage, sections },
   },
   {
@@ -487,6 +491,7 @@ let index = 0;
 let shown = {};
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const basedOn = (c) => (c.based ? `<p class="based">Based on: ${esc(c.based)}</p>` : '');
 // Light is the default. The switch sets data-theme="dark" and remembers the choice for this page.
 const themeKey = 'decision-cards-theme:' + location.pathname;
 function setTheme(dark, save) {
@@ -567,7 +572,8 @@ function drawCard() {
       ${c.body ? `<div class="body">${c.body}</div>` : ''}
       ${c.evidence ? `<p class="evidence">${esc(c.evidence)}</p>` : ''}
       ${c.why ? `<details><summary>Why</summary><p>${c.why}</p></details>` : ''}
-      <button type="button" class="primary" id="next">Next</button>`;
+      <button type="button" class="primary" id="next">Next</button>
+      ${basedOn(c)}`;
     $('next').addEventListener('click', advance);
     drawCanvas();
     return;
@@ -579,7 +585,8 @@ function drawCard() {
     ${c.why ? `<details><summary>Why</summary><p>${c.why}</p></details>` : ''}
     <label class="label note-label" for="note">Note</label>
     <textarea id="note" rows="2" placeholder="Optional"></textarea>
-    <button type="button" class="primary" id="next" disabled>Next</button>`;
+    <button type="button" class="primary" id="next" disabled>Next</button>
+    ${basedOn(c)}`;
   $('card').querySelectorAll('input[type=radio]').forEach((r) => r.addEventListener('change', () => {
     $('next').disabled = false;
     shown[c.id] = r.value;

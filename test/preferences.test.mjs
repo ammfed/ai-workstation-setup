@@ -13,6 +13,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
 import { Context, detectPlatform } from '../lib/context.mjs';
 import firstmate from '../modules/firstmate/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
@@ -461,6 +462,20 @@ test('the card template labels its note box and hides an empty waiting strip', (
   // The strip is display:flex, which beats the hidden attribute unless hidden is forced.
   assert.match(html, /\[hidden\]\{display:none!important\}/);
   assert.match(html, /<div class="waiting" id="waiting" hidden>/);
+});
+
+test('a card with based ends with one "Based on" line, and a card without it renders as before', () => {
+  const html = fs.readFileSync(path.join(repoRoot, 'templates/preferences/decision-cards.html'), 'utf8');
+  const helpers = html.match(/\nconst esc = .*\nconst basedOn = .*\n/);
+  assert.ok(helpers, 'the page defines basedOn next to esc');
+  const basedOn = vm.runInNewContext(`${helpers[0]}; basedOn`);
+  assert.equal(basedOn({ based: 'the owner\'s notes & a usability study' }), '<p class="based">Based on: the owner\'s notes &amp; a usability study</p>');
+  assert.equal(basedOn({}), '');
+  assert.equal(basedOn({ based: '' }), '');
+  // Both card kinds, with options and without, end with the line after the Next button.
+  const ends = html.match(/id="next"[^>]*>Next<\/button>\n\s*\$\{basedOn\(c\)\}`;/g) || [];
+  assert.equal(ends.length, 2);
+  assert.match(html, /\.based\{[^}]*\}/);
 });
 
 test('the card template is light by default with a guarded dark switch', () => {

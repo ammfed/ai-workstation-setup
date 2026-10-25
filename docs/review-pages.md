@@ -20,7 +20,8 @@ it lives.
 
 1. **Build the page.** Copy the template next to the work, replace `CARDS` (and `DECIDED`,
    what is already settled), and give every option a preview. Keep text to a title, one
-   question and short option labels.
+   question and short option labels. A card's optional `based` field ends it with one short
+   "Based on" line that names the types of sources behind it.
 2. **Serve it without opening a tab.** Creating the page never opens a tab, and the agent never
    re-runs the open command just to refresh the page.
 
