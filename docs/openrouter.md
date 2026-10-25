@@ -22,7 +22,9 @@ clone. With no key given, the module creates that file empty for you to fill in.
 | --- | --- | --- |
 | Voice mode actions | yes | `actions.chooser.keyFile` points at the key file, and `actions.chooser.model` is `OPENROUTER_MODEL` ([voice mode](voice-mode.md)). |
 | [compact-adviser](https://github.com/kunchenguid/compact-adviser) | no | It calls TypeSafe directly and documents no OpenRouter setting. Give it `TYPESAFE_API_KEY` (from the TypeSafe console) instead. |
-| Firstmate's typed dispatch resolver (`bin/fm-dispatch-resolve.sh`) | no | It calls TypeSafe directly and documents no OpenRouter setting. It is switched on by `TYPESAFE_API_KEY` in the environment or `$FM_HOME/.env` (Firstmate's `docs/configuration.md`, "Typed dispatch resolution"). |
+| Firstmate's typed dispatch resolver (`bin/fm-dispatch-resolve.sh`) | yes, by Firstmate's own setting | `FM_DISPATCH_PROVIDER` selects `typesafe` or `openrouter`. OpenRouter needs both `FM_DISPATCH_PROVIDER=openrouter` and a non-empty `FM_DISPATCH_MODEL`, and an OpenRouter key alone never selects the provider. With no provider setting, the resolver keeps its original behavior: it uses `jev-latest` when `TYPESAFE_API_KEY` is available and is off otherwise. Each setting and key comes from the environment or `$FM_HOME/.env`, and the environment wins (Firstmate's `docs/configuration.md`, "Typed dispatch resolution"). This setup does not set these for you. |
 
-This setup does not wrap or patch either tool to send its requests elsewhere. If one of them
-later documents an OpenRouter setting, it can be wired here the same way as voice mode.
+This setup does not wrap or patch any tool to send its requests elsewhere. The Firstmate
+resolver needs no wrapper or workaround, because its OpenRouter setting is built in. If
+compact-adviser later documents an OpenRouter setting, it can be wired here the same way as
+voice mode.
