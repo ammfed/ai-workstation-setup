@@ -266,7 +266,7 @@ It is plain Markdown. Each `##` heading says where its lines go:
 | --- | --- |
 | `Everywhere` | All three files below |
 | `Sessions` | The core file (`working-preferences.md`) and Firstmate's `data/captain.md` |
-| `Workers` | Firstmate's `config/brief-include.md`, appended to every worker brief |
+| `Workers` | Firstmate's `config/brief-include.md` (and each local second-mate home's), appended to every worker brief |
 | `Second mates` | Firstmate's `data/captain-shared.md` in the main home, which every second mate reads; written only when there are lines for it |
 | `Reviewer` | The no-mistakes design review rules (agent-clis, `NO_MISTAKES_PRINCIPLES`), added after the generic ones to every review whose change touches an interface file |
 
