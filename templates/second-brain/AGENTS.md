@@ -30,28 +30,24 @@ note as a `pillar:` tag, so a note can belong to two areas at once and no folder
 
 Everything else:
 
-- `templates/` - one frontmatter and body template per note `type`, used by hand and by the
-  ingesting agent
+- `templates/` - one frontmatter and body template per note `type`, for people and agents
 - `bin/index.mjs` - regenerates `MAP.md` from every note's frontmatter. Plain extraction, no model
-- `bin/check.mjs` - the frontmatter and link checker. This is what makes the contract below real
-  rather than merely documented
+- `bin/check.mjs` - the frontmatter and link checker that makes the contract below real
 - `bin/ingest.mjs` - the ingestion driver. Hands one raw file at a time to your agent CLI
 - `bin/housekeeping.mjs` - the unattended pass: check, then reindex. Meant for a timer
 - `prompts/ingest.md` - the prompt `bin/ingest.mjs` feeds that agent
 - Optional tools, present only when they were picked at setup:
-  - `bin/search.mjs` - ranked full-text search (BM25) over the notes. It reads the notes on
-    every run, so there is still no index to build or keep fresh
+  - `bin/search.mjs` - ranked full-text search (BM25) that reads the notes on every run, no index
   - `bin/capture.mjs` - adds one provenance-tagged line to today's journal, a named note, or a
     new note, runs `bin/check.mjs` on it, and commits only that note and `MAP.md`
-  - `bin/garden.mjs` and `prompts/garden.md` - one small tidy-up of a few notes by your agent
-    CLI (see "Garden" below)
+  - `bin/garden.mjs` and `prompts/garden.md` - one small tidy-up of a few notes by your agent CLI
   - `bin/bookmarks.mjs` - turns a browser bookmark export into markdown to drop in `$RAW_DIR`
 - `START-HERE.md`, `MAP.md` - the two hand-readable entry points. `MAP.md` is generated: one
   line per note, grouped by folder, so anyone can see everything that exists without a search
   index. Like a folder's own `README.md`, neither carries note frontmatter, and `bin/check.mjs`
   skips all three
-- `.ingest/ledger.tsv` - `sha256<TAB>filename<TAB>date<TAB>status<TAB>path`, the record of what
-  has been ingested. Created by the first `bin/ingest.mjs` run; it does not exist until then
+- `.ingest/ledger.tsv` - `sha256<TAB>filename<TAB>date<TAB>status<TAB>path`, what has been
+  ingested. The first `bin/ingest.mjs` run creates it
 
 Raw source files live **outside** this vault, under `$RAW_DIR` (this setup: `{{RAW_DIR}}`).
 Notes in `sources/` reference them by exact filename only, so the vault stays a layer of notes
@@ -79,8 +75,8 @@ A project note also carries `stage: idea|active|on-hold|done`. A `sources/` note
 A note's `type` must match the fixed type of its entity folder: everything under `people/` is
 `type: person`, and so on. Update `updated:` on every edit.
 
-`bin/check.mjs` enforces all of the above plus one more thing: that every `[[wikilink]]`
-resolves to a note that exists. Run it over the whole vault, or over named files:
+`bin/check.mjs` enforces all of the above, and that every `[[wikilink]]` resolves to a note that
+exists. Run it over the whole vault, or over named files:
 
 ```sh
 node bin/check.mjs             # whole vault
@@ -112,7 +108,7 @@ vault that silently overwrites is a vault that cannot be audited.
 ## What is open
 
 `decisions/`, `journal/` and `reviews/` are the durable "what is open" surface. An unresolved
-question belongs in one of them, where the next reader will meet it, not in someone's head:
+question belongs in one of them, where the next reader meets it, not in someone's head:
 
 - `decisions/` holds what has been settled and why, so a closed question stays closed and a
   reopened one shows what changed.
@@ -133,7 +129,8 @@ topic at hand.
 
 ## How to search
 
-There is no search index and no embeddings. Grep the vault directly:
+There is no search index and no embeddings. `MAP.md` answers "what exists", `rg` answers
+"where is it":
 
 ```sh
 rg -i "some topic" .
@@ -142,10 +139,8 @@ rg -l "type: project" projects/
 ```
 
 When `bin/search.mjs` is installed, `node bin/search.mjs some topic` ranks the notes that match
-best, title matches first; it reads the notes on every run and keeps nothing.
-
-`MAP.md` answers "what exists", `rg` answers "where is it". A search index, a knowledge graph
-and embeddings are a plausible future extension of this vault, not part of it today (see Rules).
+best, title matches first; it reads the notes on every run and keeps nothing. A search index, a
+knowledge graph and embeddings are a plausible future extension, not part of it today (see Rules).
 
 ## How to ingest raw files
 
@@ -159,39 +154,23 @@ node bin/ingest.mjs --file "/path/to/one/file"
 node bin/ingest.mjs --timeout 30   # stop the agent on one file after 30 minutes (the default)
 ```
 
-Each new file gets exactly one agent run, prompted from `prompts/ingest.md`, which writes a
-`sources/` note and folds the facts into the topic and entity notes they belong to. Then the
-file gets a ledger row. A file whose sha256 is already in the ledger under another name is a
-duplicate and is ledgered `duplicate-of:<original>` without a second agent run. A file whose
-path was ledgered before but now hashes differently is a revision: the agent updates the
-existing `sources/` note in place and the row is ledgered `updated`. A file the agent does not
-finish within `--timeout` is ledgered `failed` and the run goes on; `--retry-failed` takes it
-again. With `--deadline` (or `$INGEST_DEADLINE`, which the daily sync sets) no file starts after
-that time, and a file cut off by it is left for the next run.
-
-The agent is whatever CLI `$AGENT_CLI` names, with `$AGENT_CLI_ARGS` for its flags. The vault
-does not depend on any particular one, and runs no local model (see Rules).
+Each new file gets exactly one agent run from `prompts/ingest.md`, then a ledger row. That
+prompt also says how a run treats duplicates, revisions, timeouts and the deadline. The agent is
+the CLI `$AGENT_CLI` names, with `$AGENT_CLI_ARGS`; the vault needs no particular one and runs no
+local model (see Rules).
 
 ## Housekeeping
 
-`node bin/housekeeping.mjs` is the unattended pass: it runs `bin/check.mjs` over the vault and
-regenerates `MAP.md`, printing one summary line and touching nothing else. It is safe to run
-repeatedly and makes no network calls.
-
-Point your scheduler at it (a systemd user timer, a launchd agent, Task Scheduler, or cron)
-every few hours, or run it by hand after a batch of edits. Keeping it this boring is the point:
-an unattended job that only validates and reindexes can be left running without supervision,
-and needs no credentials of any kind.
+`node bin/housekeeping.mjs` runs `bin/check.mjs` over the vault and regenerates `MAP.md`. It
+prints one summary line, touches nothing else, makes no network calls and needs no credentials,
+so a scheduler (a systemd user timer, a launchd agent, Task Scheduler, or cron) can run it every
+few hours without supervision. Run it by hand after a batch of edits too.
 
 ## Garden
 
-`node bin/garden.mjs` (when installed) hands one slice of a few notes, taken round-robin, to
-the agent CLI named by `$AGENT_CLI` with `prompts/garden.md`, to make their structure and prose
-clearer without changing any fact. The vault must be a git repository. A slice holding a note
-with uncommitted changes is skipped; anything the agent changed outside the slice is put back;
-the changed notes must pass `bin/check.mjs` or the pass is discarded; a good pass is committed
-on its own. `--dry-run` shows the next slice and its prompt, `--status` says whether a pass is
-running.
+`node bin/garden.mjs` (when installed) has the agent CLI named by `$AGENT_CLI` make a few notes
+clearer without changing any fact. `prompts/garden.md` is its prompt and says how a pass runs
+and what it undoes.
 
 ## Rules
 

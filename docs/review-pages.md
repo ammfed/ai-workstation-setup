@@ -9,6 +9,13 @@ page starts from it, not only decisions. Next to it the module writes a hide tra
 (`hide-kit.js`), so you can mark parts of a page for removal. This page is the loop an agent
 follows with them.
 
+The review-page rules live in the `review-pages` skill that the module writes to
+`~/.claude/skills/review-pages/SKILL.md`, so they load when a page or prototype is in play
+rather than in every session. The core rules file keeps only the decision rules: how questions
+reach you, and that a yes-or-no question stays in chat.
+[Working preferences](working-preferences.md#where-the-rules-live) lists every rule and where
+it lives.
+
 ## The loop
 
 1. **Build the page.** Copy the template next to the work, replace `CARDS` (and `DECIDED`,

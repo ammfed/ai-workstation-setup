@@ -9,6 +9,7 @@ const BUNDLED_EXTRAS = {
   'workflow-playbook': [
     ['principles/checks.md', 'principles/checks.md'],
     ['principles/bin/principle-check.mjs', 'principles/bin/principle-check.mjs'],
+    ['skills/workflow-playbook/checkpoints.md', 'checkpoints.md'],
   ],
 };
 

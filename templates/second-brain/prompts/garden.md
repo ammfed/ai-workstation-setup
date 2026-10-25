@@ -18,3 +18,9 @@ For each note:
 Do not create, rename, move or delete any file, do not edit any file outside the list above,
 and do not run git. The script that started you checks and commits the result, and undoes
 anything outside this slice.
+
+How this pass runs: `bin/garden.mjs` hands you one slice of a few notes, taken round-robin. The
+vault must be a git repository. A slice holding a note with uncommitted changes is skipped.
+Anything you change outside the slice is put back, the changed notes must pass `bin/check.mjs`
+or the pass is discarded, and a good pass is committed on its own. `--dry-run` shows the next
+slice and its prompt, and `--status` says whether a pass is running.
