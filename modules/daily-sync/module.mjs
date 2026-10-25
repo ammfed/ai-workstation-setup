@@ -15,6 +15,8 @@ import { addSessionStartHook } from '../../lib/claude.mjs';
 const NAME = 'daily-sync';
 const TAG = 'ai-workstation-setup daily-sync';
 const LAUNCHD_LABEL = 'local.ai-workstation-setup.daily-sync';
+// A second run that starts only when the morning run did not succeed that day (`--catch-up`).
+const CATCHUP_TIME = '09:30';
 const dir = (ctx) => path.join(ctx.home, '.config', 'ai-workstation-setup', NAME);
 
 // A small model, no tools, no settings or MCP servers, and a one-line system prompt: about a
@@ -109,51 +111,67 @@ const sq = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
 const unitQuote = (s) => `"${String(s).replace(/%/g, '%%').replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 const xml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-async function systemdTimer(ctx, script, time) {
+const beforeCatchUp = (time) => time.hour * 60 + time.minute < 9 * 60 + 30;
+
+export async function systemdTimer(ctx, script, time) {
   const unitDir = path.join(ctx.home, '.config', 'systemd', 'user');
-  const service = [
-    '[Unit]',
-    `Description=Daily alignment pass (${TAG})`,
-    '',
-    '[Service]',
-    'Type=oneshot',
-    'Nice=10',
-    'TimeoutStartSec=3h',
-    `Environment=${unitQuote(`PATH=${process.env.PATH}`)}`,
-    `ExecStart=${unitQuote(process.execPath)} ${unitQuote(script)}`,
-    '',
-  ].join('\n');
-  const timer = [
-    '[Unit]',
-    `Description=Run daily-sync every day at ${time.text} (${TAG})`,
-    '',
-    '[Timer]',
-    `OnCalendar=*-*-* ${time.text}:00`,
-    'Persistent=true',
-    '',
-    '[Install]',
-    'WantedBy=timers.target',
-    '',
-  ].join('\n');
-  const wroteService = await ctx.writeFile(path.join(unitDir, `${NAME}.service`), service, { onConflict: 'ask' });
-  const wroteTimer = await ctx.writeFile(path.join(unitDir, `${NAME}.timer`), timer, { onConflict: 'ask' });
-  const enabled = ctx.capture(`systemctl --user is-enabled ${NAME}.timer`) === 'enabled';
-  if (wroteService || wroteTimer || !enabled) ctx.run(`systemctl --user daemon-reload && systemctl --user enable --now ${NAME}.timer`);
-  else ctx.ok(`${NAME}.timer is enabled`);
+  const catchUp = parseTime(CATCHUP_TIME);
+  const units = [{ name: NAME, time, args: '', what: 'Run daily-sync every day at' }];
+  if (beforeCatchUp(time)) units.push({ name: `${NAME}-catchup`, time: catchUp, args: ' --catch-up', what: 'Run daily-sync again if the morning run did not succeed, at' });
+  else ctx.info(`no catch-up run: it would start at ${CATCHUP_TIME}, before your ${time.text} run`);
+  // A user timer cannot wait for network-online.target (a system unit), so the script itself
+  // waits, for a bounded time, until the repos it pulls and pushes can be resolved.
+  let wrote = false;
+  const notEnabled = [];
+  for (const u of units) {
+    const service = [
+      '[Unit]',
+      `Description=Daily alignment pass${u.args ? ' (catch-up)' : ''} (${TAG})`,
+      '',
+      '[Service]',
+      'Type=oneshot',
+      'Nice=10',
+      'TimeoutStartSec=3h',
+      `Environment=${unitQuote(`PATH=${process.env.PATH}`)}`,
+      `ExecStart=${unitQuote(process.execPath)} ${unitQuote(script)}${u.args}`,
+      '',
+    ].join('\n');
+    const timer = [
+      '[Unit]',
+      `Description=${u.what} ${u.time.text} (${TAG})`,
+      '',
+      '[Timer]',
+      `OnCalendar=*-*-* ${u.time.text}:00`,
+      'Persistent=true',
+      '',
+      '[Install]',
+      'WantedBy=timers.target',
+      '',
+    ].join('\n');
+    const wroteService = await ctx.writeFile(path.join(unitDir, `${u.name}.service`), service, { onConflict: 'ask' });
+    const wroteTimer = await ctx.writeFile(path.join(unitDir, `${u.name}.timer`), timer, { onConflict: 'ask' });
+    wrote = wrote || wroteService || wroteTimer;
+    if (ctx.capture(`systemctl --user is-enabled ${u.name}.timer`) !== 'enabled') notEnabled.push(u.name);
+  }
+  const timers = units.map((u) => `${u.name}.timer`).join(' ');
+  if (wrote || notEnabled.length) ctx.run(`systemctl --user daemon-reload && systemctl --user enable --now ${timers}`);
+  else ctx.ok(`${timers} ${units.length > 1 ? 'are' : 'is'} enabled`);
   if (ctx.capture('loginctl show-user "$USER" --property=Linger --value') === 'no') {
     ctx.info('the timer runs while you are logged in and catches up on a missed run at your next login; `loginctl enable-linger` makes it run while you are logged out too');
   }
-  ctx.info(`disable it with: systemctl --user disable --now ${NAME}.timer`);
+  ctx.info(`disable it with: systemctl --user disable --now ${timers}`);
 }
 
-function cronLine(ctx, script, time) {
-  const line = `${time.minute} ${time.hour} * * * PATH=${sq(process.env.PATH)} ${sq(process.execPath)} ${sq(script)} >/dev/null 2>&1 # ${TAG}`;
+export function cronLine(ctx, script, time) {
+  const entry = (t, args) => `${t.minute} ${t.hour} * * * PATH=${sq(process.env.PATH)} ${sq(process.execPath)} ${sq(script)}${args} >/dev/null 2>&1 # ${TAG}`;
+  const wanted = [entry(time, '')];
+  if (beforeCatchUp(time)) wanted.push(entry(parseTime(CATCHUP_TIME), ' --catch-up'));
   const current = ctx.capture('crontab -l 2>/dev/null') || '';
-  if (current.split('\n').includes(line)) return ctx.ok('daily-sync is already in your crontab');
+  if (wanted.every((l) => current.split('\n').includes(l))) return ctx.ok('daily-sync is already in your crontab');
   const kept = current.split('\n').filter((l) => l && !l.includes(`# ${TAG}`));
-  ctx.run('crontab -', { input: `${[...kept, line].join('\n')}\n` });
-  ctx.info('cron does not catch up on a missed run; the next run reports it as FAILED (no successful run for over a day)');
-  ctx.info(`disable it by removing the line marked "# ${TAG}" with: crontab -e`);
+  ctx.run('crontab -', { input: `${[...kept, ...wanted].join('\n')}\n` });
+  ctx.info(`cron does not catch up on a missed run${wanted.length > 1 ? `; the ${CATCHUP_TIME} run covers a morning run that failed, and a machine that was off` : ''}, so the next run reports it as FAILED (no successful run for over a day)`);
+  ctx.info(`disable it by removing the lines marked "# ${TAG}" with: crontab -e`);
 }
 
 async function launchdAgent(ctx, script, time) {

@@ -20,6 +20,7 @@
 //   node daily-sync.mjs              the scheduled run
 //   node daily-sync.mjs --dry-run    no fetch, pull, ingest, command, model call, notify or state change
 //   node daily-sync.mjs --status     one FAILED line when the job needs you, else nothing
+//   node daily-sync.mjs --catch-up   the scheduled run, skipped when a run already succeeded today
 //   node daily-sync.mjs --config F   use another config file (default: config.json next to this script)
 // Pause it by creating a file named "off" next to config.json; delete it to resume.
 //
@@ -155,6 +156,40 @@ function alive(pid) {
   }
 }
 
+// A run started at boot or right after wake-up can come before DNS works. Before any step runs,
+// wait (at most networkWaitSec, default 300) for the host of each repo the run pulls or pushes.
+function remoteHost(url) {
+  const u = String(url).trim();
+  const m = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]*@)?([^/:]+)/i.exec(u) || /^(?:[^@/\\:]+@)?([^/\\:@]+):(?![/\\])/.exec(u);
+  return m?.[1];
+}
+
+function resolves(host, timeoutSec) {
+  const code = 'require("node:dns").lookup(process.argv[1], (err) => process.exit(err ? 1 : 0))';
+  return spawnSync(process.execPath, ['-e', code, host], { stdio: 'ignore', timeout: timeoutSec * 1000, killSignal: 'SIGKILL' }).status === 0;
+}
+
+function waitForNetwork(config) {
+  const waitSec = config.networkWaitSec === undefined ? 300 : Number(config.networkWaitSec);
+  if (dryRun || !(waitSec > 0)) return;
+  const repos = [...(config.pull || []).map(repoEntry), ...(config.vault?.path ? [repoEntry(config.vault.path)] : [])];
+  const hosts = new Set();
+  for (const r of repos) {
+    if (isRepo(r.path)) hosts.add(remoteHost(git(r.path, ['remote', 'get-url', '--push', r.remote]).out));
+  }
+  hosts.delete(undefined);
+  const deadline = Date.now() + waitSec * 1000;
+  for (const host of hosts) {
+    const began = Date.now();
+    while (!resolves(host, 10)) {
+      const left = deadline - Date.now();
+      if (left <= 0) return log(`network: ${host} did not resolve within ${waitSec}s; the steps that need it report their own failure`);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(5000, left));
+    }
+    if (Date.now() - began > 1000) log(`network: ${host} resolved after ${Math.round((Date.now() - began) / 1000)}s`);
+  }
+}
+
 // ---------------------------------------------------------------- findings
 
 // changed: something this run did. attention: drift it could not settle, reported until it
@@ -162,6 +197,8 @@ function alive(pid) {
 const items = [];
 const add = (level, key, text, extra = {}) => items.push({ level, key, text, ...extra });
 const modelCalls = { explain: 0, ingest: 0 };
+// Plain lines at the end of the report that never make a run FAILED or send it by themselves.
+const notes = [];
 let checks = 0;
 
 function check(name, fn) {
@@ -352,9 +389,88 @@ function vault(v) {
   if (r.code !== 0) return add('failed', 'vault:ingest', `vault: ingest failed (${exitText(r)}): ${clip(lastLine(out))}`);
   const atDeadline = /^ingest: stopped at the deadline/m.test(out);
   const left = atDeadline ? `; it stopped at its time limit and ${pending - runs} more wait for the next run` : more;
-  add('changed', 'vault:ingest', `vault: ingested ${runs} new raw file(s) with the vault's own agent${left}`);
-  for (const m of out.matchAll(/^\S+ failed on:\s*(.+)$/gm)) {
-    add('attention', `vault:ingest-failed:${m[1].trim()}`, `vault: ingest could not process ${m[1].trim()}; it is ledgered as failed (retry with --retry-failed)`);
+  const failedOn = [...out.matchAll(/^\S+ failed on:\s*(.+)$/gm)].map((m) => m[1].trim());
+  const ok = Math.max(0, runs - failedOn.length);
+  // A run where every attempt failed ingested nothing: that is a failed run, not a changed one.
+  if (runs > 0 && ok === 0) {
+    return add('failed', 'vault:ingest-all-failed', `vault: every ingest attempt failed (${runs} of ${runs}), so nothing was ingested (${sample(failedOn)}); check that the vault's agent command runs, then retry with --retry-failed`);
+  }
+  add('changed', 'vault:ingest', `vault: ingested ${failedOn.length ? `${ok} of ${runs}` : runs} new raw file(s) with the vault's own agent${left}`);
+  for (const f of failedOn) {
+    add('attention', `vault:ingest-failed:${f}`, `vault: ingest could not process ${f}; it is ledgered as failed (retry with --retry-failed)`);
+  }
+}
+
+// ---------------------------------------------------------------- vault use and stale sources
+
+function walkFiles(dir, visit) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.name.startsWith('.')) continue;
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) walkFiles(p, visit);
+    else if (e.isFile()) visit(p);
+  }
+}
+
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// How many agent sessions of the last 7 days made a tool call that names the vault. It reads the
+// local Claude session logs and keeps only two counts: nothing from a session is copied anywhere.
+function vaultUse(v) {
+  const logs = expandHome(v.sessionLogs || path.join(os.homedir(), '.claude', 'projects'));
+  const vp = expandHome(v.path);
+  const since = Date.now() - 7 * 24 * HOUR;
+  // The logs are JSON, where a Windows path has its backslashes doubled, so both spellings are looked for.
+  const spellings = [...new Set([vp, tilde(vp)].flatMap((p) => [p, JSON.stringify(p).slice(1, -1)]))];
+  const named = new RegExp(`(?:${spellings.map(escapeRe).join('|')})(?![\\w-])`);
+  let sessions = 0;
+  let used = 0;
+  try {
+    walkFiles(logs, (file) => {
+      if (!file.endsWith('.jsonl')) return;
+      try {
+        if (fs.statSync(file).mtimeMs < since) return;
+        sessions += 1;
+        const text = fs.readFileSync(file, 'utf8');
+        if (named.test(text) && text.split('\n').some((l) => l.includes('"tool_use"') && named.test(l))) used += 1;
+      } catch {
+        // an unreadable log is not counted
+      }
+    });
+  } catch {
+    // no log folder
+  }
+  notes.push(sessions ? `vault use: ${used} of ${sessions} agent sessions in the last 7 days` : `vault use: no agent session logs found in ${tilde(logs)} for the last 7 days`);
+}
+
+// The sources people export by hand (mail as .eml, a bookmarks export) go quiet without a sound.
+const SOURCES = [
+  { name: 'email', what: '.eml file', match: /\.eml$/i, action: 'export a fresh copy of your mail into that folder' },
+  { name: 'bookmarks', what: 'bookmarks export', match: /^bookmarks.*\.html$/i, action: 'export your bookmarks again into that folder' },
+];
+
+function staleSources(v) {
+  if (!v.rawDir) return;
+  const raw = expandHome(v.rawDir);
+  const days = Number(v.staleSourceDays) || 14;
+  for (const s of SOURCES) {
+    let newest = 0;
+    walkFiles(raw, (file) => {
+      if (s.match.test(path.basename(file))) newest = Math.max(newest, fs.statSync(file).mtimeMs);
+    });
+    const age = Math.floor((Date.now() - newest) / (24 * HOUR));
+    if (newest && age > days) {
+      add('attention', `source:stale:${s.name}`, `${s.name}: the newest ${s.what} in ${tilde(raw)} is ${age} days old (${stamp(newest).slice(0, 10)}); ${s.action}`);
+    }
+  }
+}
+
+// These two are extras: a failure to read them is logged, never a failed run.
+function soft(name, fn) {
+  try {
+    fn();
+  } catch (err) {
+    log(`note ${name}: ${err.message}`);
   }
 }
 
@@ -530,7 +646,7 @@ function report(startedAt) {
     ? `model calls: ${[modelCalls.explain && `${modelCalls.explain} to explain drift`, modelCalls.ingest && `${modelCalls.ingest} by the vault ingest`].filter(Boolean).join(', ')}`
     : 'no model calls';
   const when = stamp(startedAt);
-  if (!items.length) return `daily-sync ${when}: all quiet (${checks} check(s), ${callText})`;
+  if (!items.length) return [`daily-sync ${when}: all quiet (${checks} check(s), ${callText})`, ...notes].join('\n');
   const counts = [failed.length && `${failed.length} failed`, changed.length && `${changed.length} changed`, attention.length && `${attention.length} need you`];
   const section = (title, list) =>
     list.length ? [`${title}:`, ...list.map((i) => `- ${i.still ? '(still) ' : ''}${i.text}${i.model ? `\n  model: ${i.model}` : ''}`)] : [];
@@ -539,6 +655,7 @@ function report(startedAt) {
     ...section('Failed', failed),
     ...section('Changed', changed),
     ...section('Needs you', attention),
+    ...notes,
     `Log: ${tilde(FILES.log)}`,
   ].join('\n');
 }
@@ -585,6 +702,12 @@ function run() {
     return 0;
   }
 
+  // The catch-up run: the morning run already succeeded today, so there is nothing to catch up.
+  if (flag('--catch-up') && state.lastSuccess && stamp(state.lastSuccess).slice(0, 10) === stamp(Date.now()).slice(0, 10)) {
+    log(`skipped: catch-up not needed, a run succeeded today at ${stamp(state.lastSuccess).slice(11)}`);
+    return 0;
+  }
+
   let lock = { taken: true };
   if (!dryRun) {
     lock = takeLock();
@@ -609,9 +732,15 @@ function run() {
     add('attention', 'run:stale', `no successful run since ${stamp(state.lastSuccess)} (${hours}h ago): the schedule missed runs (machine off, timer stopped) or they failed`);
   }
 
+  waitForNetwork(config);
+
   for (const r of config.pull || []) check('pull', () => pull(r));
   for (const r of config.watch || []) check('watch', () => watch(r));
   if (config.vault) check('vault', () => vault(config.vault));
+  if (config.vault) {
+    soft('stale sources', () => staleSources(config.vault));
+    soft('vault use', () => vaultUse(config.vault));
+  }
   for (const c of config.commands || []) check(c.name || 'command', () => command(c));
   for (const v of config.versions || []) check(v.name || 'version', () => version(v));
   if (config.clickup) check('clickup', () => clickup(config.clickup));

@@ -12,7 +12,7 @@ import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Context, detectPlatform } from '../lib/context.mjs';
-import dailySync, { buildConfig } from '../modules/daily-sync/module.mjs';
+import dailySync, { buildConfig, cronLine, systemdTimer } from '../modules/daily-sync/module.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const script = path.join(repoRoot, 'templates', 'daily-sync', 'bin', 'daily-sync.mjs');
@@ -29,6 +29,9 @@ const env = {
   GIT_AUTHOR_EMAIL: email,
   GIT_COMMITTER_NAME: 'tester',
   GIT_COMMITTER_EMAIL: email,
+  // A run looks for agent session logs under the home folder: keep it away from the real one.
+  HOME: tmp,
+  USERPROFILE: tmp,
 };
 
 // Helpers written as scripts, so the notify and model commands are plain `node "<file>"`.
@@ -123,7 +126,7 @@ test('a quiet run writes a one-line report, sends nothing and calls no model', (
   const j = job({ vault: vault(rawFolder()) });
   const r = j.run();
   assert.equal(r.code, 0, r.out);
-  assert.match(j.latest(), /^daily-sync \d{4}-\d\d-\d\d \d\d:\d\d: all quiet \(1 check\(s\), no model calls\)$/);
+  assert.match(j.latest(), /^daily-sync \d{4}-\d\d-\d\d \d\d:\d\d: all quiet \(1 check\(s\), no model calls\)\nvault use: no agent session logs found in .* for the last 7 days$/);
   assert.deepEqual(j.notified(), []);
   assert.equal(j.modelCalls(), 0);
   assert.ok(j.state().lastSuccess);
@@ -437,4 +440,163 @@ test('an off file pauses it, and --status stays silent while paused', () => {
   assert.equal(j.run().code, 0);
   assert.deepEqual(j.notified(), []);
   assert.equal(spawnSync(process.execPath, [script, '--config', path.join(j.dir, 'config.json'), '--status'], { encoding: 'utf8' }).stdout, '');
+});
+
+test('a run where every ingest attempt failed is FAILED, exits non-zero and is not a success', () => {
+  const failing = ['ingest (new)  a', 'agent failed on: a', 'ingest (new)  b', 'agent failed on: b'];
+  const j = job({ vault: { ...vault(rawFolder(), 'would ingest: a'), run: node('say.cjs', ...failing) } });
+  const r = j.run();
+  assert.equal(r.code, 1, r.out);
+  const [note] = j.notified();
+  assert.match(note, /^FAILED /);
+  assert.match(note, /Failed:\n- vault: every ingest attempt failed \(2 of 2\), so nothing was ingested \(a, b\)/);
+  assert.doesNotMatch(note, /Changed:/);
+  assert.equal(j.state().lastRun.failed, 1);
+  assert.equal(j.state().lastSuccess, undefined);
+  assert.match(spawnSync(process.execPath, [script, '--config', path.join(j.dir, 'config.json'), '--status'], { encoding: 'utf8' }).stdout, /FAILED daily-sync: the last run .* had 1 failed step/);
+});
+
+test('a run where only some ingest attempts failed counts the successes and lists the failed file', () => {
+  const some = ['ingest (new)  a', 'ingest (new)  b', 'agent failed on: b'];
+  const j = job({ vault: { ...vault(rawFolder(), 'would ingest: a'), run: node('say.cjs', ...some) } });
+  assert.equal(j.run().code, 0);
+  const [note] = j.notified();
+  assert.doesNotMatch(note, /^FAILED /);
+  assert.match(note, /vault: ingested 1 of 2 new raw file\(s\) with the vault's own agent/);
+  assert.match(note, /vault: ingest could not process b;/);
+  assert.ok(j.state().lastSuccess);
+});
+
+test('--catch-up does nothing when a run already succeeded today, and runs when none did', () => {
+  const j = job({ vault: vault(rawFolder()) });
+  assert.equal(j.run().code, 0);
+  const first = j.state().lastRun.at;
+  const skipped = j.run('--catch-up');
+  assert.equal(skipped.code, 0, skipped.out);
+  assert.match(skipped.out, /skipped: catch-up not needed, a run succeeded today at \d\d:\d\d/);
+  assert.equal(j.state().lastRun.at, first, 'a skipped catch-up leaves the state alone');
+  j.setState({ ...j.state(), lastSuccess: Date.now() - 48 * 3_600_000 });
+  const ran = j.run('--catch-up');
+  assert.equal(ran.code, 0, ran.out);
+  assert.doesNotMatch(ran.out, /catch-up not needed/);
+  assert.ok(j.state().lastRun.at > first);
+  // A failed morning run is no success, so the catch-up runs again.
+  const broken = job({ vault: vault(path.join(tmp, 'no-such-raw-folder')) });
+  assert.equal(broken.run().code, 1);
+  const before = broken.state().lastRun.at;
+  assert.equal(broken.run('--catch-up').code, 1);
+  assert.ok(broken.state().lastRun.at > before);
+});
+
+/** A vault folder that is a git repo whose push remote is `url`. */
+function vaultRepo(url) {
+  const dir = path.join(tmp, `vaultrepo${++n}`);
+  fs.mkdirSync(dir);
+  git(dir, ['init', '-q', '-b', 'main']);
+  git(dir, ['remote', 'add', 'origin', url]);
+  return dir;
+}
+
+test('a run waits a bounded time for the push remote to resolve, then goes on', () => {
+  const lost = job({ networkWaitSec: 1, vault: { ...vault(rawFolder()), path: vaultRepo('https://no-such-host.invalid/x.git') } });
+  const r = lost.run();
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /network: no-such-host\.invalid did not resolve within 1s/);
+  const up = job({ networkWaitSec: 1, vault: { ...vault(rawFolder()), path: vaultRepo('git@localhost:me/notes.git') } });
+  assert.doesNotMatch(up.run().out, /network:/);
+  const off = job({ networkWaitSec: 0, vault: { ...vault(rawFolder()), path: vaultRepo('https://no-such-host.invalid/x.git') } });
+  assert.doesNotMatch(off.run().out, /network:/);
+});
+
+test('the report counts agent sessions of the last 7 days that used the vault, and copies nothing from them', () => {
+  const logs = path.join(tmp, `sessions${++n}`);
+  fs.mkdirSync(path.join(logs, 'proj'), { recursive: true });
+  const call = (file) => `${JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Read', input: { file_path: file } }] } })}\n`;
+  const said = (file) => `${JSON.stringify({ type: 'user', message: { content: `please look at ${file}` } })}\n`;
+  const put = (name, text, ageDays = 0) => {
+    const file = path.join(logs, 'proj', name);
+    fs.writeFileSync(file, text);
+    fs.utimesSync(file, new Date(Date.now() - ageDays * 86_400_000), new Date(Date.now() - ageDays * 86_400_000));
+  };
+  put('used.jsonl', call(`${tmp}/secret-plan.md`));
+  put('only-said.jsonl', said(`${tmp}/secret-plan.md`));
+  put('other-folder.jsonl', call(`${tmp}-other/x.md`));
+  put('old.jsonl', call(`${tmp}/secret-plan.md`), 10);
+  const j = job({ vault: { ...vault(rawFolder()), sessionLogs: logs } });
+  assert.equal(j.run().code, 0);
+  assert.match(j.latest(), /\nvault use: 1 of 3 agent sessions in the last 7 days$/);
+  assert.doesNotMatch(j.latest(), /secret-plan/);
+  assert.deepEqual(j.notified(), [], 'the count alone sends nothing');
+  const none = job({ vault: { ...vault(rawFolder()), sessionLogs: path.join(tmp, 'no-such-logs') } });
+  assert.equal(none.run().code, 0);
+  assert.match(none.latest(), /vault use: no agent session logs found in .*no-such-logs for the last 7 days/);
+  assert.doesNotMatch(none.latest(), /0 of 0/);
+});
+
+test('a source whose newest file is over 14 days old gets one nudge with its age and the action', () => {
+  const raw = rawFolder();
+  const put = (name, ageDays) => {
+    const file = path.join(raw, name);
+    fs.writeFileSync(file, 'x');
+    fs.utimesSync(file, new Date(Date.now() - ageDays * 86_400_000), new Date(Date.now() - ageDays * 86_400_000));
+  };
+  put('old.eml', 40);
+  put('older.eml', 90);
+  put('bookmarks-export.html', 3);
+  const j = job({ vault: vault(raw) });
+  assert.equal(j.run().code, 0);
+  const [note] = j.notified();
+  assert.match(note, /Needs you:\n- email: the newest \.eml file in .* is 40 days old \(\d{4}-\d\d-\d\d\); export a fresh copy of your mail into that folder/);
+  assert.doesNotMatch(note, /bookmarks:/, 'a fresh export is not nudged, and a source with no files is not either');
+  put('bookmarks-export.html', 20);
+  assert.equal(j.run().code, 0);
+  assert.match(j.latest(), /- \(still\) email: .*40 days old/);
+  assert.match(j.latest(), /- bookmarks: the newest bookmarks export in .* is 20 days old \(\d{4}-\d\d-\d\d\); export your bookmarks again into that folder/);
+  put('new.eml', 1);
+  assert.equal(j.run().code, 0);
+  assert.doesNotMatch(j.latest(), /email:/);
+});
+
+/** A stand-in for the installer context that records what the scheduler code writes and runs. */
+function recordingCtx(crontab = '') {
+  const written = new Map();
+  const ran = [];
+  return {
+    written,
+    ran,
+    home: path.join(tmp, 'fake-home'),
+    info() {},
+    ok() {},
+    capture: (cmd) => (cmd.startsWith('crontab -l') ? crontab : null),
+    writeFile: async (file, text) => written.set(file, text) && true,
+    run: (cmd, opts) => ran.push([cmd, opts?.input]),
+  };
+}
+const at = (text) => {
+  const [h, m] = text.split(':').map(Number);
+  return { hour: h, minute: m, text };
+};
+
+test('systemd gets a second 09:30 unit that runs with --catch-up, only when the daily time is earlier', async () => {
+  const ctx = recordingCtx();
+  await systemdTimer(ctx, '/x/daily-sync.mjs', at('07:30'));
+  const unit = (name) => [...ctx.written].find(([f]) => f.endsWith(name))?.[1];
+  assert.match(unit('daily-sync.service'), /ExecStart="[^"]+" "\/x\/daily-sync\.mjs"\n/);
+  assert.match(unit('daily-sync.timer'), /OnCalendar=\*-\*-\* 07:30:00\nPersistent=true/);
+  assert.match(unit('daily-sync-catchup.service'), /ExecStart="[^"]+" "\/x\/daily-sync\.mjs" --catch-up\n/);
+  assert.match(unit('daily-sync-catchup.timer'), /OnCalendar=\*-\*-\* 09:30:00\nPersistent=true/);
+  assert.match(ctx.ran[0][0], /enable --now daily-sync\.timer daily-sync-catchup\.timer/);
+  const late = recordingCtx();
+  await systemdTimer(late, '/x/daily-sync.mjs', at('10:00'));
+  assert.equal([...late.written].some(([f]) => f.includes('catchup')), false);
+});
+
+test('cron gets a second 09:30 line that runs with --catch-up', () => {
+  const ctx = recordingCtx('0 5 * * * unrelated');
+  cronLine(ctx, '/x/daily-sync.mjs', at('07:30'));
+  const input = ctx.ran[0][1];
+  assert.match(input, /^0 5 \* \* \* unrelated\n30 7 \* \* \* PATH=.* '\/x\/daily-sync\.mjs' >\/dev\/null 2>&1 # ai-workstation-setup daily-sync\n30 9 \* \* \* PATH=.* '\/x\/daily-sync\.mjs' --catch-up >\/dev\/null/);
+  const again = recordingCtx(input);
+  cronLine(again, '/x/daily-sync.mjs', at('07:30'));
+  assert.deepEqual(again.ran, [], 'both lines already there: nothing is rewritten');
 });
