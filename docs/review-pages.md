@@ -20,8 +20,7 @@ it lives.
 
 1. **Build the page.** Copy the template next to the work, replace `CARDS` (and `DECIDED`,
    what is already settled), and give every option a preview. Keep text to a title, one
-   question and short option labels. A card's optional `based` field ends it with one short
-   "Based on" line that names the types of sources behind it.
+   question and short option labels.
 2. **Serve it without opening a tab.** Creating the page never opens a tab, and the agent never
    re-runs the open command just to refresh the page.
 
@@ -61,6 +60,7 @@ it lives.
 | `headline` | Optional `{ num, cap }`: the one number that matters, shown first |
 | `evidence` | Optional one sentence shown above "Why" |
 | `why` | Short detail, closed by default |
+| `based` | Optional one short line naming the types of sources behind the card, shown last as "Based on: ..." |
 | `label` | Optional small label above the question, such as `D-1`; "1 of N" is added to it |
 
 A card with no `options` is a content card (a report, plan or explainer step) and gets a
