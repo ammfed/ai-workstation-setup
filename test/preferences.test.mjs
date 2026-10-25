@@ -384,6 +384,20 @@ test('the route starts a map at once for an effort over several sessions, and wa
   assert.match(building, /When the user types \/wayfinder, wayfinder tracks the map as tickets\./);
 });
 
+test('the route names each skill only the user can start only with the note that the user starts it', async () => {
+  const building = sectionOf((await renderHomes({ PREFS_ROUTE: 'yes' }))['running-workers'], 'Building something new');
+  const notes = {
+    wayfinder: 'When the user types /wayfinder, wayfinder tracks',
+    'to-spec': 'Only the user starts to-spec, by typing /to-spec; until then write the spec yourself and offer /to-spec in one line.',
+    'to-tickets': 'Only the user starts to-tickets, by typing /to-tickets; until then cut the tickets yourself and offer /to-tickets in one line.',
+  };
+  for (const [name, note] of Object.entries(notes)) {
+    const count = (text) => (text.match(new RegExp(`(?<![\\w-])/?${name}(?![\\w-])`, 'g')) ?? []).length;
+    assert.ok(building.includes(note), `the route carries the note for ${name}`);
+    assert.equal(count(building), count(note), `${name} appears only inside its note`);
+  }
+});
+
 test('preparing the next stage while a review page waits is the user\'s choice, off by default', async () => {
   const line = 'While waiting, prepare the next stage, but do not start it before approval.';
   const off = sectionOf((await renderHomes())['review-pages'], 'Opening and sending');

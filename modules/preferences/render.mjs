@@ -407,8 +407,8 @@ function placeRules(get, { cardsPath, hideKitPath, decisionsPath } = {}) {
       'Take a software project (building or changing an app, a tool or a codebase) through six steps, each with its skill when installed: ' +
         '1 Plan: write the idea down, judge fit and timing, and say so in one line. If the effort takes more than one session, start a map at once without being asked and show it. When the user types /wayfinder, wayfinder tracks the map as tickets. ' +
         '2 Decide: settle the open decisions in rounds of questions and record the answers (grilling, with domain-modeling for the glossary and decision records). ' +
-        '3 Prototype: write a spec that names the test seams, with a throwaway prototype when the look or flow needs judging, and get it approved before building (to-spec, prototype). ' +
-        '4 Breakdown: cut a spec too big for one change into tickets with their blocking edges (to-tickets). ' +
+        '3 Prototype: write a spec that names the test seams, with a throwaway prototype when the look or flow needs judging, and get it approved before building (prototype). Only the user starts to-spec, by typing /to-spec; until then write the spec yourself and offer /to-spec in one line. ' +
+        '4 Breakdown: cut a spec too big for one change into tickets with their blocking edges. Only the user starts to-tickets, by typing /to-tickets; until then cut the tickets yourself and offer /to-tickets in one line. ' +
         '5 Build: one builder builds the whole spec test-first (tdd, codebase-design). ' +
         '6 Ship: validate, open a pull request, and merge once approved (no-mistakes).',
     get('PREFS_ROUTE') &&
