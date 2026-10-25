@@ -1,18 +1,41 @@
 # Working preferences
 
-The `preferences` module turns a set of questions into a plain Markdown rules file your
-agents load on every session. The defaults describe one proven way of working with an
-agent fleet; every one is a question, so change what does not suit you.
+The `preferences` module turns a set of questions into plain Markdown rules your agents follow.
+The defaults describe one proven way of working with an agent fleet; every one is a question,
+so change what does not suit you.
+
+## Where the rules live
+
+A rules file that loads in every session costs attention in every session, and agents follow
+fewer rules well as the count grows. So the rules are split by how often a session needs them:
+
+- **The core file** holds the rules almost every session needs: how to reply, decisions, focus
+  and priorities, safety, and what to check before you start. With the recommended answers it
+  is 38 short rules, about 70 lines. It ends with one line per skill below, saying when to load it.
+- **Five skills** hold the rules that only one kind of work needs. Claude Code shows the agent
+  each skill's name and description at startup, and the agent loads the whole skill when that
+  work comes up:
+  - `writing-for-others`: anything other people will read, other languages, questionnaires.
+  - `status-and-away`: status replies, the daily check, live state, queue order, away mode.
+  - `review-pages`: when to use a page, the card template, layout, checks, sending, answers.
+  - `running-workers`: worker briefs, landing pull requests, building something new, public
+    repositories, deadlines.
+  - `models-and-research`: model and effort choice, helpers, quota, research and sources.
+- **This page** explains each rule and why it exists. Agents do not load it.
 
 Where it writes (`PREFS_TARGETS`):
 
-| Target | File | Loaded by |
+| Target | Files | Loaded by |
 | --- | --- | --- |
-| `claude` | `~/.claude/rules/working-preferences.md` | Claude Code, as user rules in every project |
+| `claude` | `~/.claude/rules/working-preferences.md` (the core file) and `~/.claude/skills/<name>/SKILL.md` (the five skills) | Claude Code: the core file in every project, each skill when its work comes up |
 | `firstmate` | `data/captain.md` in your Firstmate home (`FIRSTMATE_HOME` from this run or your saved answers, else the clone; the file firstmate reads for preferences) | Firstmate, at session start |
 
-The file is yours: edit it freely. Re-running the installer asks before replacing a
-changed file and keeps a timestamped backup.
+`captain.md` holds the core rules and every skill's rules in one file, with each skill under its
+own heading. A supervisor needs status, review-page and worker rules in almost every turn, and
+its harness may not load Claude Code skills, so nothing in it waits to be loaded.
+
+Every file is yours: edit it freely. Re-running the installer asks before replacing a changed
+file and keeps a timestamped backup. A skill none of your answers fills is not written.
 
 After the targets, one question decides how many follow: `PREFS_REVIEW_EACH` (default no)
 writes the recommended set below without asking each one. Answer yes to go through them one
@@ -23,11 +46,11 @@ answers file still sets any key it names either way.
 With the `firstmate` target, the module also writes Firstmate's `config/brief-include.md`, which
 Firstmate appends to every worker brief. It holds what applies: the house style with
 `PREFS_WRITING_STYLE=ste` (for what workers write to Firstmate, never the deliverable), the
-vault-first line (also in the rules file) when second-brain runs or its saved vault folder
+vault-first line (also in the core file) when second-brain runs or its saved vault folder
 exists and agents have access, naming only the routes it installs, the helper-model rule from
 `PREFS_DELEGATE_RETRIEVAL`, the build rules from `PREFS_KUN`, `PREFS_TEST_FIRST` and
 `PREFS_GLOSSARY_ADR`, the principle checker line from `PREFS_PRINCIPLE_CHECKS`, and your private
-Everywhere and Workers lines. Nothing applies, nothing is written.
+Everywhere and Workers lines. Nothing applies, nothing is written. The split does not change it.
 
 Your own rules that are not generic go in a private rules file outside the clone; see
 [Your private rules](#your-private-rules).
@@ -150,8 +173,67 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | `PREFS_PRIVATE_STAYS_LOCAL` | yes | Private chats and anything captured from your own sessions never go to an outside model or service. |
 | `PREFS_PUBLIC_REPOS` | yes | In public repositories: a no-reply commit identity, no email trailers, pull request text that names nothing private, and a privacy scan before every push. |
 
-Always included: no secrets or personal data anywhere, only genuine decisions brought
-to you, and saying plainly when something was reasoned about rather than tested.
+Always included, in the core file: no secrets or personal data anywhere, only genuine
+decisions brought to you, and saying plainly when something was reasoned about rather than
+tested.
+
+## Why each preference exists, and where it lives
+
+"Core" is the always-loaded core file. A skill name means the rule loads with that skill.
+Firstmate's `captain.md` holds every rule, wherever it lives here.
+
+| Key | Why it exists | Lives in |
+| --- | --- | --- |
+| `PREFS_PLAIN_LANGUAGE` | Jargon and long replies slow every decision. | Core |
+| `PREFS_NO_NARRATION` | A running commentary hides the result you asked for. | Core |
+| `PREFS_NO_EM_DASHES` | Many readers take em dashes as a sign of machine-written text. | Core |
+| `PREFS_OUTWARD_AS_USER` | Readers outside your team do not know or care about the agents. | writing-for-others |
+| `PREFS_NATURAL_TRANSLATION` | A literal translation reads as foreign to a native reader. | writing-for-others |
+| `PREFS_WRITING_PRINCIPLES` | A document that does not lead with its point loses its reader, and a deck built before its point is agreed is rebuilt. | writing-for-others |
+| `PREFS_WRITING_STYLE` | One fixed style makes instructions and warnings unambiguous. | Core (House style) |
+| `PREFS_ONE_DESIGN_SYSTEM` | Two design systems in one artifact look broken. | writing-for-others |
+| `PREFS_COPY_SECOND_OPINION` | The agent that wrote a text cannot hear how it sounds. | writing-for-others |
+| `PREFS_HABITS` | Small habits keep replies actionable and claims honest. | Core, except the deadline rule (running-workers) |
+| `PREFS_CALM_WORD` | One word quiets a busy session without new instructions. | Core |
+| `PREFS_STATUS` | A status that leads with your asks is one you can act on. | status-and-away |
+| `PREFS_HONEST_NUMBERS` | A made-up figure looks like a fact. | Core |
+| `PREFS_LINK_DELIVERABLES` | A finished item you cannot open is not finished for you. | Core |
+| `PREFS_DAILY_CHECK`, `PREFS_STALE_DAYS` | Uncollected answers and long waits are easy to forget. | status-and-away |
+| `PREFS_AWAY_MODE` | Decisions made while you are away are decisions you did not make. | status-and-away |
+| `PREFS_DECISIONS` | Questions asked one at a time, with previews, get faster and better answers. | Core; the page mechanics in review-pages |
+| `PREFS_YES_NO_IN_CHAT` | A page for a yes-or-no question wastes a round. | Core |
+| `PREFS_PREVIEW_BEFORE_BUILD` | People judge what they can see. | review-pages |
+| `PREFS_CHECK_ANSWERS_FIRST` | Asking again what you already answered costs your attention. | Core (chat and tool); review-pages (card pages) |
+| `PREFS_ASK_BEFORE_CLOSING` | Closing a session unasked can lose work you still wanted. | Core |
+| `PREFS_AUTONOMY` | Asking about every small choice stalls the work; acting on the big ones takes them from you. | Core |
+| `PREFS_DECISIONS_LOG` | A ruling that is not written down gets asked again or undone. | Core |
+| `PREFS_GRILL` | Rounds of focused questions settle a plan before work starts. | Core; the questionnaire rule in writing-for-others |
+| `PREFS_PAGES_ALL_CARDS`, `PREFS_PAGE_SIDE_BY_SIDE`, `PREFS_PAGE_FLIP_PREVIEWS`, `PREFS_PAGE_MINIMAL_TEXT`, `PREFS_PAGE_PHONE`, `PREFS_PAGE_WIDE_HEADER` | One familiar page shape lets you decide without learning a new layout each time. | review-pages |
+| `PREFS_PAGE_CHECK_BEFORE_SEND` | A page can load and still be blank or broken. | review-pages |
+| `PREFS_PAGE_FIRST`, `PREFS_PAGE_PREPARE_NEXT` | A question asked before its page exists is noise, and work started before approval may be redone. | review-pages |
+| `PREFS_PAGES_TOGETHER` | Pages checked against each other do not ask the same thing twice. | review-pages |
+| `PREFS_FLEET_WORKFLOW` | Clear briefs, live status and pull requests keep a fleet visible and safe. | running-workers; the status and live-state rules in status-and-away; when a page is used in review-pages |
+| `PREFS_BUILD_WHOLE_GOAL` | A builder fed step by step loops on details and misses the main idea. | running-workers |
+| `PREFS_ROUTE`, `PREFS_TEST_FIRST`, `PREFS_GLOSSARY_ADR` | One route and its checks keep software work in order. | running-workers |
+| `PREFS_KUN` | One method loaded at the start keeps every kind of work on its route. | Core (and worker briefs) |
+| `PREFS_PROTOTYPE_CHECK` | You notice a broken layout before the content. | review-pages |
+| `PREFS_PRINCIPLE_CHECKS` | A script catches mechanical slips before a reviewer has to. | Worker briefs only |
+| `PREFS_MODEL_GUIDE` | Each model follows the briefing style its vendor documents. | running-workers |
+| `PREFS_CAPTURE_IDEAS` | An idea that is not written down is lost, and one started at once derails the current work. | Core |
+| `PREFS_RESEQUENCE` | Work ordered by what blocks what finishes sooner. | status-and-away |
+| `PREFS_ORIENT` | You always know what comes next without asking. | Core |
+| `PREFS_FINISH_FIRST` | Finished work beats a growing list of improvements. | Core |
+| `PREFS_MODEL_ROUTING`, `PREFS_QUOTA`, `PREFS_DELEGATE_*` | Quota is limited, and the wrong effort quietly lowers quality. | models-and-research (the helper rule also in worker briefs) |
+| `PREFS_RESEARCH_BROWSER` | Your own browser holds your accounts and tabs. | models-and-research |
+| `PREFS_SOURCE_QUALITY`, `PREFS_VERIFY_USER_CLAIMS`, `PREFS_LIVE_FACTS`, `PREFS_FINDINGS_TO_CHANGE` | Weak or stale sources make a strong claim look settled, and research that changes nothing was wasted. | models-and-research |
+| `PREFS_MERGE` | A merge is hard to undo, and approving work is not the same as shipping it. | Core |
+| `PREFS_VERIFY_CAUSE`, `PREFS_STOP_DIGGING` | A guessed cause sends the fix the wrong way. | Core |
+| `PREFS_PAUSE_WORD` | One word stops every agent at once. | Core |
+| `PREFS_BLOCKED_COMMANDS` | A permission check exists for a reason; going around it is not your choice made. | Core |
+| `PREFS_PRIVATE_STAYS_LOCAL` | Private material must not leave your machine. | Core |
+| `PREFS_PUBLIC_REPOS` | A public repository keeps everything it is given, forever. | running-workers |
+| `PREFS_TASTE_PRESET` | An optional starting point for screen taste and review habits. | Core (and worker briefs) |
+| `PREFS_PRIVATE_RULES` | Your own rules never go in this public repository. | Core, worker briefs and second mates, by heading |
 
 ## The taste preset
 
@@ -160,8 +242,8 @@ habits the template's author works by, cleaned to generic rules in
 `templates/preferences/taste-preset.md`. It holds only rules no question above writes, such as
 purposeful minimalism, one word per label, one fixed layout frame, and treating a comment on a
 review page as something to rework rather than agreement. Its `Everywhere` lines land in a
-"Taste preset" section of the rules file and of every Firstmate worker brief; its `Sessions`
-lines go to the rules file only. Turn it off and re-run the installer to remove them. The
+"Taste preset" section of the core file and of every Firstmate worker brief; its `Sessions`
+lines go to the core file only. Turn it off and re-run the installer to remove them. The
 recommended set leaves it off, so it is asked only when you go through each preference.
 
 ## Your private rules
@@ -176,7 +258,7 @@ It is plain Markdown. Each `##` heading says where its lines go:
 | Heading | Goes to |
 | --- | --- |
 | `Everywhere` | All three files below |
-| `Sessions` | The rules file (`working-preferences.md`, and Firstmate's `data/captain.md`) |
+| `Sessions` | The core file (`working-preferences.md`) and Firstmate's `data/captain.md` |
 | `Workers` | Firstmate's `config/brief-include.md`, appended to every worker brief |
 | `Second mates` | Firstmate's `data/captain-shared.md` in the main home, which every second mate reads; written only when there are lines for it |
 | `Reviewer` | The no-mistakes design review rules (agent-clis, `NO_MISTAKES_PRINCIPLES`), added after the generic ones to every review whose change touches an interface file |
@@ -184,7 +266,7 @@ It is plain Markdown. Each `##` heading says where its lines go:
 Each `-` or numbered item, or each paragraph, is one rule; a line that follows without a blank
 line continues it. A `#` title, text before the first heading and HTML comments are not used.
 An unknown heading is reported and its lines are left out. The lines land in a "Private rules"
-section at the end of each file, so edit them in your private file, not in the written copies.
+section at the end of each file (never in a skill), so edit them in your private file, not in the written copies.
 
 ```markdown
 ## Everywhere
