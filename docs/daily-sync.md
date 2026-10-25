@@ -126,8 +126,11 @@ Paths may start with `~`.
   template has. A vault that ships its own daily script can use it instead, for example
   `bin/daily --limit {limit}`; only answer that when the vault has the script. Keep `{limit}`
   in the command, or the limit does not apply. The report counts the lines the command prints
-  that start `ingesting:` or `ingest (` (for the model-call count) or `<name> failed on:` (for failed files), so
+  that start `ingesting:` or `ingest (` (for the model-call count), `<name> failed on:` or
+  `ingest: FAILED <file>: <reason>` (for failed files, on stdout or stderr), so
   a daily script should pass the ingest's own output through.
+- Each run also checks the vault read-only: a failing `bin/status` (a stuck run) or `bin/lint`
+  (lint problems) puts one line in "Needs you". A vault without either script skips that check.
 - When every ingest attempt of a run fails (no success, at least one attempt), the run is
   `FAILED` with one line, exits non-zero and does not count as a success. When only some fail,
   the line reads `ingested 3 of 5` and each failed file is listed under "Needs you".

@@ -389,15 +389,32 @@ function vault(v) {
   if (r.code !== 0) return add('failed', 'vault:ingest', `vault: ingest failed (${exitText(r)}): ${clip(lastLine(out))}`);
   const atDeadline = /^ingest: stopped at the deadline/m.test(out);
   const left = atDeadline ? `; it stopped at its time limit and ${pending - runs} more wait for the next run` : more;
-  const failedOn = [...out.matchAll(/^\S+ failed on:\s*(.+)$/gm)].map((m) => m[1].trim());
-  const ok = Math.max(0, runs - failedOn.length);
+  // Two failure formats: `<x> failed on: <file>` (bin/ingest.mjs) and `ingest: FAILED <file>: <reason>` (the vault's bash bin/ingest, on stderr).
+  const failedOn = [...out.matchAll(/^(?:\S+ failed on:\s*(.+)|ingest: FAILED (.+?): .*)$/gm)].map((m) => (m[1] || m[2]).trim());
+  // A failure may print no "ingesting:" line of its own, so a failed file still counts as an attempt.
+  const attempts = Math.max(runs, failedOn.length);
+  const ok = Math.max(0, attempts - failedOn.length);
   // A run where every attempt failed ingested nothing: that is a failed run, not a changed one.
-  if (runs > 0 && ok === 0) {
-    return add('failed', 'vault:ingest-all-failed', `vault: every ingest attempt failed (${runs} of ${runs}), so nothing was ingested (${sample(failedOn)}); check that the vault's agent command runs, then retry with --retry-failed`);
+  if (attempts > 0 && ok === 0) {
+    return add('failed', 'vault:ingest-all-failed', `vault: every ingest attempt failed (${attempts} of ${attempts}), so nothing was ingested (${sample(failedOn)}); check that the vault's agent command runs, then retry with --retry-failed`);
   }
-  add('changed', 'vault:ingest', `vault: ingested ${failedOn.length ? `${ok} of ${runs}` : runs} new raw file(s) with the vault's own agent${left}`);
+  add('changed', 'vault:ingest', `vault: ingested ${failedOn.length ? `${ok} of ${attempts}` : runs} new raw file(s) with the vault's own agent${left}`);
   for (const f of failedOn) {
     add('attention', `vault:ingest-failed:${f}`, `vault: ingest could not process ${f}; it is ledgered as failed (retry with --retry-failed)`);
+  }
+}
+
+// Read-only vault checks: a stuck pipeline run and lint problems. A vault without
+// bin/status or bin/lint skips that check.
+function vaultHealth(v) {
+  const vp = expandHome(v.path);
+  if (fs.existsSync(path.join(vp, 'bin', 'status'))) {
+    const st = sh('bin/status', { cwd: vp, timeoutSec: 30 });
+    if (st.code !== 0) add('attention', 'vault:stuck', `vault: ${clip(lastLine(st.out + st.err))}`);
+  }
+  if (fs.existsSync(path.join(vp, 'bin', 'lint'))) {
+    const l = sh('bin/lint', { cwd: vp, timeoutSec: 300 });
+    if (l.code !== 0) add('attention', 'vault:lint', `vault: lint found problems: ${clip(lastLine(l.out + l.err))}`);
   }
 }
 
@@ -737,6 +754,7 @@ function run() {
   for (const r of config.pull || []) check('pull', () => pull(r));
   for (const r of config.watch || []) check('watch', () => watch(r));
   if (config.vault) check('vault', () => vault(config.vault));
+  if (config.vault) check('vault-health', () => vaultHealth(config.vault));
   if (config.vault) {
     soft('stale sources', () => staleSources(config.vault));
     soft('vault use', () => vaultUse(config.vault));
