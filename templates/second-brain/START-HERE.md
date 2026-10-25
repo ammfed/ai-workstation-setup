@@ -30,7 +30,7 @@ Entity folders hold one kind of note each, and start out empty:
 - `reviews/` - weekly or monthly reviews, filename starting `YYYY-MM-DD`.
 - `sources/` - one note per raw file ingested, the bridge to the original documents.
 
-## What is open
+## What's open
 
 `decisions/`, `journal/` and `reviews/` are where unresolved things live so they stay visible.
 An open question in one of those folders gets met by the next person or agent who opens the
@@ -84,6 +84,7 @@ rg -l "source: report.pdf" sources/    # which note covers a given raw file
 rg -l "type: project" projects/        # every project
 ```
 
-When `bin/search.mjs` is installed, `node bin/search.mjs some topic` ranks the notes that match
-best, title matches first. Narrow it with `--type project` or `--folder people`. It reads the
-notes on every run and keeps no index.
+When the search tool is installed, `bin/search some topic` ranks the notes that match best,
+title matches first. Narrow it with `--type project` or `--folder people`, and add `--json` for
+agents. It reads the notes on every run and keeps no index. On Windows, run
+`node bin/search some topic`. `bin/search` runs `bin/search.mjs`, which holds the code.

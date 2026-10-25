@@ -26,11 +26,11 @@ const KUN_RULE =
   'Later checks in the same session reuse that load; run it again only in a new session or after compaction. ' +
   'Skip it for small clear tasks (a typo, a version bump, a config tweak), status replies and helper subagents.';
 // Written to worker briefs only when a vault is configured; sessions get the same lines from the
-// second-brain rules file. It names the search tool that rules file names, bin/search.mjs, only
-// when second-brain installed it.
+// second-brain rules file. It names the search tool that rules file names, bin/search, only when
+// second-brain installed it.
 function vaultRule(vault) {
   if (!vault) return null;
-  const search = `search it with \`rg\`${vault.search ? ' or `bin/search.mjs`' : ''}`;
+  const search = `search it with \`rg\`${vault.search ? ' or `bin/search`' : ''}`;
   return `Before you start, check the notes vault at \`${vault.path}\` for past decisions, findings and rulings on the work: find a note by its folder and file name, or ${search}. Trust the newest dated line, and check an open item against the live tracker before you act on it.`;
 }
 const GLOSSARY_RULE =

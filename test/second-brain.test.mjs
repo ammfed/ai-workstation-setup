@@ -68,6 +68,22 @@ test('search: title words outrank body words, and unrelated notes are left out',
   assert.deepEqual(hits.map((h) => h.id), ['a.md', 'b.md']);
 });
 
+test('search: bin/search runs the same search as bin/search.mjs, exit status included', () => {
+  const root = vault();
+  try {
+    fs.writeFileSync(path.join(root, 'work', 'Garden plans.md'), note('Garden plans', 'topic', 'tomatoes and beans'));
+    fs.writeFileSync(path.join(root, 'work', 'Travel.md'), note('Travel', 'topic', 'trains'));
+    const viaEntry = node(root, 'search', ['garden', '--json']);
+    const viaScript = node(root, 'search.mjs', ['garden', '--json']);
+    assert.equal(viaEntry.status, 0, viaEntry.stderr);
+    assert.equal(viaEntry.stdout, viaScript.stdout);
+    assert.deepEqual(JSON.parse(viaEntry.stdout).map((h) => h.path), ['work/Garden plans.md']);
+    assert.equal(node(root, 'search', []).status, 2, 'no query exits 2, as search.mjs does');
+  } finally {
+    removeVault(root);
+  }
+});
+
 test('capture: a line goes in before the first section and updated: moves', () => {
   const text = '---\ntitle: X\nupdated: 2026-01-01\n---\n\n# X\n\nold line\n\n## Close-out\n- done\n';
   assert.equal(
@@ -304,7 +320,8 @@ test('claude files: the rules file carries the short vault rule with the vault p
     for (const phrase of ['Look there first', 'folder and file name', '`work/`, `home/`', 'Trust the newest dated line', '`status: superseded`', 'live\n  tracker', 'Read only', 'never goes to an outside model or service']) {
       assert.ok(text.includes(phrase), phrase);
     }
-    assert.ok(text.includes(path.join(vault, 'bin', 'search.mjs')) && text.includes(path.join(vault, 'bin', 'capture.mjs')));
+    assert.ok(text.includes(`node "${path.join(vault, 'bin', 'search')}" "terms"`) && text.includes(path.join(vault, 'bin', 'capture.mjs')));
+    assert.doesNotMatch(text, /search\.mjs/, 'the one search tool name is bin/search');
     assert.ok(!fs.existsSync(claudeFile(home, 'skills', 'second-brain', 'SKILL.md')), 'no skill is written');
     assert.match(out, /wrote .*second-brain\.md/);
 
@@ -331,6 +348,28 @@ test('claude files: only the scripts that were installed are named', async () =>
     fs.rmSync(path.join(home, '.claude'), { recursive: true });
     await claudeFilesInto(home, { VAULT_SCRIPTS: 'no' });
     assert.doesNotMatch(fs.readFileSync(claudeFile(home, 'rules', 'second-brain.md'), 'utf8'), /bin\/|MAP\.md/);
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('claude files: in an existing vault the rule names bin/search only when the vault has it', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-claude-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const dir = path.join(home, 'my vault');
+    fs.mkdirSync(path.join(dir, 'bin'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'bin', 'search.mjs'), '// an older template copy\n');
+    git(dir, 'init', '-q');
+    git(dir, 'add', '.');
+    git(dir, 'commit', '-qm', 'start');
+    const rules = claudeFile(home, 'rules', 'second-brain.md');
+    await claudeFilesInto(home);
+    assert.doesNotMatch(fs.readFileSync(rules, 'utf8'), /bin[\\/]search/, 'no bin/search in the vault, none named');
+    fs.writeFileSync(path.join(dir, 'bin', 'search'), '#!/bin/sh\n');
+    await claudeFilesInto(home);
+    assert.ok(fs.readFileSync(rules, 'utf8').includes(path.join(dir, 'bin', 'search')), 'the vault has bin/search, so it is named');
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
     fs.rmSync(home, { recursive: true, force: true });
@@ -493,7 +532,7 @@ async function installInto(home, vaultDir, given = {}, platform = {}) {
   return lines.join('\n');
 }
 
-const STARTER_FILES = ['work/README.md', 'people/README.md', 'templates/topic.md', 'bin/index.mjs', 'bin/ingest.mjs', 'bin/search.mjs', 'prompts/ingest.md'];
+const STARTER_FILES = ['work/README.md', 'people/README.md', 'templates/topic.md', 'bin/index.mjs', 'bin/ingest.mjs', 'bin/search.mjs', 'bin/search', 'prompts/ingest.md'];
 
 test('starter files: a fresh folder gets them, and it is not an existing vault', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-install-'));
@@ -550,12 +589,15 @@ test('starter files: VAULT_REFRESH=yes writes the missing ones into an existing 
   try {
     fs.mkdirSync(path.join(dir, 'work'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'work', 'README.md'), 'my own readme\n');
+    fs.mkdirSync(path.join(dir, 'bin'));
+    fs.writeFileSync(path.join(dir, 'bin', 'search'), '#!/bin/sh\necho my own search\n');
     git(dir, 'init', '-q');
     git(dir, 'add', '.');
     git(dir, 'commit', '-qm', 'start');
     const out = await installInto(home, dir, { VAULT_REFRESH: 'yes' });
     for (const f of STARTER_FILES.filter((f) => f !== 'work/README.md')) assert.ok(fs.existsSync(path.join(dir, f)), `${f} is written`);
     assert.equal(fs.readFileSync(path.join(dir, 'work', 'README.md'), 'utf8'), 'my own readme\n', 'an existing file is untouched');
+    assert.equal(fs.readFileSync(path.join(dir, 'bin', 'search'), 'utf8'), '#!/bin/sh\necho my own search\n', "the vault's own bin/search is untouched");
     assert.doesNotMatch(out, /starter files left out/);
   } finally {
     fs.rmSync(home, { recursive: true, force: true });

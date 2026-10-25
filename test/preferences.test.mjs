@@ -132,7 +132,7 @@ test('the /kun rule is on by default, in sessions and worker briefs, and can be 
   assert.doesNotMatch(renderBriefInclude((key) => (key === 'PREFS_KUN' ? false : ctx.get(key))), /\/kun/);
 });
 
-test('the vault-first line goes to the worker brief only, and names bin/search.mjs only when second-brain installed it', async () => {
+test('the vault-first line goes to the worker brief only, and names bin/search only when second-brain installed it', async () => {
   const ctx = await answer({ PREFS_TARGETS: 'claude,firstmate' });
   const get = (key) => ctx.get(key);
   const dir = path.join(os.tmpdir(), 'notes vault');
@@ -140,7 +140,7 @@ test('the vault-first line goes to the worker brief only, and names bin/search.m
   const tail = ' Trust the newest dated line, and check an open item against the live tracker before you act on it.';
   const cases = [
     [{ scripts: true, search: false }, 'search it with `rg`.'],
-    [{ scripts: true, search: true }, 'search it with `rg` or `bin/search.mjs`.'],
+    [{ scripts: true, search: true }, 'search it with `rg` or `bin/search`.'],
     [{ scripts: false, search: false }, 'search it with `rg`.'],
   ];
   for (const [setup, routes] of cases) {
@@ -169,7 +169,7 @@ test('a real run writes the brief\'s vault-first line from this run\'s vault ans
     for (const text of read()) assert.doesNotMatch(text, /notes vault/);
     fs.mkdirSync(vault);
     await installInto(home, { ...base, VAULT_PATH: vault, VAULT_TOOLS: 'search,capture' });
-    assert.ok(brief().includes(`check the notes vault at \`${vault}\` for past decisions, findings and rulings on the work: find a note by its folder and file name, or search it with \`rg\` or \`bin/search.mjs\`.`));
+    assert.ok(brief().includes(`check the notes vault at \`${vault}\` for past decisions, findings and rulings on the work: find a note by its folder and file name, or search it with \`rg\` or \`bin/search\`.`));
     assert.doesNotMatch(read()[0], /notes vault/);
     fs.rmSync(vault, { recursive: true });
     await installInto(home, base, { VAULT_PATH: vault, VAULT_SCRIPTS: true, VAULT_TOOLS: [] });

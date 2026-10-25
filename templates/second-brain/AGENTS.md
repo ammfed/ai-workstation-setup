@@ -2,7 +2,7 @@
 
 Plain markdown, Obsidian-openable, no numbering scheme. People and agents both write here,
 and this file is the contract that keeps it legible to both. It is the short core every job
-and editor needs; each procedure lives in its own file (see Procedures). Keep it current: when
+and editor needs; each procedure lives in its own file (see "Where procedures live"). Keep it current: when
 a convention changes, change it here in the same edit.
 
 ## Layout
@@ -37,7 +37,7 @@ Everything else:
 frontmatter, and `bin/check.mjs` skips them. Raw source files live **outside** this vault, under
 `$RAW_DIR` (this setup: `{{RAW_DIR}}`). Notes in `sources/` name them by exact filename only.
 
-## What is open
+## What's open
 
 `decisions/`, `journal/` and `reviews/` are where unresolved things live, so the next reader
 meets them:
@@ -75,14 +75,12 @@ updated:  YYYY-MM-DD
 - `bin/check.mjs` enforces all of this, and that every `[[wikilink]]` resolves to a note that
   exists. A note with broken frontmatter is invisible to every filtered read of the vault.
 
-### Provenance and dated lines
+**Provenance.** Every fact added to a topic, person, project, decision or meeting note carries
+its origin inline: `(from [[<source note>]], <date>)`, or `(captured by <who>, <date>)` when it
+came from a conversation rather than a file. The newest dated line wins.
 
-Every fact added to a topic, person, project, decision or meeting note carries its origin
-inline: `(from [[<source note>]], <date>)`, or `(captured by <who>, <date>)` when it came from
-a conversation rather than a file. The newest dated line wins.
-
-A fact that contradicts an existing line is never overwritten. Strike the old line, stating
-both dates, and add the new fact as its own line below:
+**Dated lines.** A fact that contradicts an existing line is never overwritten. Strike the old
+line, stating both dates, and add the new fact as its own line below:
 
 ```markdown
 ~~The deadline is 14 March (stated 2026-01-08)~~ superseded 2026-02-19 by the line below.
@@ -91,14 +89,19 @@ The deadline is 4 April (from [[budget-revision.eml]], 2026-02-19).
 
 A merged note becomes a one-line `status: superseded` redirect to the note that replaced it.
 
-## Writing style
+**Writing style.** No em dashes in new prose: use a period, a comma, a colon, or a plain
+conjunction (quoted source material stays as it is). Write the fact, not the story around it,
+one claim per line, each with its provenance. Prefer a link (`[[note]]`) to a retelling.
 
-- **No em dashes in new prose.** Use a period, a comma, a colon, or a plain conjunction.
-  Applies to what you and any agent write here, not to quoted source material.
-- Write the fact, not the story around it. One claim per line, each with its provenance.
-- Prefer a link to a retelling: `[[note]]` instead of repeating what that note already says.
+## How to find something
 
-## Rules
+Find a note by folder and file name first (`ls projects/`, `rg -l "phrase" .`), then read it.
+`MAP.md` lists every note, one line each. `bin/search <terms>` ranks notes by those words when
+it is installed (`--json` for agents). Trust the newest dated line, follow a
+`status: superseded` redirect to its note, and check an open item against the live tracker or
+repository, since notes lag behind them. Details: `START-HERE.md`, "Searching".
+
+## Hard rules
 
 - **Raw files are never copied into the vault, and never modified.** `$RAW_DIR` is the archive,
   this vault is notes about it. The `sha256` in a `sources/` note is the only link that has to
@@ -113,16 +116,20 @@ A merged note becomes a one-line `status: superseded` redirect to the note that 
   next action and where it is tracked, and never mirrors the task list.
 - **Nothing is silently deleted or overwritten.** A wrong fact gets struck, not removed.
 
-## Procedures
+## Where procedures live
 
-Each procedure lives in one file, and every script opens with a usage comment. Read it when you
-run that job.
+Each procedure lives in one file, and every script opens with a usage comment.
 
-- Search: `START-HERE.md`, "Searching" (`rg`, and `bin/search.mjs` when installed).
 - Ingest raw files: `START-HERE.md`, "Daily use", for the commands; `prompts/ingest.md` for
   what one run writes and how duplicates, revisions and timeouts are handled.
 - Check and reindex: `START-HERE.md`, "Daily use" (`bin/check.mjs`, `bin/index.mjs`,
   `bin/housekeeping.mjs`).
+- Search: `START-HERE.md`, "Searching" (`rg`, and `bin/search` when installed).
 - Capture one fact (when installed): the usage comment in `bin/capture.mjs`.
 - Garden (when installed): `prompts/garden.md`, and the usage comment in `bin/garden.mjs`.
 - Bookmarks (when installed): the usage comment in `bin/bookmarks.mjs`.
+
+## Maintaining this file
+
+Keep this file for what almost every job and editor needs. A procedure goes in its own file,
+with one pointer line here. Prefer rewriting or pruning an entry over appending a new one.

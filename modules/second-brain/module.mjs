@@ -33,10 +33,10 @@ const SCRIPTS = ['lib-vault.mjs', 'index.mjs', 'check.mjs', 'ingest.mjs', 'house
 // Optional tools on top of the core scripts. Each needs only Node; garden is the one model step,
 // and it runs only through the agent command you give it ($AGENT_CLI), never a default.
 const TOOLS = [
-  { value: 'search', file: 'search.mjs', label: 'search - ranked full-text search over your notes (no index, no model)' },
-  { value: 'capture', file: 'capture.mjs', label: 'capture - add one fact to today\'s journal, a note, or a new note, with its provenance, checked and committed' },
-  { value: 'garden', file: 'garden.mjs', label: 'garden - one small reversible tidy-up of a few notes by your agent CLI, checked, committed, undone if anything is off' },
-  { value: 'bookmarks', file: 'bookmarks.mjs', label: 'bookmarks - turn a browser bookmark export into markdown for ingestion' },
+  { value: 'search', files: ['search.mjs', 'search'], label: 'search - ranked full-text search over your notes (no index, no model)' },
+  { value: 'capture', files: ['capture.mjs'], label: 'capture - add one fact to today\'s journal, a note, or a new note, with its provenance, checked and committed' },
+  { value: 'garden', files: ['garden.mjs'], label: 'garden - one small reversible tidy-up of a few notes by your agent CLI, checked, committed, undone if anything is off' },
+  { value: 'bookmarks', files: ['bookmarks.mjs'], label: 'bookmarks - turn a browser bookmark export into markdown for ingestion' },
 ];
 // `earlier` is what an older version of this setup called the job, so its units can be told
 // apart from a local edit and replaced.
@@ -201,7 +201,11 @@ export async function writeClaudeFiles(ctx, vault, pillars) {
   const bin = (file, args) => `\`node "${path.join(vault, 'bin', file)}" ${args}\``;
   const contract = `\`${path.join(vault, 'AGENTS.md')}\``;
   const writers = ['ingest.mjs', ...(tools.includes('capture') ? ['capture.mjs'] : [])].map((f) => `\`bin/${f}\``).join(', ');
-  const search = `- Search it with \`rg -i "phrase" "${vault}"\`${tools.includes('search') ? `, or ${bin('search.mjs', '"terms"')} for ranked\n  results (narrow with \`--type\` or \`--folder\`)` : ''}.`;
+  // An existing vault keeps its own bin/ unless VAULT_REFRESH adds the missing files, so name
+  // bin/search only when it is there or this run writes it.
+  const searchTool = tools.includes('search')
+    && (fs.existsSync(path.join(vault, 'bin', 'search')) || !isExistingVault(vault) || ctx.get('VAULT_REFRESH'));
+  const search = `- Search it with \`rg -i "phrase" "${vault}"\`${searchTool ? `, or ${bin('search', '"terms"')} for ranked\n  results (narrow with \`--type\` or \`--folder\`)` : ''}.`;
   const edit = [
     scripts
       ? `- Read only: do not edit vault notes by hand. Its own scripts (${writers}) write it, and\n  ${contract} is the contract if a task needs a change there.`
@@ -373,7 +377,8 @@ export default {
       if (tools.length) {
         await ctx.step('vault tools', async () => {
           starterSkip();
-          for (const t of tools) await ctx.writeFile(path.join(vault, 'bin', t.file), ctx.template(`second-brain/bin/${t.file}`, vars), { mode: 0o755 });
+          // A file the vault already has, such as its own bin/search, is kept as it is.
+          for (const file of tools.flatMap((t) => t.files)) await ctx.writeFile(path.join(vault, 'bin', file), ctx.template(`second-brain/bin/${file}`, vars), { mode: 0o755 });
           if (tools.some((t) => t.value === 'garden')) await ctx.writeFile(path.join(vault, 'prompts', 'garden.md'), ctx.template('second-brain/prompts/garden.md', vars));
         });
       }

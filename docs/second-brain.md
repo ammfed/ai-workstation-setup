@@ -113,8 +113,12 @@ them exist here, and nothing in the vault depends on one.
 
 Picked with `VAULT_TOOLS` (all off by default), each a single Node script in `bin/`:
 
-- `search.mjs`: ranked full-text search (BM25, title words weighted up). It reads the notes on
-  every run and keeps nothing, so there is still no index.
+- `search`: ranked full-text search (BM25, title words weighted up), run as `bin/search terms`
+  (`node bin/search terms` on Windows). The extensionless `bin/search` runs `bin/search.mjs`,
+  which holds the code. It reads the notes on every run and keeps nothing, so there is still no
+  index. `bin/search` is the one search tool name the vault rule, the worker brief and the vault
+  `AGENTS.md` use. A vault that already has its own `bin/search` keeps it: the installer never
+  replaces a file a vault already has.
 - `capture.mjs`: one provenance-tagged line into today's journal, a named note (`--to`), or a
   new note (`--type`, `--title`, `--area`). The note must pass `bin/check.mjs` or the capture is
   undone; in a git vault only that note and `MAP.md` are committed.
@@ -154,7 +158,7 @@ With `VAULT_AGENT_ACCESS` (on by default), the module also writes
 `~/.claude/rules/second-brain.md`, a Claude Code user rules file loaded in every session, with
 your vault path filled in. It is about eight short lines: the vault exists and is private, look
 there first for past decisions and history, find a note by its folder and file name, `rg` or
-`bin/search.mjs`, trust the newest dated line and follow `status: superseded`, check open items
+`bin/search`, trust the newest dated line and follow `status: superseded`, check open items
 against the live tracker, do not edit notes by hand (with the `bin/capture.mjs` line when that
 tool is installed), and what may leave the machine (see below). It names only the scripts and
 tools you installed.
