@@ -344,7 +344,7 @@ Why: one supervisor that checks every phase against the same method catches drif
 ## 6. Wording
 
 1. **A second model checks every text a person will read.**
-   - Before handover, send the wording to a strong model from another family through an agent CLI this setup installed with full context: what the page is, who reads it, the tone, and what must not change.
+   - Before handover, send the wording to a strong model from another family through an agent CLI this setup installed, with full context: what the page is, who reads it, the tone, and what must not change.
    - Use its wording unless it breaks a fact, a name, a rule or wording the owner already approved.
    - Never send private material, only your own wording.
 
