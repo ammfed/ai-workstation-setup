@@ -141,10 +141,11 @@ Re-running is safe: installed tools are detected and skipped (tools that can pro
 they work without a sign-in are also given a quick real check), config edits only
 happen when something differs, and a changed file you own is never replaced
 without asking (a timestamped `.bak-*` copy is kept when it is). With `--yes`, and at a
-terminal while the install runs (it asks nothing then), a
-script or file the setup shipped is refreshed when your copy is an older version it
+terminal while the install runs, a
+script or file the setup shipped is refreshed without asking when your copy is an older version it
 shipped (known from a hash list in `~/.config/ai-workstation-setup/shipped.json` and
-from this clone's git history); a copy you edited is left alone. A file that an older
+from this clone's git history); a copy you edited is left alone under `--yes` and asked
+about at a terminal. A file that an older
 version of this setup built in code rather than from a template, such as the working
 preferences files, refreshes this way only after one interactive install run has
 recorded it. Your answers are
