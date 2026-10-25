@@ -6,6 +6,7 @@
 //     (a file you edited yourself is replaced only when you say yes),
 //   - the hook registrations in settings.json: the context reminder on UserPromptSubmit,
 //     PostToolUse and SessionStart (keeping your threshold and text), and the update reminder,
+//     leaving out any of them you answered no to in answers.env (as the installer does),
 //   - settings keys the defaults set and you have not set: the status line, the default model
 //     and effort, and the effort per model from the model map (docs/model-map.md).
 // Every other key in settings.json stays as it is. Missing default tools (agent-clis) and
@@ -16,7 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Context, Skip, c, detectPlatform } from '../lib/context.mjs';
+import { Context, Skip, c, detectPlatform, parseAnswersFile } from '../lib/context.mjs';
 import { claudeDir, setHook, settingsPath } from '../lib/claude.mjs';
 import { Prompter } from '../lib/prompt.mjs';
 import { DEFAULTS as DEFAULT_TOOLS } from '../modules/agent-clis/module.mjs';
@@ -38,12 +39,24 @@ export function reminderCommand(script, existing) {
 }
 
 /**
+ * Which reminder hooks the saved answers (answers.env, when it exists) leave on; a key not
+ * answered keeps its default of yes.
+ */
+export function savedReminders(file) {
+  const saved = fs.existsSync(file) ? parseAnswersFile(file) : new Map();
+  const on = (key) => !/^(n|no|false|0|)$/i.test(saved.get(key) ?? 'yes');
+  const context = on('CLAUDE_CONTEXT_REMINDER');
+  return { context, compact: context && on('CLAUDE_COMPACT_REMINDER'), update: on('CLAUDE_UPDATE_REMINDER') };
+}
+
+/**
  * The settings file as this template's defaults want it, with `changes` naming each difference.
  * `statusLine`: 'set' to point the status line at the shipped gauges, anything else to keep it.
  * `reminderCurrent`: false when the reminder hook file stays an older one of your own, which
  * may not know the --user flag; its registered command is then kept as it is.
+ * `reminders`: the hooks your saved answers leave on (see savedReminders); one answered no is not registered.
  */
-export function planSettings(settings, { home, statusLine, gitClone, reminderCurrent = true }) {
+export function planSettings(settings, { home, statusLine, gitClone, reminderCurrent = true, reminders = { context: true, compact: true, update: true } }) {
   const data = structuredClone(settings);
   const changes = [];
   // A stand-in for the installer's context: the lib/claude.mjs helpers edit `data` in memory.
@@ -60,11 +73,12 @@ export function planSettings(settings, { home, statusLine, gitClone, reminderCur
   const reminder = path.join(claude, 'hooks', 'context-reminder.mjs');
   const current = (data.hooks?.UserPromptSubmit || []).flatMap((m) => m?.hooks || []).find((h) => String(h?.command || '').includes('context-reminder.mjs'));
   const command = reminderCurrent || !current ? reminderCommand(reminder, current?.command) : current.command;
-  for (const event of REMINDER_EVENTS) {
+  const events = !reminders.context ? [] : reminders.compact ? REMINDER_EVENTS : REMINDER_EVENTS.filter((e) => e !== 'SessionStart');
+  for (const event of events) {
     if (setHook(shim, event, 'context-reminder.mjs', command)) changes.push(`register the context reminder on ${event}`);
   }
 
-  if (gitClone) {
+  if (gitClone && reminders.update) {
     const check = path.join(claude, 'hooks', 'update-check.mjs');
     if (setHook(shim, 'SessionStart', 'update-check.mjs', `node "${check}" "${repoRoot}"`)) changes.push('register the update reminder on SessionStart');
   }
@@ -197,6 +211,13 @@ export async function main(argv) {
     }
   }
   const gitClone = fs.existsSync(path.join(repoRoot, '.git'));
+  let reminders;
+  try {
+    reminders = savedReminders(path.join(repoRoot, 'answers.env'));
+  } catch (err) {
+    console.error(`${err.message}; fix answers.env by hand, nothing was changed`);
+    return 2;
+  }
 
   console.log(c.bold(`${dryRun ? 'Plan (dry run, nothing is written)' : 'Applying'}: Claude Code setup from ${repoRoot}`));
 
@@ -206,8 +227,8 @@ export async function main(argv) {
   if (other && (await ask(`Your status line runs "${other}". Replace it with the shipped gauges (a backup is kept)?`))) statusLine = 'set';
 
   const files = [
-    ['claude-code/bin/context-reminder.mjs', path.join(claude, 'hooks', 'context-reminder.mjs')],
-    ...(gitClone ? [['claude-code/bin/update-check.mjs', path.join(claude, 'hooks', 'update-check.mjs')]] : []),
+    ...(reminders.context ? [['claude-code/bin/context-reminder.mjs', path.join(claude, 'hooks', 'context-reminder.mjs')]] : []),
+    ...(gitClone && reminders.update ? [['claude-code/bin/update-check.mjs', path.join(claude, 'hooks', 'update-check.mjs')]] : []),
     ['claude-code/agents/reader.md', path.join(claude, 'agents', 'reader.md')],
   ];
   const gauges = path.join(claude, 'statusline-gauges.mjs');
@@ -229,7 +250,7 @@ export async function main(argv) {
     } else if (rel.endsWith('context-reminder.mjs')) reminderCurrent = false;
   }
 
-  const { data, changes } = planSettings(settings, { home, statusLine, gitClone, reminderCurrent });
+  const { data, changes } = planSettings(settings, { home, statusLine, gitClone, reminderCurrent, reminders });
 
   const tools = [];
   for (const key of DEFAULT_TOOLS) {

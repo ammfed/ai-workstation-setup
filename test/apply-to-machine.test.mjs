@@ -10,7 +10,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { planSettings, reminderCommand } from '../scripts/apply-to-machine.mjs';
+import { planSettings, reminderCommand, savedReminders } from '../scripts/apply-to-machine.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const unix = process.platform !== 'win32';
@@ -85,6 +85,27 @@ test('a reminder hook of your own keeps its registered command', () => {
   const settings = { hooks: { UserPromptSubmit: [{ hooks: [{ type: 'command', command: 'node "/x/context-reminder.mjs" auto' }] }] } };
   const { data } = planSettings(settings, { home: sampleHome, statusLine: 'keep', gitClone: false, reminderCurrent: false });
   assert.equal(data.hooks.PostToolUse[0].hooks[0].command, 'node "/x/context-reminder.mjs" auto');
+});
+
+test('saved answers of no keep the reminder hooks out of the settings plan', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'apply-answers-'));
+  try {
+    const file = path.join(dir, 'answers.env');
+    assert.deepEqual(savedReminders(file), { context: true, compact: true, update: true }, 'no answers file: the defaults');
+    fs.writeFileSync(file, '# saved\nCLAUDE_COMPACT_REMINDER=no\nCLAUDE_UPDATE_REMINDER=no\n');
+    const reminders = savedReminders(file);
+    assert.deepEqual(reminders, { context: true, compact: false, update: false });
+    const { data, changes } = planSettings({}, { home: sampleHome, statusLine: 'keep', gitClone: true, reminders });
+    assert.deepEqual(Object.keys(data.hooks), ['UserPromptSubmit', 'PostToolUse']);
+    assert.ok(!changes.some((ch) => ch.includes('SessionStart')), changes.join('\n'));
+
+    fs.writeFileSync(file, 'CLAUDE_CONTEXT_REMINDER=no\n');
+    const none = planSettings({}, { home: sampleHome, statusLine: 'keep', gitClone: true, reminders: savedReminders(file) });
+    assert.deepEqual(Object.keys(none.data.hooks), ['SessionStart']);
+    assert.ok(none.data.hooks.SessionStart[0].hooks[0].command.includes('update-check.mjs'));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('apply-to-machine: dry run, apply, a second run, then undo', { skip: !unix }, () => {

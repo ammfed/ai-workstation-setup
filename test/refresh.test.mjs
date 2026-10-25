@@ -123,3 +123,23 @@ test('an interactive run still asks, even for an older shipped copy', async () =
   assert.equal(fs.readFileSync(f.target, 'utf8'), '// demo v1 for you\n');
   fs.rmSync(f.tmp, { recursive: true, force: true });
 });
+
+test('a file built in code is refreshed under --yes when the copy on disk is one this setup wrote', async () => {
+  const f = fixture();
+  const run = async (text) => {
+    const { ctx, rec } = context(f);
+    return { v: await ctx.writeFile(f.target, text, { onConflict: 'ask' }), rec };
+  };
+  assert.equal((await run('// built in code, v1\n')).v, true);
+  const second = await run('// built in code, v2\n');
+  assert.equal(second.v, true);
+  assert.deepEqual(second.rec.skips, []);
+  assert.equal(fs.readFileSync(f.target, 'utf8'), '// built in code, v2\n');
+
+  fs.writeFileSync(f.target, '// built in code, v2, with my change\n');
+  const third = await run('// built in code, v3\n');
+  assert.equal(third.v, false);
+  assert.equal(fs.readFileSync(f.target, 'utf8'), '// built in code, v2, with my change\n');
+  assert.match(third.rec.skips.join('\n'), /local edit.*left untouched/);
+  fs.rmSync(f.tmp, { recursive: true, force: true });
+});
