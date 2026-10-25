@@ -1,0 +1,9 @@
+#!/usr/bin/env node
+// The vault's search command: runs bin/search.mjs with the same arguments.
+// Usage: bin/search [--limit N] [--folder F] [--type T] [--json] QUERY...
+// On Windows, run it as: node bin/search QUERY...
+const { spawnSync } = require('node:child_process');
+const path = require('node:path');
+
+const run = spawnSync(process.execPath, [path.join(__dirname, 'search.mjs'), ...process.argv.slice(2)], { stdio: 'inherit' });
+process.exit(run.status ?? 1);

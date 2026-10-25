@@ -5,7 +5,8 @@
 // There is no index to build or keep fresh, no model and no network, so the notes stay the only
 // source of truth and a search can never be stale. A title match counts more than a body match.
 //
-// Usage: node bin/search.mjs [--limit N] [--folder F] [--type T] [--json] QUERY...
+// Usage: bin/search [--limit N] [--folder F] [--type T] [--json] QUERY...
+// (bin/search runs this file; on Windows run `node bin/search` or `node bin/search.mjs`.)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -69,12 +70,12 @@ if (runAsScript()) {
     else if (a === '--type') opts.type = argv[(i += 1)];
     else if (a === '--json') opts.json = true;
     else if (a === '-h' || a === '--help') {
-      console.log('Usage: node bin/search.mjs [--limit N] [--folder F] [--type T] [--json] QUERY...');
+      console.log('Usage: bin/search [--limit N] [--folder F] [--type T] [--json] QUERY...');
       process.exit(0);
     } else words.push(a);
   }
   if (!words.length) {
-    console.error('search: give a query, for example: node bin/search.mjs budget review');
+    console.error('search: give a query, for example: bin/search budget review');
     process.exit(2);
   }
   const root = vaultRoot([]);
