@@ -126,7 +126,8 @@ where Claude's sign-in opens your browser and any key a picked part needs (Click
 OpenRouter, Context7) is pasted hidden, or left for later with Enter. GitHub and Context7 are listed there under "Later,
 when you want them" (pick them under `c` to sign in at the end of the first run); running
 the setup again offers them. While it installs, a terminal shows one line per group with a
-word for its state (done, now, did not work) and nothing to answer; the step-by-step detail
+word for its state (done, now, did not work) and nothing to answer, except whether to replace
+a file you changed yourself (a backup is kept); the step-by-step detail
 and command output go to `setup-notes.md` in your home folder (a dry run writes it to a
 temporary folder and names it). At a terminal the last screen says "All set! Claude is
 ready." and how to start it, or "Nearly all set." naming what did not work; the summary and
@@ -140,10 +141,11 @@ Re-running is safe: installed tools are detected and skipped (tools that can pro
 they work without a sign-in are also given a quick real check), config edits only
 happen when something differs, and a changed file you own is never replaced
 without asking (a timestamped `.bak-*` copy is kept when it is). With `--yes`, and at a
-terminal while the install runs (it asks nothing then), a
-script or file the setup shipped is refreshed when your copy is an older version it
+terminal while the install runs, a
+script or file the setup shipped is refreshed without asking when your copy is an older version it
 shipped (known from a hash list in `~/.config/ai-workstation-setup/shipped.json` and
-from this clone's git history); a copy you edited is left alone. A file that an older
+from this clone's git history); a copy you edited is left alone under `--yes` and asked
+about at a terminal. A file that an older
 version of this setup built in code rather than from a template, such as the working
 preferences files, refreshes this way only after one interactive install run has
 recorded it. Your answers are

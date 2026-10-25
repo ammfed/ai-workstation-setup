@@ -85,6 +85,24 @@ test('after something else printed, the screen draws afresh below it', () => {
   assert.ok(!out.text.includes('\x1b['), 'no move up over what printed in between');
 });
 
+test('after a question the screen draws again below it at once; without a terminal it prints nothing', () => {
+  const out = sink(true);
+  const p = new Progress(progressGroups(mods(['core', 'skills'])), { out });
+  p.start();
+  p.set('core', 'now');
+  p.interrupt();
+  out.text = '';
+  p.resume();
+  assert.ok(!out.text.includes('['), 'no move up over the question');
+  assert.match(out.text, /now    The basics/);
+  const plain = sink(false);
+  const q = new Progress(progressGroups(mods(['core'])), { out: plain });
+  q.set('core', 'now');
+  plain.text = '';
+  q.resume();
+  assert.equal(plain.text, '');
+});
+
 test('without a terminal each finished group prints one line', () => {
   const out = sink(false);
   const p = new Progress(progressGroups(mods(['core', 'claude-code'])), { out });
@@ -106,7 +124,7 @@ function capture(fn) {
     .then(() => lines.join('\n'));
 }
 
-test('while the screen is up the detail and command output go to the notes file, and nothing is asked', async () => {
+test('while the screen is up the detail and command output go to the notes file, and a question steps the screen aside', async () => {
   const asked = [];
   const prompter = { confirm: async (t) => (asked.push(t), true), release() {} };
   const ctx = new Context({ platform: detectPlatform(), dryRun: false, interactive: true, answers: new Map(), prompter, repoRoot });
@@ -114,12 +132,12 @@ test('while the screen is up the detail and command output go to the notes file,
   assert.equal(notes.file, path.join(home, NOTES_FILE));
   ctx.sink = notes.fd;
   const shown = [];
-  ctx.progress = { interrupt: () => shown.push('interrupt') };
+  ctx.progress = { interrupt: () => shown.push('interrupt'), resume: () => shown.push('resume') };
   const screen = await capture(async () => {
     ctx.beginModule('demo');
     ctx.info('a detail line');
     ctx.run('echo from-the-command');
-    assert.equal(await ctx.confirm('Replace it?', false), false);
+    assert.equal(await ctx.confirm('Replace it?', false), true);
     ctx.run('echo the-person-sees-this', { show: true });
   });
   fs.closeSync(notes.fd);
@@ -130,8 +148,8 @@ test('while the screen is up the detail and command output go to the notes file,
   assert.ok(!text.includes('the-person-sees-this'), text);
   assert.ok(!screen.includes('a detail line') && !screen.includes('from-the-command'), screen);
   assert.match(screen, /\$ echo the-person-sees-this/);
-  assert.deepEqual(asked, []);
-  assert.deepEqual(shown, ['interrupt']);
+  assert.deepEqual(asked, ['Replace it?']);
+  assert.deepEqual(shown, ['interrupt', 'resume', 'interrupt']);
 });
 
 test('a setup-notes.md the setup did not write is backed up; a dry run writes only to a temporary folder', () => {
