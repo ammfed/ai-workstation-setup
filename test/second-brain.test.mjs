@@ -404,6 +404,43 @@ test('claude files: a bin/search that is not a node script is called by its own 
   }
 });
 
+test('claude files: the rule names only the filters the vault\'s own search takes', { skip: process.platform === 'win32' && 'runs a shell script' }, async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-claude-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const dir = path.join(home, 'my vault');
+    const file = path.join(dir, 'bin', 'search');
+    fs.mkdirSync(path.join(dir, 'bin'), { recursive: true });
+    git(dir, 'init', '-q');
+    const rules = claudeFile(home, 'rules', 'second-brain.md');
+    const searchLine = () => fs.readFileSync(rules, 'utf8').split('\n').slice(0, 12).join('\n').match(/Search it with[^]*?\.\n/)[0];
+
+    // A vault search of its own, like a bash script with its own flags: no --folder.
+    const help = 'usage: bin/search [-h] [-n LIMIT] [-p PILLAR] [-t TYPE] [-s STATUS] [--json] [query ...]\n  -t, --type TYPE\n  -s, --status STATUS\n';
+    fs.writeFileSync(file, `#!/bin/sh\ncat <<'EOF'\n${help}EOF\n`, { mode: 0o755 });
+    git(dir, 'add', '.');
+    git(dir, 'commit', '-qm', 'start');
+    await claudeFilesInto(home);
+    assert.match(searchLine(), /narrow with `--type` or `--status`/);
+    assert.doesNotMatch(searchLine(), /--folder/, 'the vault\'s search rejects --folder');
+
+    // A search whose help names none of the filters gets no narrowing hint.
+    fs.rmSync(path.join(home, '.claude'), { recursive: true });
+    fs.writeFileSync(file, '#!/bin/sh\necho "usage: bin/search [query ...]"\n', { mode: 0o755 });
+    await claudeFilesInto(home);
+    assert.doesNotMatch(searchLine(), /narrow/);
+
+    // The node entry this setup ships takes --type and --folder.
+    fs.rmSync(path.join(home, '.claude'), { recursive: true });
+    fs.writeFileSync(file, '#!/usr/bin/env node\n');
+    await claudeFilesInto(home);
+    assert.match(searchLine(), /narrow with `--type` or `--folder`/);
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('claude files: by default the rule says vault content never goes to an outside model or service', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-claude-'));
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');

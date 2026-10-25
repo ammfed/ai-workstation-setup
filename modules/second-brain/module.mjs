@@ -205,7 +205,9 @@ export async function writeClaudeFiles(ctx, vault, pillars) {
   // bin/search only when it is there or this run writes it.
   const searchTool = tools.includes('search')
     && (fs.existsSync(path.join(vault, 'bin', 'search')) || !isExistingVault(vault) || ctx.get('VAULT_REFRESH'));
-  const search = `- Search it with \`rg -i "phrase" "${vault}"\`${searchTool ? `, or ${searchCommand(vault)} for ranked\n  results (narrow with \`--type\` or \`--folder\`)` : ''}.`;
+  const filters = searchTool ? searchFilters(vault) : [];
+  const narrow = filters.length ? ` (narrow with ${filters.map((f) => `\`${f}\``).join(' or ')})` : '';
+  const search = `- Search it with \`rg -i "phrase" "${vault}"\`${searchTool ? `, or ${searchCommand(vault)} for ranked\n  results${narrow}` : ''}.`;
   const edit = [
     scripts
       ? `- Read only: do not edit vault notes by hand. Its own scripts (${writers}) write it, and\n  ${contract} is the contract if a task needs a change there.`
@@ -244,11 +246,32 @@ export async function writeClaudeFiles(ctx, vault, pillars) {
  */
 export function searchCommand(vault) {
   const file = path.join(vault, 'bin', 'search');
+  return isNodeSearch(file) ? `\`node "${file}" "terms"\`` : `\`"${file}" "terms"\``;
+}
+
+function isNodeSearch(file) {
   let first = '#!/usr/bin/env node';
   try {
     first = fs.readFileSync(file, 'utf8').split(/\r?\n/, 1)[0];
   } catch { /* not there yet: this run writes the node entry */ }
-  return /^#!.*\bnode\b/.test(first) ? `\`node "${file}" "terms"\`` : `\`"${file}" "terms"\``;
+  return /^#!.*\bnode\b/.test(first);
+}
+
+// Filters the rule may suggest, in the order it names them. The node search this setup ships
+// takes --type and --folder.
+const FILTERS = ['--type', '--status', '--folder', '--pillar'];
+const SHIPPED_FILTERS = ['--type', '--folder'];
+
+/**
+ * Up to two filters the vault's bin/search takes, so the rule never suggests one it rejects. A
+ * search the vault wrote itself is asked for its own --help; one that cannot run gets none.
+ */
+export function searchFilters(vault) {
+  const file = path.join(vault, 'bin', 'search');
+  if (isNodeSearch(file)) return SHIPPED_FILTERS;
+  const help = spawnSync(file, ['--help'], { encoding: 'utf8', timeout: 5000 });
+  const text = `${help.stdout ?? ''}${help.stderr ?? ''}`;
+  return FILTERS.filter((f) => new RegExp(`(^|[\\s,[])${f}\\b`).test(text)).slice(0, 2);
 }
 
 /** A vault that is already a git repository with at least one commit keeps its own tooling and notes. */
