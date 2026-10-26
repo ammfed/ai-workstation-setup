@@ -96,6 +96,21 @@ export function renderBriefInclude(get, { checkerPath, privateRules, tastePreset
   return parts.filter(Boolean).join('\n');
 }
 
+// A second-mate home's config/brief-include.md keeps its own lines, so the generated lines go in
+// a marked block: a re-run replaces only the block, and a file without one gets it at the end.
+export const BRIEF_BLOCK_START = '<!-- ai-workstation-setup: start of generated lines. A re-run replaces this block; keep your own lines outside it. -->';
+export const BRIEF_BLOCK_END = '<!-- ai-workstation-setup: end of generated lines -->';
+export function mergeBriefBlock(current, brief) {
+  const block = `${BRIEF_BLOCK_START}\n\n${brief.trimEnd()}\n\n${BRIEF_BLOCK_END}\n`;
+  const text = String(current || '');
+  const start = text.indexOf('<!-- ai-workstation-setup: start');
+  const end = text.indexOf(BRIEF_BLOCK_END);
+  if (start === -1 && end === -1) return text.trim() ? `${text.trimEnd()}\n\n${block}` : block;
+  if (start === -1 || end < start) throw new Error('the generated-lines block has a missing or misplaced marker; fix the markers by hand');
+  const after = text.slice(end + BRIEF_BLOCK_END.length).replace(/^\n/, '');
+  return `${text.slice(0, start)}${block}${after}`;
+}
+
 // Firstmate's data/captain-shared.md in the main home, which every second mate reads (read-only
 // there): the private Everywhere and Second mates lines. Empty when there are none.
 export function renderCaptainShared(privateRules) {

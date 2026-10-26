@@ -3,7 +3,8 @@ import path from 'node:path';
 import { Skip } from '../../lib/context.mjs';
 import { claudeDir } from '../../lib/claude.mjs';
 import { PRIVATE_HEADINGS, PRIVATE_RULES_DEFAULT, parsePrivateRules } from './private-rules.mjs';
-import { renderBriefInclude, renderCaptain, renderCaptainShared, renderPreferenceSkills, renderPreferences } from './render.mjs';
+import { localSecondmateHomes } from '../firstmate/module.mjs';
+import { mergeBriefBlock, renderBriefInclude, renderCaptain, renderCaptainShared, renderPreferenceSkills, renderPreferences } from './render.mjs';
 
 // Writes how you want your agents to work (status format, tone, decisions, review
 // pages, building, ideas, away mode, merges, research, quota) as a short rules file every session
@@ -384,6 +385,18 @@ export default {
       // to every worker brief: house style, vault-first line, helper model, build rules, principle checker, taste preset, private lines.
       const brief = renderBriefInclude((key) => ctx.get(key), { checkerPath: checkerPath(ctx), privateRules, tastePreset, vault: vaultSetup(ctx) });
       if (brief) await ctx.step('firstmate worker briefs', () => ctx.writeFile(path.join(home, 'config', 'brief-include.md'), brief, { onConflict: 'ask' }));
+      // Each second-mate home reads only its own include, so the same lines go there as a marked
+      // block around which the home's own lines stay. Homes come from the main home's registry.
+      const registry = path.join(home, 'data', 'secondmates.md');
+      const mates = fs.existsSync(registry) ? localSecondmateHomes(fs.readFileSync(registry, 'utf8')) : [];
+      for (const mate of brief ? mates : []) {
+        await ctx.step(`firstmate worker briefs ${path.basename(mate)}`, () => {
+          if (!fs.existsSync(path.join(mate, '.fm-secondmate-home'))) throw new Skip(`${mate} is not a second-mate home (no .fm-secondmate-home)`);
+          const file = path.join(mate, 'config', 'brief-include.md');
+          const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+          return ctx.writeFile(file, mergeBriefBlock(current, brief), { onConflict: 'replace' });
+        });
+      }
       // data/captain-shared.md in the main home is copied read-only into every second-mate home.
       const shared = renderCaptainShared(privateRules);
       if (shared) await ctx.step('firstmate second mates', () => ctx.writeFile(path.join(home, 'data', 'captain-shared.md'), shared, { onConflict: 'ask' }));

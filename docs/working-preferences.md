@@ -52,6 +52,13 @@ exists and agents have access, naming only the routes it installs, the helper-mo
 `PREFS_GLOSSARY_ADR`, the principle checker line from `PREFS_PRINCIPLE_CHECKS`, and your private
 Everywhere and Workers lines. Nothing applies, nothing is written. The split does not change it.
 
+Firstmate reads that file only in the home it belongs to, so the module also writes the same
+lines into `config/brief-include.md` of every local second-mate home listed in the main home's
+`data/secondmates.md` (a home without its `.fm-secondmate-home` marker is skipped). There the
+lines go in a block between two `ai-workstation-setup` comment markers: lines the home wrote
+itself stay around the block, a re-run replaces only the block, and a dry run lists each file.
+Keep your own edits outside the block. A home added later gets the lines on the next run.
+
 Your own rules that are not generic go in a private rules file outside the clone; see
 [Your private rules](#your-private-rules).
 
@@ -259,7 +266,7 @@ It is plain Markdown. Each `##` heading says where its lines go:
 | --- | --- |
 | `Everywhere` | All three files below |
 | `Sessions` | The core file (`working-preferences.md`) and Firstmate's `data/captain.md` |
-| `Workers` | Firstmate's `config/brief-include.md`, appended to every worker brief |
+| `Workers` | Firstmate's `config/brief-include.md` (and each local second-mate home's), appended to every worker brief |
 | `Second mates` | Firstmate's `data/captain-shared.md` in the main home, which every second mate reads; written only when there are lines for it |
 | `Reviewer` | The no-mistakes design review rules (agent-clis, `NO_MISTAKES_PRINCIPLES`), added after the generic ones to every review whose change touches an interface file |
 

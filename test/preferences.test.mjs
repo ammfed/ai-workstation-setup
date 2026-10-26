@@ -17,7 +17,7 @@ import { Context, detectPlatform } from '../lib/context.mjs';
 import firstmate from '../modules/firstmate/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
 import { parsePrivateRules } from '../modules/preferences/private-rules.mjs';
-import { PREFERENCE_SKILLS, renderBriefInclude, renderCaptain, renderCaptainShared, renderPreferenceSkills, renderPreferences } from '../modules/preferences/render.mjs';
+import { BRIEF_BLOCK_END, BRIEF_BLOCK_START, PREFERENCE_SKILLS, mergeBriefBlock, renderBriefInclude, renderCaptain, renderCaptainShared, renderPreferenceSkills, renderPreferences } from '../modules/preferences/render.mjs';
 import { ALL_ON, RULE_HOMES } from './rule-homes.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -648,7 +648,97 @@ test('a second unattended run with a changed answer refreshes the files this set
   }
 });
 
-test('without the firstmate module in the run, the saved Firstmate home is used, not ~/firstmate', { skip: process.platform === 'win32' }, async () => {
+test('the generated block goes after the home lines once, replaces only itself, and refuses a broken marker', () => {
+  const own = '## Our own rule\n\n- Keep this.\n';
+  const first = mergeBriefBlock(own, '## Building\n\n- One.\n');
+  assert.ok(first.startsWith(own), first);
+  assert.ok(first.endsWith(`${BRIEF_BLOCK_END}\n`), first);
+  const after = `${first}\n- Added later by hand.\n`;
+  const second = mergeBriefBlock(after, '## Building\n\n- Two.\n');
+  assert.equal(second, after.replace('- One.', '- Two.'));
+  assert.equal(mergeBriefBlock(second, '## Building\n\n- Two.\n'), second);
+  assert.equal(mergeBriefBlock('', '- Only.\n'), `${BRIEF_BLOCK_START}\n\n- Only.\n\n${BRIEF_BLOCK_END}\n`);
+  assert.throws(() => mergeBriefBlock(`${BRIEF_BLOCK_START}\n- no end\n`, '- x\n'), /missing or misplaced marker/);
+});
+
+test('every local second-mate home in the registry gets the worker lines as a block around its own lines', { skip: process.platform === 'win32' }, async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const mate = path.join(home, 'homes', 'mate-a');
+    const fresh = path.join(home, 'homes', 'mate-b');
+    const notHome = path.join(home, 'homes', 'not-a-home');
+    for (const dir of [mate, fresh]) {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, '.fm-secondmate-home'), '');
+    }
+    fs.mkdirSync(notHome, { recursive: true });
+    const own = '## Our house style\n\n- A line this home wrote.\n';
+    fs.mkdirSync(path.join(mate, 'config'));
+    fs.writeFileSync(path.join(mate, 'config', 'brief-include.md'), own);
+    fs.mkdirSync(path.join(home, 'fm', 'data'), { recursive: true });
+    fs.writeFileSync(
+      path.join(home, 'fm', 'data', 'secondmates.md'),
+      [
+        `- mate-a - one domain (home: ${mate}; scope: a; projects: a; added 2026-01-01)`,
+        `- mate-b - another domain (home: ${fresh}; scope: b; projects: b; added 2026-01-01)`,
+        `- stray - no marker file (home: ${notHome}; scope: c; projects: c; added 2026-01-01)`,
+        '- far - another machine (host: example; root: /srv; home: /srv/far; scope: d; projects: d; added 2026-01-01)',
+        '',
+      ].join('\n'),
+    );
+    const given = { PREFS_PRIVATE_RULES: path.join(home, 'missing.md'), PREFS_KUN: 'yes', PREFS_PRINCIPLE_CHECKS: 'yes' };
+    const { out, ctx } = await installInto(home, given);
+    assert.equal(ctx.record.failures.length, 0, out);
+    const checker = path.join(home, '.claude', 'skills', 'workflow-playbook', 'principles', 'bin', 'principle-check.mjs');
+    const main = fs.readFileSync(path.join(home, 'fm', 'config', 'brief-include.md'), 'utf8');
+    for (const dir of [mate, fresh]) {
+      const brief = fs.readFileSync(path.join(dir, 'config', 'brief-include.md'), 'utf8');
+      assert.ok(brief.includes(main.trimEnd()), `${dir} carries the main home's lines`);
+      assert.ok(brief.includes(checker), `${dir} names the principle checker`);
+      assert.match(brief, /run \/kun once/, dir);
+    }
+    assert.ok(fs.readFileSync(path.join(mate, 'config', 'brief-include.md'), 'utf8').startsWith(own), 'the home keeps its own lines');
+    assert.match(out, /not-a-home is not a second-mate home/);
+    assert.ok(!fs.existsSync(path.join(notHome, 'config')));
+
+    // A changed answer replaces only the block, and a second identical run changes nothing.
+    await installInto(home, { ...given, PREFS_KUN: 'no' });
+    const changed = fs.readFileSync(path.join(mate, 'config', 'brief-include.md'), 'utf8');
+    assert.ok(changed.startsWith(own), changed);
+    assert.doesNotMatch(changed, /run \/kun once/);
+    assert.equal(changed.split(BRIEF_BLOCK_START).length, 2, 'one block only');
+    const again = (await installInto(home, { ...given, PREFS_KUN: 'no' })).out;
+    assert.match(again, new RegExp(`${path.join(mate, 'config', 'brief-include.md').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} is already up to date`));
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('a dry run lists every second-mate home include it would write', { skip: process.platform === 'win32' }, async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const mate = path.join(home, 'homes', 'mate-a');
+    fs.mkdirSync(mate, { recursive: true });
+    fs.writeFileSync(path.join(mate, '.fm-secondmate-home'), '');
+    fs.mkdirSync(path.join(home, 'fm', 'data'), { recursive: true });
+    fs.writeFileSync(path.join(home, 'fm', 'data', 'secondmates.md'), `- mate-a - one domain (home: ${mate}; scope: a; projects: a; added 2026-01-01)\n`);
+    const answers = new Map(Object.entries({ PREFS_TARGETS: 'firstmate', PREFS_DECISIONS: 'chat', FIRSTMATE_HOME: path.join(home, 'fm'), PREFS_PRIVATE_RULES: path.join(home, 'missing.md') }));
+    const ctx = new Context({ platform: { ...detectPlatform(), home }, dryRun: true, interactive: false, answers, prompter: null, repoRoot });
+    ctx.beginModule('preferences');
+    for (const q of preferences.questions) if (!q.when || q.when(ctx)) await ctx.ask(q);
+    const out = await capture(() => preferences.install(ctx));
+    assert.ok(out.includes(`would write ${path.join(mate, 'config', 'brief-include.md')}`), out);
+    assert.ok(!fs.existsSync(path.join(mate, 'config')), 'a dry run writes nothing');
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('without the firstmate module in the run, the saved Firstmate home is used, not ~/firstmate',{ skip: process.platform === 'win32' }, async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-'));
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
   try {
