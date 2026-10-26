@@ -14,14 +14,41 @@ export function keyFile(ctx) {
   return path.join(ctx.home, '.config', 'ai-workstation-setup', NAME, '.env');
 }
 
-// Replace or add the OPENROUTER_API_KEY line, keeping every other line of the file.
-export function withKey(text, key) {
+// Replace or add a KEY=value line for each entry, keeping every other line of the file.
+export function withEnv(text, entries) {
   const lines = String(text || '').split('\n').filter((l, i, all) => !(i === all.length - 1 && l === ''));
-  const line = `OPENROUTER_API_KEY=${key}`;
-  const i = lines.findIndex((l) => /^\s*OPENROUTER_API_KEY=/.test(l));
-  if (i >= 0) lines[i] = line;
-  else lines.push(line);
+  for (const [name, value] of Object.entries(entries)) {
+    const line = `${name}=${value}`;
+    const i = lines.findIndex((l) => new RegExp(`^\\s*${name}=`).test(l));
+    if (i >= 0) lines[i] = line;
+    else lines.push(line);
+  }
   return `${lines.join('\n')}\n`;
+}
+
+export function withKey(text, key) {
+  return withEnv(text, { OPENROUTER_API_KEY: key });
+}
+
+// The Firstmate home whose .env the dispatch resolver reads: the answer, else the firstmate
+// module's home (its clone when it has none), else FM_HOME, else ~/.firstmate.
+export function firstmateHome(ctx) {
+  const v = ctx.values;
+  return v.OPENROUTER_FIRSTMATE_HOME || v.FIRSTMATE_HOME || v.FIRSTMATE_DIR || process.env.FM_HOME || path.join(ctx.home, '.firstmate');
+}
+
+// Firstmate's built-in OpenRouter setting (its docs/configuration.md, "Typed dispatch
+// resolution"): only these two lines change; the file's other lines, its key among them, stay.
+function writeDispatch(ctx, file, model) {
+  const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
+  const next = withEnv(current, { FM_DISPATCH_PROVIDER: 'openrouter', FM_DISPATCH_MODEL: model });
+  if (current === next) return ctx.ok(`${file} already routes Firstmate dispatch through OpenRouter (${model})`);
+  if (ctx.dryRun) return ctx.say(`  ~ would set FM_DISPATCH_PROVIDER=openrouter and FM_DISPATCH_MODEL=${model} in ${file}`);
+  ctx.backup(file);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  // A new file is private; an existing one keeps its mode.
+  fs.writeFileSync(file, next, current === null ? { mode: 0o600 } : undefined);
+  ctx.ok(`set FM_DISPATCH_PROVIDER=openrouter and FM_DISPATCH_MODEL=${model} in ${file}`);
 }
 
 function storeKey(ctx, file, current, key) {
@@ -55,8 +82,22 @@ export default {
     {
       key: 'OPENROUTER_MODEL',
       type: 'text',
-      message: 'Decision model on OpenRouter for tools that ask one (voice mode actions)',
+      message: 'Decision model on OpenRouter for tools that ask one (voice mode actions, Firstmate dispatch)',
       default: DEFAULT_MODEL,
+    },
+    {
+      key: 'OPENROUTER_FIRSTMATE',
+      type: 'confirm',
+      message: "Route Firstmate's dispatch resolver through OpenRouter (sets FM_DISPATCH_PROVIDER and FM_DISPATCH_MODEL in the Firstmate home's .env)?",
+      default: false,
+    },
+    {
+      key: 'OPENROUTER_FIRSTMATE_HOME',
+      type: 'text',
+      path: true,
+      message: 'Firstmate home whose .env gets those settings (empty: FIRSTMATE_HOME, the firstmate clone, FM_HOME, then ~/.firstmate)',
+      default: '',
+      when: (ctx) => ctx.get('OPENROUTER_FIRSTMATE'),
     },
   ],
 
@@ -76,6 +117,17 @@ export default {
       });
     });
 
+    if (ctx.get('OPENROUTER_FIRSTMATE')) {
+      await ctx.step('Firstmate dispatch', () => {
+        const env = path.join(firstmateHome(ctx), '.env');
+        writeDispatch(ctx, env, ctx.get('OPENROUTER_MODEL') || DEFAULT_MODEL);
+        const text = fs.existsSync(env) ? fs.readFileSync(env, 'utf8') : '';
+        if (!process.env.OPENROUTER_API_KEY && !/^\s*OPENROUTER_API_KEY=\S/m.test(text)) {
+          ctx.todo(`put your OpenRouter key as OPENROUTER_API_KEY in ${env} or your environment; Firstmate's resolver reads it there, not from ${file}`);
+        }
+      });
+    }
+
     await ctx.step('tools', () => {
       const voice = (ctx.values.MODULES || []).includes('voice-mode');
       ctx.info(
@@ -83,7 +135,10 @@ export default {
           ? `voice mode reads this key file and uses ${ctx.get('OPENROUTER_MODEL')} for its actions`
           : 'voice mode, when you install it, reads this key file for its actions',
       );
-      ctx.info("compact-adviser calls TypeSafe directly and documents no OpenRouter setting; it uses TYPESAFE_API_KEY. Firstmate's dispatch resolver takes OpenRouter through FM_DISPATCH_PROVIDER and FM_DISPATCH_MODEL and reads its own OPENROUTER_API_KEY from the environment or $FM_HOME/.env, not this key file (see docs/openrouter.md)");
+      ctx.info('compact-adviser calls TypeSafe directly and documents no OpenRouter setting; it uses TYPESAFE_API_KEY (see docs/openrouter.md)');
+      if (!ctx.get('OPENROUTER_FIRSTMATE')) {
+        ctx.info("Firstmate's dispatch resolver takes OpenRouter through FM_DISPATCH_PROVIDER and FM_DISPATCH_MODEL; answer yes to OPENROUTER_FIRSTMATE to set them (see docs/openrouter.md)");
+      }
     });
   },
 };

@@ -20,6 +20,7 @@ import { PATCH_MARKER, PRISTINE_SHA256, earlierOfficeNamesHelper, mergePixelSett
 import { PR_MERGE_RULES, registerContextReminder, reminderTokens } from '../modules/claude-code/module.mjs';
 import { findOpenWhisprAppImage, lavishUnits, openGuardSeconds } from '../modules/extras/module.mjs';
 import firstmate, { isLinkedWorktree, stowTokens } from '../modules/firstmate/module.mjs';
+import openrouter, { withEnv } from '../modules/openrouter/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
 import { renderBriefInclude } from '../modules/preferences/render.mjs';
 import skills, { writeBundledSkill } from '../modules/skills/module.mjs';
@@ -905,6 +906,84 @@ test('without an operational home the firstmate run removes an older export and 
   for (const q of firstmate.questions) if (!q.when || q.when(ctx)) await ctx.ask(q);
   await capture(() => firstmate.install(ctx));
   assert.equal(fs.readFileSync(rc, 'utf8'), 'export FM_HOME=/mine\n');
+});
+
+// The openrouter module with invented answers; a temporary folder stands in for the Firstmate home.
+async function runOpenrouter(home, fmHome, answers, { dryRun = false } = {}) {
+  const ctx = new Context({
+    platform: { ...detectPlatform(), home },
+    dryRun,
+    interactive: false,
+    answers: new Map(Object.entries({ OPENROUTER_FIRSTMATE_HOME: fmHome, ...answers })),
+    prompter: null,
+    repoRoot,
+  });
+  ctx.beginModule('openrouter');
+  const key = process.env.OPENROUTER_API_KEY;
+  delete process.env.OPENROUTER_API_KEY;
+  try {
+    for (const q of openrouter.questions) if (!q.when || q.when(ctx)) await ctx.ask(q);
+    const out = await capture(() => openrouter.install(ctx));
+    return { out };
+  } finally {
+    if (key !== undefined) process.env.OPENROUTER_API_KEY = key;
+  }
+}
+
+const HOME_ENV = ['# my settings', 'TYPESAFE_API_KEY=ts-invented', 'OPENROUTER_API_KEY=or-invented', 'FMX_DRY_RUN=1', ''].join('\n');
+
+test('opting in adds the two dispatch lines to a Firstmate .env and keeps its other lines', { skip: !unix }, async () => {
+  const home = tempHome();
+  const fmHome = path.join(home, 'fm');
+  fs.mkdirSync(fmHome);
+  const env = path.join(fmHome, '.env');
+  fs.writeFileSync(env, HOME_ENV, { mode: 0o640 });
+  const { out } = await runOpenrouter(home, fmHome, { OPENROUTER_FIRSTMATE: 'yes' });
+  assert.equal(fs.readFileSync(env, 'utf8'), `${HOME_ENV}FM_DISPATCH_PROVIDER=openrouter\nFM_DISPATCH_MODEL=typesafe/jev-1.13\n`);
+  assert.equal(fs.statSync(env).mode & 0o777, 0o640);
+  assert.doesNotMatch(out, /or-invented|ts-invented/);
+  assert.doesNotMatch(out, /OPENROUTER_API_KEY in/);
+
+  // A re-run changes nothing and makes no second backup.
+  const backups = () => fs.readdirSync(fmHome).filter((n) => n.startsWith('.env.bak-')).length;
+  assert.equal(backups(), 1);
+  const again = await runOpenrouter(home, fmHome, { OPENROUTER_FIRSTMATE: 'yes' });
+  assert.equal(fs.readFileSync(env, 'utf8'), `${HOME_ENV}FM_DISPATCH_PROVIDER=openrouter\nFM_DISPATCH_MODEL=typesafe/jev-1.13\n`);
+  assert.match(again.out, /already routes Firstmate dispatch through OpenRouter/);
+  assert.equal(backups(), 1);
+});
+
+test('the dispatch lines are updated in place, and a dry run or an opt-out writes nothing', { skip: !unix }, async () => {
+  assert.equal(
+    withEnv('A=1\nFM_DISPATCH_MODEL=old/model\nB=2\n', { FM_DISPATCH_PROVIDER: 'openrouter', FM_DISPATCH_MODEL: 'typesafe/jev-1.13' }),
+    'A=1\nFM_DISPATCH_MODEL=typesafe/jev-1.13\nB=2\nFM_DISPATCH_PROVIDER=openrouter\n',
+  );
+  const home = tempHome();
+  const fmHome = path.join(home, 'fm');
+  fs.mkdirSync(fmHome);
+  const env = path.join(fmHome, '.env');
+  fs.writeFileSync(env, HOME_ENV);
+  const dry = await runOpenrouter(home, fmHome, { OPENROUTER_FIRSTMATE: 'yes' }, { dryRun: true });
+  assert.match(dry.out, /would set FM_DISPATCH_PROVIDER=openrouter and FM_DISPATCH_MODEL=typesafe\/jev-1.13/);
+  const off = await runOpenrouter(home, fmHome, { OPENROUTER_FIRSTMATE: 'no' });
+  assert.equal(fs.readFileSync(env, 'utf8'), HOME_ENV);
+  assert.deepEqual(fs.readdirSync(fmHome), ['.env']);
+  assert.match(off.out, /answer yes to OPENROUTER_FIRSTMATE/);
+
+  // With no .env yet, the opt-out still creates none.
+  const empty = path.join(home, 'fm-empty');
+  await runOpenrouter(home, empty, { OPENROUTER_FIRSTMATE: 'no' });
+  assert.equal(fs.existsSync(empty), false);
+});
+
+test('a new Firstmate .env is private, and a missing key becomes a to-do', { skip: !unix }, async () => {
+  const home = tempHome();
+  const fmHome = path.join(home, 'fm');
+  const { out } = await runOpenrouter(home, fmHome, { OPENROUTER_FIRSTMATE: 'yes' });
+  const env = path.join(fmHome, '.env');
+  assert.equal(fs.readFileSync(env, 'utf8'), 'FM_DISPATCH_PROVIDER=openrouter\nFM_DISPATCH_MODEL=typesafe/jev-1.13\n');
+  assert.equal(fs.statSync(env).mode & 0o777, 0o600);
+  assert.match(out, /OPENROUTER_API_KEY in .*fm\/\.env or your environment/);
 });
 
 const hasAnalyze = spawnSync('systemd-analyze', ['--version'], { stdio: 'ignore' }).status === 0;
