@@ -986,6 +986,22 @@ test('a new Firstmate .env is private, and a missing key becomes a to-do', { ski
   assert.match(out, /OPENROUTER_API_KEY in .*fm\/\.env or your environment/);
 });
 
+test('an openrouter-only run writes into the saved Firstmate clone, not another folder', { skip: !unix }, async () => {
+  const home = tempHome();
+  const clone = path.join(home, 'my-firstmate');
+  const fmHome = process.env.FM_HOME;
+  process.env.FM_HOME = path.join(home, 'stale-fm-home');
+  try {
+    await runOpenrouter(home, '', { OPENROUTER_FIRSTMATE: 'yes', FIRSTMATE_DIR: clone, FIRSTMATE_HOME: '' });
+  } finally {
+    if (fmHome === undefined) delete process.env.FM_HOME;
+    else process.env.FM_HOME = fmHome;
+  }
+  assert.equal(fs.readFileSync(path.join(clone, '.env'), 'utf8'), 'FM_DISPATCH_PROVIDER=openrouter\nFM_DISPATCH_MODEL=typesafe/jev-1.13\n');
+  assert.equal(fs.existsSync(path.join(home, 'stale-fm-home')), false);
+  assert.equal(fs.existsSync(path.join(home, '.firstmate')), false);
+});
+
 const hasAnalyze = spawnSync('systemd-analyze', ['--version'], { stdio: 'ignore' }).status === 0;
 
 test('the Lavish Library units write WorkingDirectory as a bare path that systemd accepts', { skip: !hasAnalyze && 'systemd-analyze is not available here' }, () => {

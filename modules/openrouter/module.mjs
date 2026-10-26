@@ -31,10 +31,12 @@ export function withKey(text, key) {
 }
 
 // The Firstmate home whose .env the dispatch resolver reads: the answer, else the firstmate
-// module's home (its clone when it has none), else FM_HOME, else ~/.firstmate.
+// module's home (its clone when it has none) from this run or the saved answers, so
+// `--modules openrouter` alone still finds it, else FM_HOME, else the default clone ~/firstmate.
 export function firstmateHome(ctx) {
-  const v = ctx.values;
-  return v.OPENROUTER_FIRSTMATE_HOME || v.FIRSTMATE_HOME || v.FIRSTMATE_DIR || process.env.FM_HOME || path.join(ctx.home, '.firstmate');
+  const saved = ['FIRSTMATE_HOME', 'FIRSTMATE_DIR'].map((key) => ctx.get(key) ?? ctx.answers.get(key)).find(Boolean);
+  const home = ctx.get('OPENROUTER_FIRSTMATE_HOME') || saved || process.env.FM_HOME;
+  return home ? ctx.path(home) : path.join(ctx.home, 'firstmate');
 }
 
 // Firstmate's built-in OpenRouter setting (its docs/configuration.md, "Typed dispatch
@@ -95,7 +97,7 @@ export default {
       key: 'OPENROUTER_FIRSTMATE_HOME',
       type: 'text',
       path: true,
-      message: 'Firstmate home whose .env gets those settings (empty: FIRSTMATE_HOME, the firstmate clone, FM_HOME, then ~/.firstmate)',
+      message: 'Firstmate home whose .env gets those settings (empty: FIRSTMATE_HOME, the firstmate clone, FM_HOME, then ~/firstmate)',
       default: '',
       when: (ctx) => ctx.get('OPENROUTER_FIRSTMATE'),
     },
