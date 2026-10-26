@@ -107,7 +107,7 @@ Paths may start with `~`.
   "versions": [
     {
       "name": "design system",
-      "recorded": { "file": "~/second-brain/topics/Design system.md", "pattern": "Design System v(\\d+(?:\\.\\d+)*)" },
+      "recorded": { "file": ["~/notes/Design system - web.md", "~/notes/Design system.md"], "pattern": "Design System v(\\d+(?:\\.\\d+)*)" },
       "actual": { "dir": "~/design-systems", "pattern": "^v(\\d+(?:\\.\\d+)*)" },
       "evidence": "~/design-systems/CHANGELOG.md"
     }
@@ -117,6 +117,10 @@ Paths may start with `~`.
 }
 ```
 
+- A version source's `file` is one path, or a list of paths. With a list, the first path that
+  exists is read and the report names that file, so a note that was split into smaller notes
+  can be listed first with the old note as the fallback. When none exists, the check fails
+  with a line that names every path tried.
 - `vault.dryRun` must print one line starting `would ingest`, `would update` or `would retry`
   per pending file; the ingest the second-brain module installs does. The vault gets
   `RAW_DIR` from `rawDir`, so the schedule never depends on your shell profile.

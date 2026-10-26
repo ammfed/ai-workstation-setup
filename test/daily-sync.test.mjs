@@ -388,6 +388,41 @@ test('a recorded version behind the folder that holds it is drift', () => {
   assert.match(j.notified()[0], /widget kit: 1\.0 on record in .*record\.md, but .*holder holds 1\.10/);
 });
 
+test('a version source file may be a list: the first file that exists is read', () => {
+  const holder = path.join(tmp, 'holder-list');
+  fs.mkdirSync(path.join(holder, 'v2.0'), { recursive: true });
+  const parent = path.join(tmp, 'parent.md');
+  const child = path.join(tmp, 'child.md');
+  const missing = path.join(tmp, 'missing.md');
+  const pattern = 'Widget Kit v(\\d+(?:\\.\\d+)*)';
+  const actual = { dir: holder, pattern: '^v(\\d+(?:\\.\\d+)*)' };
+  fs.writeFileSync(parent, 'Widget Kit v1.0\n');
+  fs.writeFileSync(child, 'Widget Kit v2.0\n');
+
+  // the first file is missing: the second is read and compared
+  let j = job({ versions: [{ name: 'widget kit', recorded: { file: [missing, parent], pattern }, actual }] });
+  assert.equal(j.run().code, 0);
+  assert.match(j.notified()[0], /widget kit: 1\.0 on record in .*parent\.md, but .*holder-list holds 2\.0/);
+  assert.doesNotMatch(j.notified()[0], /missing\.md/);
+
+  // the first file exists: it wins, and the fallback is not read
+  j = job({ versions: [{ name: 'widget kit', recorded: { file: [child, parent], pattern }, actual }] });
+  const same = j.run();
+  assert.equal(same.code, 0, same.out);
+  assert.equal(j.notified().length, 0, 'the child note matches the folder, so nothing is reported');
+  assert.match(same.out, /ok\s+widget kit: 2\.0 on record and in .*holder-list/);
+
+  // none exists: a failure line names every path tried
+  j = job({ versions: [{ name: 'widget kit', recorded: { file: [missing, path.join(tmp, 'also-missing.md')], pattern }, actual }] });
+  assert.equal(j.run().code, 1, 'a failure, not a crash');
+  assert.match(j.notified()[0], /widget kit: no file to read, tried .*missing\.md, .*also-missing\.md/);
+
+  // a plain string behaves as before, including when the file is missing
+  j = job({ versions: [{ name: 'widget kit', recorded: { file: parent, pattern }, actual }] });
+  assert.equal(j.run().code, 0);
+  assert.match(j.notified()[0], /widget kit: 1\.0 on record in .*parent\.md, but .*holder-list holds 2\.0/);
+});
+
 test('ClickUp lists are compared with an expected-lists file, read-only', () => {
   const board = path.join(tmp, 'board.json');
   fs.writeFileSync(board, JSON.stringify({ lists: { milestones: { id: '101', name: 'Milestones' }, gone: { id: '104', name: 'Old list' }, a: { id: '102' } } }));
