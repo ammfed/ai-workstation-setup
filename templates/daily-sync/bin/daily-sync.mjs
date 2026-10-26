@@ -511,10 +511,20 @@ function command(c) {
   add('attention', `cmd:${c.name}`, `${c.name}: ${clip(out, 600)}`, { track: 'text' });
 }
 
+// A version source's `file` is one path, or a list tried in order: the first that exists is read.
+const fileCandidates = (src) => [].concat(src.file).map(expandHome);
+
+function sourceFile(src) {
+  const paths = fileCandidates(src);
+  const found = paths.find((p) => fs.existsSync(p));
+  if (!found) throw new Error(`no file to read, tried ${paths.map(tilde).join(', ')}`);
+  return found;
+}
+
 function readVersions(src) {
   if (!src?.pattern) throw new Error('each version source needs a pattern');
   let text;
-  if (src.file) text = fs.readFileSync(expandHome(src.file), 'utf8');
+  if (src.file) text = fs.readFileSync(sourceFile(src), 'utf8');
   else if (src.dir) text = fs.readdirSync(expandHome(src.dir)).join('\n');
   else if (src.command) {
     const r = sh(src.command, { timeoutSec: 60 });
@@ -534,7 +544,10 @@ function cmpVersion(a, b) {
   return 0;
 }
 
-const where = (src) => (src.file || src.dir ? tilde(expandHome(src.file || src.dir)) : `\`${src.command}\``);
+const where = (src) => {
+  if (src.file) return tilde(fileCandidates(src).find((p) => fs.existsSync(p)) ?? fileCandidates(src)[0]);
+  return src.dir ? tilde(expandHome(src.dir)) : `\`${src.command}\``;
+};
 
 function head(file) {
   try {
