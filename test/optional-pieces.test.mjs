@@ -979,6 +979,7 @@ test('the dispatch lines are updated in place, and a dry run or an opt-out write
 test('a new Firstmate .env is private, and a missing key becomes a to-do', { skip: !unix }, async () => {
   const home = tempHome();
   const fmHome = path.join(home, 'fm');
+  fs.mkdirSync(fmHome);
   const { out } = await runOpenrouter(home, fmHome, { OPENROUTER_FIRSTMATE: 'yes' });
   const env = path.join(fmHome, '.env');
   assert.equal(fs.readFileSync(env, 'utf8'), 'FM_DISPATCH_PROVIDER=openrouter\nFM_DISPATCH_MODEL=typesafe/jev-1.13\n');
@@ -989,6 +990,7 @@ test('a new Firstmate .env is private, and a missing key becomes a to-do', { ski
 test('an openrouter-only run writes into the saved Firstmate clone, not another folder', { skip: !unix }, async () => {
   const home = tempHome();
   const clone = path.join(home, 'my-firstmate');
+  fs.mkdirSync(clone);
   const fmHome = process.env.FM_HOME;
   process.env.FM_HOME = path.join(home, 'stale-fm-home');
   try {
@@ -1000,6 +1002,14 @@ test('an openrouter-only run writes into the saved Firstmate clone, not another 
   assert.equal(fs.readFileSync(path.join(clone, '.env'), 'utf8'), 'FM_DISPATCH_PROVIDER=openrouter\nFM_DISPATCH_MODEL=typesafe/jev-1.13\n');
   assert.equal(fs.existsSync(path.join(home, 'stale-fm-home')), false);
   assert.equal(fs.existsSync(path.join(home, '.firstmate')), false);
+});
+
+test('a missing Firstmate home is skipped, not created, so a later clone is not blocked', { skip: !unix }, async () => {
+  const home = tempHome();
+  const fmHome = path.join(home, 'firstmate');
+  const { out } = await runOpenrouter(home, fmHome, { OPENROUTER_FIRSTMATE: 'yes' });
+  assert.match(out, /skipped: Firstmate dispatch: .*firstmate does not exist/);
+  assert.equal(fs.existsSync(fmHome), false);
 });
 
 const hasAnalyze = spawnSync('systemd-analyze', ['--version'], { stdio: 'ignore' }).status === 0;

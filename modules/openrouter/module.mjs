@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { Skip } from '../../lib/context.mjs';
 
 // One OpenRouter key and one decision model (Jev by default) for the tools that can reach a model
 // through OpenRouter by their own documented settings. The key is taken from OPENROUTER_API_KEY or
@@ -46,8 +47,9 @@ function writeDispatch(ctx, file, model) {
   const next = withEnv(current, { FM_DISPATCH_PROVIDER: 'openrouter', FM_DISPATCH_MODEL: model });
   if (current === next) return ctx.ok(`${file} already routes Firstmate dispatch through OpenRouter (${model})`);
   if (ctx.dryRun) return ctx.say(`  ~ would set FM_DISPATCH_PROVIDER=openrouter and FM_DISPATCH_MODEL=${model} in ${file}`);
+  const home = path.dirname(file);
+  if (!fs.existsSync(home)) throw new Skip(`${home} does not exist; install Firstmate there (or set OPENROUTER_FIRSTMATE_HOME), then rerun with --modules openrouter`);
   ctx.backup(file);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
   // A new file is private; an existing one keeps its mode.
   fs.writeFileSync(file, next, current === null ? { mode: 0o600 } : undefined);
   ctx.ok(`set FM_DISPATCH_PROVIDER=openrouter and FM_DISPATCH_MODEL=${model} in ${file}`);
