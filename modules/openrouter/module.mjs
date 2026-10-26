@@ -83,7 +83,7 @@ export default {
           ? `voice mode reads this key file and uses ${ctx.get('OPENROUTER_MODEL')} for its actions`
           : 'voice mode, when you install it, reads this key file for its actions',
       );
-      ctx.info("compact-adviser and Firstmate's dispatch resolver call TypeSafe directly and document no OpenRouter setting; they use TYPESAFE_API_KEY (see docs/openrouter.md)");
+      ctx.info("compact-adviser calls TypeSafe directly and documents no OpenRouter setting; it uses TYPESAFE_API_KEY. Firstmate's dispatch resolver takes OpenRouter through FM_DISPATCH_PROVIDER and FM_DISPATCH_MODEL and reads its own OPENROUTER_API_KEY from the environment or $FM_HOME/.env, not this key file (see docs/openrouter.md)");
     });
   },
 };
