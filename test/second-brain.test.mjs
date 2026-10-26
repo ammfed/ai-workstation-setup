@@ -797,3 +797,54 @@ test('housekeeping timer: a unit an earlier version wrote is replaced, an edited
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
+
+// A grown vault: per-project preference notes in preferences/, plus generated maps/ and
+// housekeeping docs/ and job data/ that carry no note frontmatter.
+function addGrownFolders(root) {
+  fs.mkdirSync(path.join(root, 'preferences'));
+  fs.writeFileSync(path.join(root, 'preferences', 'Example Project.md'), note('Example Project', 'preference', 'Keep replies short.'));
+  for (const d of ['maps', 'docs', 'data']) {
+    fs.mkdirSync(path.join(root, d));
+    fs.writeFileSync(path.join(root, d, 'notes.md'), '# Generated\n\n- a line with no frontmatter\n');
+  }
+}
+
+test('check: a grown vault with preferences/, maps/ and docs/ checks clean', () => {
+  const root = vault();
+  try {
+    addGrownFolders(root);
+    const r = node(root, 'check.mjs', []);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.doesNotMatch(r.stdout, /maps|docs|data|preference/);
+  } finally {
+    removeVault(root);
+  }
+});
+
+test('check: a note in preferences/ must still have type preference', () => {
+  const root = vault();
+  try {
+    addGrownFolders(root);
+    fs.writeFileSync(path.join(root, 'preferences', 'Other Project.md'), note('Other Project', 'topic', 'A line.'));
+    const r = node(root, 'check.mjs', []);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /preferences[\\/]Other Project\.md: .*preference/);
+  } finally {
+    removeVault(root);
+  }
+});
+
+test('check: a fresh vault without the grown folders still checks clean, and a stray maps-like folder is still a life area', () => {
+  const root = vault();
+  try {
+    const clean = node(root, 'check.mjs', []);
+    assert.equal(clean.status, 0, clean.stdout + clean.stderr);
+    fs.mkdirSync(path.join(root, 'hobbies'));
+    fs.writeFileSync(path.join(root, 'hobbies', 'notes.md'), '# No frontmatter\n');
+    const bad = node(root, 'check.mjs', []);
+    assert.equal(bad.status, 1, bad.stdout + bad.stderr);
+    assert.match(bad.stdout, /hobbies[\\/]notes\.md/);
+  } finally {
+    removeVault(root);
+  }
+});

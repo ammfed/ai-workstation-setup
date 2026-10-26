@@ -21,6 +21,7 @@ the names are not the idea.
 | `journal/` | one note per day |
 | `reviews/` | periodic reviews |
 | `sources/` | one note per raw file ingested |
+| `preferences/` | optional: one preference note per project (`type: preference`) |
 
 The portable idea is not the folder list. It is that a note's **kind** is fixed by the
 folder it sits in, while its **life area** rides on the note as a `pillar:` list. A note
