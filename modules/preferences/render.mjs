@@ -357,6 +357,8 @@ function placeRules(get, { cardsPath, hideKitPath, decisionsPath } = {}) {
     allCards && "The template overrides lavish-axi's own design default and the look of boards that a skill brings with it. Use another look only when the user names one.",
     allCards && 'For a diagram on a page, use the diagram-design skill.',
     cards && cardsPath && !allCards && `Start each decision page from the template at \`${cardsPath}\`.`,
+    cards && cardsPath &&
+      'End each card with a short "Based on" line (the template\'s `based` field) that names the types of sources behind it, such as the user\'s notes, a design system or a usability study.',
     cards && hideKitPath &&
       `Every Lavish prototype, slide or doc page carries the hide tray, so the user can hide parts and send the list back as "remove these". Paste \`${hideKitPath}\` into a script just before </body> and call \`HideKit.attach(document.body)\`. The card template already has it.`,
     cards && get('PREFS_PAGE_SIDE_BY_SIDE') &&

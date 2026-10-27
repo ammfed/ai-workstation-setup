@@ -13,6 +13,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
 import { Context, detectPlatform } from '../lib/context.mjs';
 import firstmate from '../modules/firstmate/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
@@ -461,6 +462,46 @@ test('the card template labels its note box and hides an empty waiting strip', (
   // The strip is display:flex, which beats the hidden attribute unless hidden is forced.
   assert.match(html, /\[hidden\]\{display:none!important\}/);
   assert.match(html, /<div class="waiting" id="waiting" hidden>/);
+});
+
+test('a card with based ends with one "Based on" line, and a card without it renders as before', () => {
+  const html = fs.readFileSync(path.join(repoRoot, 'templates/preferences/decision-cards.html'), 'utf8');
+  const helpers = html.match(/\nconst esc = .*\nconst basedOn = .*\n/);
+  assert.ok(helpers, 'the page defines basedOn next to esc');
+  const basedOn = vm.runInNewContext(`${helpers[0]}; basedOn`);
+  assert.equal(basedOn({ based: 'the owner\'s notes & a usability study' }), '<p class="based">Based on: the owner\'s notes &amp; a usability study</p>');
+  assert.equal(basedOn({}), '');
+  assert.equal(basedOn({ based: '' }), '');
+  // Run the page script against a small fake DOM and render real cards with and without based.
+  const pageScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).find((s) => s.includes('function drawCard'));
+  const elements = new Map();
+  const element = () => ({
+    innerHTML: '', textContent: '', hidden: false, disabled: false, value: '', style: {}, dataset: {},
+    addEventListener() {}, setAttribute() {}, querySelector: () => null, querySelectorAll: () => [], close() {}, showModal() {},
+  });
+  const document = {
+    documentElement: { dataset: {} },
+    getElementById: (id) => elements.get(id) || elements.set(id, element()).get(id),
+    querySelector: () => null,
+  };
+  const page = vm.createContext({
+    document, location: { pathname: '/cards.html' }, localStorage: { getItem: () => null, setItem() {} },
+    window: { addEventListener() {} }, setTimeout() {}, HideKit: { attach: () => ({ refresh() {} }) },
+  });
+  vm.runInContext(pageScript, page);
+  const render = (card) => {
+    vm.runInContext('CARDS.length = 0; CARDS.push(card); index = 0; drawCard();', Object.assign(page, { card }));
+    return document.getElementById('card').innerHTML.trim();
+  };
+  const line = '<p class="based">Based on: two interviews &amp; the logs</p>';
+  const withOptions = render({ id: 'a', title: 'A', question: 'Which?', options: [['x', 'X'], ['y', 'Y']], rec: 'x', based: 'two interviews & the logs' });
+  assert.ok(withOptions.endsWith(line), withOptions);
+  const content = render({ id: 'b', title: 'B', body: '<p>Plan</p>', based: 'two interviews & the logs' });
+  assert.ok(content.endsWith(line), content);
+  const without = render({ id: 'c', title: 'C', question: 'Which?', options: [['x', 'X']] });
+  assert.doesNotMatch(without, /Based on/);
+  assert.ok(without.endsWith('<button type="button" class="primary" id="next" disabled>Next</button>'), without);
+  assert.doesNotMatch(render({ id: 'd', title: 'D', body: '<p>Plan</p>' }), /Based on/);
 });
 
 test('the card template is light by default with a guarded dark switch', () => {

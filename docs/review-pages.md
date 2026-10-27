@@ -60,6 +60,7 @@ it lives.
 | `headline` | Optional `{ num, cap }`: the one number that matters, shown first |
 | `evidence` | Optional one sentence shown above "Why" |
 | `why` | Short detail, closed by default |
+| `based` | Optional one short line naming the types of sources behind the card, shown last as "Based on: ..." |
 | `label` | Optional small label above the question, such as `D-1`; "1 of N" is added to it |
 
 A card with no `options` is a content card (a report, plan or explainer step) and gets a

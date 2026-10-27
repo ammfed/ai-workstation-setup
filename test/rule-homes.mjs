@@ -102,6 +102,7 @@ export const RULE_HOMES = [
   row("This overrides lavish-axi's own design default", PAGES, ["overrides lavish-axi's own design default"]),
   row('For a diagram on a page, use the diagram-design skill.', PAGES),
   row('Every Lavish prototype, slide or doc page carries the hide tray', PAGES),
+  row('End each card with a short "Based on" line', PAGES),
   row('Lay a decision page out horizontally', PAGES),
   row('For any visual choice, give every option its own preview', PAGES, ['give every option its own preview', "Never show only the recommended option's visual."]),
   row('Keep page text to the minimum', PAGES, ['Keep page text to the minimum', 'Let visuals carry the meaning']),
