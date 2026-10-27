@@ -347,8 +347,9 @@ test('the workflow-playbook skill routes models and waits at a review page the w
   const routing = skill.slice(skill.indexOf('**Match the model to the job.**'), skill.indexOf('2. **One complete brief.**'));
   const row = (job) => routing.split('\n').map((l) => l.trim()).find((l) => l.startsWith(`| ${job}`)) || '';
   assert.match(row('Building'), /strongest model at medium effort/);
-  assert.match(row('Research, investigations'), /strongest model at high effort.*highest effort when the result is weak/);
-  assert.match(row('A new look'), /highest effort/);
+  assert.match(row('Research, investigations'), /strongest model at high effort.*extra-high effort when the result is weak/);
+  assert.match(row('A new look'), /extra-high effort/);
+  assert.doesNotMatch(skill, /highest effort/);
   assert.match(row('Polish'), /strongest model at high effort/);
   assert.match(row('Small, clear tasks'), /faster model at high effort.*failed check, re-run it on the strongest model at medium effort/);
   assert.match(routing, /above these only when the owner names it/);
@@ -356,10 +357,24 @@ test('the workflow-playbook skill routes models and waits at a review page the w
   const rules = renderPreferenceSkills((k) => ({ PREFS_MODEL_ROUTING: 'capable' })[k])['models-and-research'];
   assert.match(rules, /polish of a prototype whose look is already settled[^\n]*high effort/);
   assert.match(rules, /small, clear tasks[^\n]*faster model at high effort, and re-run it on the most capable model at medium effort after a failed check/);
+  assert.match(rules, /new frontend look[^\n]*extra-high effort/);
+  assert.match(rules, /Re-run an investigation[^\n]*extra-high effort/);
 
   const wait = skill.slice(skill.indexOf('2. **Never leave the next step empty'), skill.indexOf('3. **End every reply'));
   assert.match(wait, /stands by quietly for that answer: it does not prepare the next stage/);
   assert.match(wait, /owner's preference[^.]*, and the recommended answer is no/);
   const prepare = preferences.questions.find((q) => q.key === 'PREFS_PAGE_PREPARE_NEXT');
   assert.equal(prepare.default, false, 'the setup also waits by default');
+});
+
+test('the workflow-playbook skill points to the rule skills for merges, status and the words check', () => {
+  const skill = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
+  assert.match(skill, /Merge follows the merge rule in working-preferences\.md\./);
+  assert.doesNotMatch(skill, /if the owner has granted that/);
+  const status = skill.slice(skill.indexOf('2. **Status the owner can act on.**'), skill.indexOf('## 9.'));
+  assert.match(status, /Follow the status-and-away skill for status replies\./);
+  assert.match(skill, /a strong model from another family through an agent CLI this setup installed/);
+  assert.doesNotMatch(skill, /ChatGPT/);
+  assert.match(skill, /`docs\/route\.md` in the setup repository/);
+  assert.match(skill, /Inside a stage, when a choice can be undone, go ahead/);
 });
