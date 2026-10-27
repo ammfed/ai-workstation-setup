@@ -404,6 +404,39 @@ test('claude files: a bin/search that is not a node script is called by its own 
   }
 });
 
+test('claude files: only the node search this setup ships gets a narrowing hint', { skip: process.platform === 'win32' && 'runs a shell script' }, async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-claude-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const dir = path.join(home, 'my vault');
+    const file = path.join(dir, 'bin', 'search');
+    const ran = path.join(home, 'search-ran');
+    fs.mkdirSync(path.join(dir, 'bin'), { recursive: true });
+    git(dir, 'init', '-q');
+    const rules = claudeFile(home, 'rules', 'second-brain.md');
+    const searchLine = () => fs.readFileSync(rules, 'utf8').split('\n').slice(0, 12).join('\n').match(/Search it with[^]*?\.\n/)[0];
+
+    // A vault search of its own, with its own flags: no hint, and it is never run.
+    fs.writeFileSync(file, `#!/bin/sh\ntouch "${ran}"\necho "usage: bin/search [-t TYPE] [-s STATUS] [query ...]  --type --status"\n`, { mode: 0o755 });
+    git(dir, 'add', '.');
+    git(dir, 'commit', '-qm', 'start');
+    await claudeFilesInto(home);
+    assert.match(searchLine(), /bin\/search" "terms"`/);
+    assert.doesNotMatch(searchLine(), /--folder/, 'the vault\'s search may reject --folder');
+    assert.doesNotMatch(searchLine(), /narrow/);
+    assert.equal(fs.existsSync(ran), false, 'the vault\'s own search must not run at install');
+
+    // The node entry this setup ships takes --type and --folder.
+    fs.rmSync(path.join(home, '.claude'), { recursive: true });
+    fs.writeFileSync(file, '#!/usr/bin/env node\n');
+    await claudeFilesInto(home);
+    assert.match(searchLine(), /narrow with `--type` or `--folder`/);
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('claude files: by default the rule says vault content never goes to an outside model or service', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-claude-'));
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
