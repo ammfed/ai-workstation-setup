@@ -251,7 +251,7 @@ export default {
     yes('PREFS_TEST_FIRST', 'Building: build product code test-first at the seams the spec names (not prototypes, docs or config)?', { default: false }),
     yes('PREFS_GLOSSARY_ADR', 'Building: read GLOSSARY.md and docs/adr before building, and add new terms and decision records with the change?', { default: false }),
     yes('PREFS_PROTOTYPE_CHECK', 'Building: check every prototype at your target screen size, then at laptop width (and phone width when review pages are checked on a phone), keep font sizes and column positions the same on every tab, and fix broken layout, unclear labels and dead ends before you see it?', { default: false }),
-    yes('PREFS_PRINCIPLE_CHECKS', 'Building: tell every Firstmate worker to run the principle checker (installed with workflow-playbook) before reporting done on anything with a screen?', {
+    yes('PREFS_PRINCIPLE_CHECKS', 'Building: tell every Firstmate worker to run the principle checker (installed with workflow-playbook) before reporting done on anything with a screen, and to have a fresh reviewer check a page before it reaches you?', {
       when: (ctx) => ctx.get('PREFS_TARGETS').includes('firstmate'),
     }),
     yes('PREFS_MODEL_GUIDE', 'Models: when a model is named for a task, read its vendor\'s prompting guide first?'),
