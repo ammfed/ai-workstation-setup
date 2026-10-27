@@ -61,7 +61,7 @@ function tasteSection(tastePreset, also) {
 
 // Firstmate's config/brief-include.md, appended to every worker brief: the house style for what
 // workers write to firstmate (never the deliverable itself), the vault-first line, the helper-model rule, the standing
-// build rules, the principle checker before done, the taste preset's Everywhere lines when it is on,
+// build rules, the principle checker and fresh reviewer before done, the taste preset's Everywhere lines when it is on,
 // and the private Everywhere and Workers lines.
 // Empty when none of them applies. `checkerPath` is the installed principle checker, or null.
 export function renderBriefInclude(get, { checkerPath, privateRules, tastePreset, vault } = {}) {
