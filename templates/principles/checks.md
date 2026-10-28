@@ -9,7 +9,7 @@ The workflow playbook runs these checks before any page reaches the owner (rule 
 | Runs as | Who | When (playbook phases) | What a failure blocks |
 | --- | --- | --- | --- |
 | Script | `principle-check` in this folder (`bin/principle-check.mjs`), run on the page's files by the worker that built it | 5 and 7, and before every review page in any phase | The worker may not report done, and the page may not go to the owner |
-| Reviewer | A fresh agent that did not build the work, briefed as in "Reviewer brief" below | 5 and 8, while preparing the owner's review page | The page waits until each finding is fixed or becomes a card for the owner |
+| Reviewer | A fresh agent that did not build the work, briefed as in "Reviewer brief" below | 5 and 8, and before every review page in any phase | The page waits until each finding is fixed or becomes a card for the owner |
 | Words | The script for the mechanical rows, then the second-model read (playbook rule 6.1) for the rest | Every phase that writes something a person will read | The text is rewritten before it is sent |
 | Owner | The owner, on a card with a recommendation | 5 and 8 | Nothing ships until the owner answers |
 

@@ -49,7 +49,7 @@ Firstmate appends to every worker brief. It holds what applies: the house style 
 vault-first line (sessions get it from the second-brain rules file instead) when second-brain runs or its saved vault folder
 exists and agents have access, naming only the routes it installs, the helper-model rule from
 `PREFS_DELEGATE_RETRIEVAL`, the build rules from `PREFS_KUN`, `PREFS_TEST_FIRST` and
-`PREFS_GLOSSARY_ADR`, the principle checker line from `PREFS_PRINCIPLE_CHECKS`, and your private
+`PREFS_GLOSSARY_ADR`, the principle checker and fresh reviewer lines from `PREFS_PRINCIPLE_CHECKS`, and your private
 Everywhere and Workers lines. Nothing applies, nothing is written. The split does not change it.
 
 Firstmate reads that file only in the home it belongs to, so the module also writes the same
@@ -136,7 +136,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | `PREFS_TEST_FIRST` | no | Product code is built test-first at the seams the spec names (tdd, codebase-design). Prototypes, docs and config are not test-first. |
 | `PREFS_GLOSSARY_ADR` | no | `GLOSSARY.md` and `docs/adr/` are read before building, and new terms and decision records land with the change that introduces them. The files start only when a term or a hard-to-reverse decision comes up. |
 | `PREFS_PROTOTYPE_CHECK` | no | Before you see a prototype, the agent opens it at your target screen size first, then at laptop width and, when `PREFS_PAGE_PHONE` is yes, at phone width (390 px), checks that font sizes and column positions stay the same on every tab, and fixes broken layout, unclear labels and dead ends. |
-| `PREFS_PRINCIPLE_CHECKS` | yes | With the `firstmate` target: every worker brief tells the worker to run the principle checker that `workflow-playbook` installs (`principles/bin/principle-check.mjs`, with `--phone` for work built for other people) before it reports done on anything with a screen, fix every `fail` line and list each `check` line for the reviewer. Written only when the playbook is chosen or already installed. |
+| `PREFS_PRINCIPLE_CHECKS` | yes | With the `firstmate` target: every worker brief tells the worker to run the principle checker that `workflow-playbook` installs (`principles/bin/principle-check.mjs`, with `--phone` for work built for other people) before it reports done on anything with a screen, fix every `fail` line and list each `check` line for the reviewer. It also tells the worker to have a fresh reviewer that did not build a page check its screenshots before the page reaches you, briefed as "Reviewer brief" in `principles/checks.md` says. Written only when the playbook is chosen or already installed. |
 | `PREFS_MODEL_GUIDE` | yes | When a model is named for a task, the agent reads that vendor's official prompting guide first and briefs the model the way it says. |
 
 ### Ideas and priorities
@@ -224,7 +224,7 @@ Firstmate's `captain.md` holds every rule, wherever it lives here.
 | `PREFS_ROUTE`, `PREFS_TEST_FIRST`, `PREFS_GLOSSARY_ADR` | One route and its checks keep software work in order. | running-workers |
 | `PREFS_KUN` | One method loaded at the start keeps every kind of work on its route. | Core (and worker briefs) |
 | `PREFS_PROTOTYPE_CHECK` | You notice a broken layout before the content. | review-pages |
-| `PREFS_PRINCIPLE_CHECKS` | A script catches mechanical slips before a reviewer has to. | Worker briefs only |
+| `PREFS_PRINCIPLE_CHECKS` | A script catches mechanical slips before a reviewer has to, and workers run the checks their brief names. | Worker briefs only |
 | `PREFS_MODEL_GUIDE` | Each model follows the briefing style its vendor documents. | running-workers |
 | `PREFS_CAPTURE_IDEAS` | An idea that is not written down is lost, and one started at once derails the current work. | Core |
 | `PREFS_RESEQUENCE` | Work ordered by what blocks what finishes sooner. | status-and-away |

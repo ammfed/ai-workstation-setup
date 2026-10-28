@@ -586,7 +586,7 @@ test('the worker brief include gains the helper model, build rules, the principl
   assert.equal(ctx.get('PREFS_PRINCIPLE_CHECKS'), true, 'the checker line is on by default');
   const checker = path.join(os.tmpdir(), 'skills', 'workflow-playbook', 'principles', 'bin', 'principle-check.mjs');
   const text = renderBriefInclude((key) => ctx.get(key), { checkerPath: checker, privateRules: rules });
-  const order = ['## Helper models', '`agy --model example-model`', '## Building', 'test-first at the seams', 'GLOSSARY.md', '## Principle checks', `node ${checker} <its files or folder>`, '--phone', '## Private rules', '- Everywhere rule one.', '- Workers rule.'];
+  const order = ['## Helper models', '`agy --model example-model`', '## Building', 'test-first at the seams', 'GLOSSARY.md', '## Principle checks', `node ${checker} <its files or folder>`, '--phone', 'a fresh reviewer that did not build it', '"Reviewer brief"', '## Private rules', '- Everywhere rule one.', '- Workers rule.'];
   let at = -1;
   for (const part of order) {
     const i = text.indexOf(part);
@@ -596,8 +596,8 @@ test('the worker brief include gains the helper model, build rules, the principl
   assert.doesNotMatch(text, /Sessions rule|Second mates rule|Reviewer rule|## Writing style/);
   assert.doesNotMatch(text, /Delivery contract: mode=/);
   // The checker line needs both the answer and an installed checker.
-  assert.doesNotMatch(renderBriefInclude((key) => ctx.get(key)), /Principle checks/);
-  assert.doesNotMatch(renderBriefInclude((key) => (key === 'PREFS_PRINCIPLE_CHECKS' ? false : ctx.get(key)), { checkerPath: checker }), /Principle checks/);
+  assert.doesNotMatch(renderBriefInclude((key) => ctx.get(key)), /Principle checks|fresh reviewer/);
+  assert.doesNotMatch(renderBriefInclude((key) => (key === 'PREFS_PRINCIPLE_CHECKS' ? false : ctx.get(key)), { checkerPath: checker }), /Principle checks|fresh reviewer/);
   assert.match(renderBriefInclude((key) => ctx.get(key), { checkerPath: '/a b/principle-check.mjs' }), /node "\/a b\/principle-check\.mjs"/, 'a path with a space is quoted');
 });
 
