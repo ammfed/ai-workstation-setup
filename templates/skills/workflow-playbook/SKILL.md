@@ -421,12 +421,14 @@ This section is phase 10. It keeps the way of working, and this playbook, curren
    Why: a method that is not written down has to be taught again on the next project.
 2. **Improve as a standing item.**
    - The improve item is a dated, repeating item that the owner approves once. It also follows every merge (phase 9).
-   - Each run looks back over the finished work or the last day: what slowed the work, which of the owner's corrections came more than once, and which check failed most.
+   - Each run looks back over the finished work or the last day: what slowed the work, which of the owner's corrections came more than once, which check failed most, which command failed the same way in more than one session, and which installed tool, plugin or MCP server no session used.
    - Sort each finding: a mechanical slip becomes a script check, and a judgement call becomes a reviewer check or a written rule.
+   - A fact about how a repository works (the command that runs its tests there, a step that must come first) becomes one line in its AGENTS.md once more than one session has hit it. The line comes out when a later session shows it wrong.
+   - An unused tool, plugin or MCP server becomes a proposal to remove it. Remove it between sessions, never in the middle of one.
    - Each proposal goes to the owner as a card. Approved ones land as a check, a rule or a playbook change.
    - Edits to saved memory are proposed, never made on their own.
 
-   Why: the coordinator never starts work in an empty queue, so a look back runs only if it is an approved item, and a lesson that does not become a check is made again.
+   Why: the coordinator never starts work in an empty queue, so a look back runs only if it is an approved item, and a lesson that does not become a check is made again. A fact each session finds again, and a tool no session uses, cost tokens in every session, and a session whose tools change must write its cached prompt again.
 3. **Save, then compact, at a phase boundary.**
    - When the context needs compacting, finish the phase step in hand.
    - Save the session's lessons and the owner's rulings (rule 8.1), then compact.

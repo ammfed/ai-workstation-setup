@@ -331,7 +331,7 @@ export default {
       message: 'Safety: a word that pauses every running agent until you say resume (empty for none)',
       default: 'pause',
     },
-    yes('PREFS_STOP_DIGGING', 'Safety: confirm a problem is real before hunting its cause, and stop after a couple of checks that find nothing?'),
+    yes('PREFS_STOP_DIGGING', 'Safety: confirm a problem is real before hunting its cause, stop after a couple of checks that find nothing, and stop repeating a command that fails the same way twice?'),
     yes('PREFS_BLOCKED_COMMANDS', 'Safety: when a permission check blocks an install, schedule, service or push, never work around it; give you the exact command to run?'),
     yes('PREFS_PRIVATE_STAYS_LOCAL', 'Safety: private chats and anything captured from your own sessions never go to an outside model?'),
     yes('PREFS_PUBLIC_REPOS', 'Safety: in public repositories, a no-reply commit identity, no email trailers, pull request text naming nothing private, and a privacy scan before each push?'),

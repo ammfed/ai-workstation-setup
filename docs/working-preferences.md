@@ -175,7 +175,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | `PREFS_MERGE` | `explicit` | Pull requests merge only on your explicit word. `green` lets the agent merge its own green pull requests. |
 | `PREFS_VERIFY_CAUSE` | yes | No guessed causes: a failure's cause is named only when checked, otherwise "cause unknown". |
 | `PREFS_PAUSE_WORD` | `pause` | Saying this word stops every running agent until you say resume. Empty for none. |
-| `PREFS_STOP_DIGGING` | yes | A problem is confirmed from evidence before its cause is hunted; after about two checks that find nothing, the agent reports what is known. |
+| `PREFS_STOP_DIGGING` | yes | A problem is confirmed from evidence before its cause is hunted; after about two checks that find nothing, the agent reports what is known. A command or check that fails the same way twice is not run a third time: the agent tries one other way, then reports. |
 | `PREFS_BLOCKED_COMMANDS` | yes | A permission check that blocks an install, schedule, service change, push or pull request is never worked around; the agent records the exact one-line command for you and carries on. |
 | `PREFS_PRIVATE_STAYS_LOCAL` | yes | Private chats and anything captured from your own sessions never go to an outside model or service. |
 | `PREFS_PUBLIC_REPOS` | yes | In public repositories: a no-reply commit identity, no email trailers, pull request text that names nothing private, and a privacy scan before every push. |
@@ -234,7 +234,7 @@ Firstmate's `captain.md` holds every rule, wherever it lives here.
 | `PREFS_RESEARCH_BROWSER` | Your own browser holds your accounts and tabs. | models-and-research |
 | `PREFS_SOURCE_QUALITY`, `PREFS_VERIFY_USER_CLAIMS`, `PREFS_LIVE_FACTS`, `PREFS_FINDINGS_TO_CHANGE` | Weak or stale sources make a strong claim look settled, and research that changes nothing was wasted. | models-and-research |
 | `PREFS_MERGE` | A merge is hard to undo, and approving work is not the same as shipping it. | Core |
-| `PREFS_VERIFY_CAUSE`, `PREFS_STOP_DIGGING` | A guessed cause sends the fix the wrong way. | Core |
+| `PREFS_VERIFY_CAUSE`, `PREFS_STOP_DIGGING` | A guessed cause sends the fix the wrong way, and a failure repeated unchanged only spends tokens. | Core |
 | `PREFS_PAUSE_WORD` | One word stops every agent at once. | Core |
 | `PREFS_BLOCKED_COMMANDS` | A permission check exists for a reason; going around it is not your choice made. | Core |
 | `PREFS_PRIVATE_STAYS_LOCAL` | Private material must not leave your machine. | Core |
