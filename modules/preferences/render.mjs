@@ -269,6 +269,8 @@ function placeRules(get, { cardsPath, hideKitPath, decisionsPath } = {}) {
       'Do not name a cause for a failure unless you checked it against evidence. Otherwise report the failure and say the cause is unknown.',
     get('PREFS_STOP_DIGGING') &&
       'A request to investigate is not proof that something is broken. Confirm the problem from real evidence first, or ask what the user saw. If about two checks turn up nothing, stop and report what is known.',
+    get('PREFS_STOP_DIGGING') &&
+      'When the same command or check fails the same way twice, stop repeating it. Try one different approach, and if that also fails, stop and report the failure with its error.',
     get('PREFS_BLOCKED_COMMANDS') &&
       'When a permission check blocks an install, a schedule, a service change, a push or a pull request, do not look for a way around it. Record the exact one-line command for the user to run, say what it is for, and carry on with the rest.',
     get('PREFS_PRIVATE_STAYS_LOCAL') &&

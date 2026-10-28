@@ -179,7 +179,7 @@ export const RULE_HOMES = [
   row('Merge a pull request only when the user explicitly says', 'core'),
   row('You may merge your own pull requests', 'core', undefined, { PREFS_MERGE: 'green' }),
   row('Do not name a cause for a failure', 'core'),
-  row('A request to investigate is not proof', 'core'),
+  row('A request to investigate is not proof', 'core', ['A request to investigate is not proof', 'When the same command or check fails the same way twice']),
   row('When a permission check blocks', 'core'),
   row('Private chats, and anything captured', 'core'),
   row('In a public repository, commit with a no-reply identity', WORKERS, ['commit with a no-reply identity', 'Pull request text in a public repository', 'run the privacy scan before every push']),
