@@ -10,6 +10,9 @@ set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 node_min=20
+# The Node.js major nvm installs. Not --lts: the Node 26 build needs libatomic.so.1, which a
+# fresh Ubuntu (WSL) image does not ship, so it installs but does not run.
+node_install=24
 nvm_version=v0.40.7
 
 dry_run=0
@@ -56,14 +59,14 @@ if [ "$(node_major)" -lt "$node_min" ]; then
 fi
 
 install_node() {
-  curl -o- "https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh" | bash && load_nvm && nvm install --lts
+  curl -o- "https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh" | bash && load_nvm && nvm install "$node_install"
 }
 
 # Node.js is installed without a question when missing: nothing else can be shown without it,
 # and it is for this user only. At a terminal two plain lines say so and nvm's own output goes
 # to a log that is shown only when it fails; with --yes the output prints as it happens.
 if [ "$(node_major)" -lt "$node_min" ]; then
-  install_cmd="curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh | bash && nvm install --lts"
+  install_cmd="curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh | bash && nvm install ${node_install}"
   if [ "$assume_yes" -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then
     echo "  Getting ready: installing Node.js, a small helper this setup runs on."
     echo "  It is for your user only and takes a minute or two."

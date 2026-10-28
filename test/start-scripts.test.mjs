@@ -60,7 +60,7 @@ test('without a terminal, a dry run names the Node.js install and asks nothing',
     const r = spawnSync('bash', [installSh, ...args], { env: noNode(), encoding: 'utf8', input: '' });
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.match(r.stdout, /The installer needs Node\.js 20\+ \(found: none\)\./);
-    assert.match(r.stdout, /~ would run: curl -o- https:\/\/raw\.githubusercontent\.com\/nvm-sh\/nvm\/v[\d.]+\/install\.sh \| bash && nvm install --lts/);
+    assert.match(r.stdout, /~ would run: curl -o- https:\/\/raw\.githubusercontent\.com\/nvm-sh\/nvm\/v[\d.]+\/install\.sh \| bash && nvm install 24/);
     assert.doesNotMatch(r.stdout, /Getting ready|\[Y\/n\]/);
   }
 });
