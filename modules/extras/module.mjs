@@ -63,7 +63,7 @@ export function lavishUnits(dir, lavishBin) {
 async function installLavishLibrary(ctx) {
   const dir = ctx.get('LAVISH_LIBRARY_DIR');
   const [major, minor] = process.versions.node.split('.').map(Number);
-  if (major < 22 || (major === 22 && minor < 13)) throw new Skip(`needs Node 22.13+ (running ${process.versions.node}); run \`nvm install --lts\` and re-run`);
+  if (major < 22 || (major === 22 && minor < 13)) throw new Skip(`needs Node 22.13+ (running ${process.versions.node}); run \`nvm install 24\` and re-run`);
   if (!ctx.dryRun && !ctx.has('lavish-axi')) throw new Skip('needs lavish-axi; pick it in agent-clis first');
   if (fs.existsSync(path.join(dir, '.git'))) ctx.ok(`${dir} is already a clone`);
   else if (fs.existsSync(dir) && fs.readdirSync(dir).length) throw new Error(`${dir} exists and is not a git clone; choose another LAVISH_LIBRARY_DIR`);
