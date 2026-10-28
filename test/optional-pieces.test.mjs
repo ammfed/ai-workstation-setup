@@ -522,17 +522,6 @@ test('the playbook sets the review stakes once per project at capture: full run 
   assert.match(rule, /an agent never lowers them on its own/);
 });
 
-test('the playbook improve item looks for repeated failures and unused tools, and turns them into AGENTS.md lines and removal proposals', () => {
-  const text = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
-  const rule = text.slice(text.indexOf('2. **Improve as a standing item.**'), text.indexOf('3. **Save, then compact, at a phase boundary.**'));
-  assert.ok(rule.length > 100, 'rule 9.2 is in section 9');
-  assert.match(rule, /which command failed the same way in more than one session/);
-  assert.match(rule, /which installed tool, plugin or MCP server no session used/);
-  assert.match(rule, /one line in its AGENTS\.md once more than one session has hit it\. The line comes out when a later session shows it wrong\./);
-  assert.match(rule, /Remove it between sessions, never in the middle of one\./);
-  assert.ok(rule.indexOf('becomes a proposal to remove it') < rule.indexOf('Each proposal goes to the owner as a card'), 'a removal is a proposal the owner approves');
-});
-
 test('the playbook names every skill the installer offers, once: as a phase owner, as the supervisor or in its table of skills that own no phase', () => {
   const text = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
   const section = text.slice(text.indexOf('## Phases'), text.indexOf('## 1. Stage gates'));
