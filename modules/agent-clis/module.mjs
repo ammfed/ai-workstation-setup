@@ -419,7 +419,7 @@ export default {
       const tool = TOOLS[key];
       const state = await ctx.step(key, () => {
         if (tool.minNode && !nodeAtLeast(tool.minNode)) {
-          throw new Skip(`needs Node ${tool.minNode.join('.')}+ (running ${process.versions.node}); run \`nvm install --lts\` and re-run`);
+          throw new Skip(`needs Node ${tool.minNode.join('.')}+ (running ${process.versions.node}); run \`nvm install 24\` and re-run`);
         }
         return ctx.ensureTool(tool);
       });

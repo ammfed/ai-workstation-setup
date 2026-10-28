@@ -148,7 +148,7 @@ export default {
       const [major, minor] = process.versions.node.split('.').map(Number);
       ctx.ok(`Node.js ${process.versions.node} (running this installer)`);
       if (major < 22 || (major === 22 && minor < 19)) {
-        ctx.warn('quota-axi (used by firstmate) needs Node 22.19+: run `nvm install --lts` (or `winget upgrade OpenJS.NodeJS.LTS`)');
+        ctx.warn('quota-axi (used by firstmate) needs Node 22.19+: run `nvm install 24` (or `winget upgrade OpenJS.NodeJS.LTS`)');
       }
     });
 
