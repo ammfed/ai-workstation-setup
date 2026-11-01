@@ -3,6 +3,7 @@ name: reader
 description: Fast read-only helper for reading, lookup and summary. Use it to find files or text, read code or document excerpts, check one fact, or summarise a long file or web page. Do not use it for planning, design, debugging, or any change.
 tools: Read, Bash, WebFetch, WebSearch
 model: haiku
+effort: medium
 ---
 
 You are a read-only helper.

@@ -447,17 +447,18 @@ function placeRules(get, { cardsPath, hideKitPath, decisionsPath } = {}) {
   add('models-and-research', 'Models and effort', [
     routing === 'capable' && 'Use the most capable model at medium effort by default, for building and for everything else.',
     routing === 'capable' &&
-      'Give the design of a new frontend look that is not yet settled (screens, look, layout, clickable journeys) to the most capable model at extra-high effort.',
+      'Give the design of a new frontend look that is not yet settled (screens, look, layout, clickable journeys) to the most capable model at high effort.',
     routing === 'capable' &&
-      'Give polish of a prototype whose look is already settled (spacing, copy, states, small layout fixes, fixes from a usability check) to the most capable model at high effort.',
-    routing === 'capable' && 'Give investigations, diagnosis and plans to the most capable model at high effort.',
+      'Give polish of a prototype whose look is already settled (spacing, copy, states, small layout fixes, fixes from a usability check) to the most capable model at medium effort.',
+    routing === 'capable' && 'Give a code bug hunt whose cause is unknown to the most capable model at high effort.',
     routing === 'capable' &&
-      'Re-run an investigation, diagnosis or plan at extra-high effort when the result is weak or the cause is hard to find. Fix or build at medium effort once the cause is proven or the plan is settled.',
-    routing === 'capable' && 'Give small, clear tasks (a bug with a clear repro, a docs or copy edit, a version bump, a config tweak) to a faster model at high effort, and re-run it on the most capable model at medium effort after a failed check.',
-    routing === 'capable' && 'Run research on the most capable model at high effort.',
+      'Give scouts, audits, plans, research, slides and documents to the most capable model at medium effort. Start security audits and hard-to-undo plans at high.',
     routing === 'capable' &&
-      'The research agent plans and checks the work. It hands bulk fetching to the bulk research CLI, reading and summaries to the reader subagent, and drafting to a faster model at high effort.',
-    routing === 'capable' && 'Give reading, lookup and summary sub-tasks to the fastest model (for example the reader subagent).',
+      'Re-run weak work once at one effort level higher. Use extra-high only as the second re-run of a bug hunt or new look, or when the user names it. Never use extra-high or max by rule. Fix or build at medium effort once the cause is proven or the plan is settled.',
+    routing === 'capable' && 'Give small, clear tasks (a bug with a clear repro, a docs or copy edit, a version bump, a config tweak) to a faster model at medium effort, and re-run it on the most capable model at medium effort after a failed check.',
+    routing === 'capable' &&
+      'The research agent plans and checks the work. It hands bulk fetching to the bulk research CLI, reading and summaries to the reader subagent, and drafting to a faster model at medium effort.',
+    routing === 'capable' && 'Give reading, lookup and summary sub-tasks to the fastest model at medium effort (for example the reader subagent), low for a one-fact lookup.',
     routing === 'capable' && 'Before planning, investigation or design work starts, check the effort level the agent doing it actually runs at.',
     routing === 'capable' && 'An agent on a lower effort than these rules pick hands that work to a worker at that effort and only reviews and relays the result.',
     routing === 'economical' && 'Use a balanced model at low effort for routine work and sub-tasks.',

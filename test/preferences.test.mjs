@@ -247,17 +247,21 @@ test('planning effort is checked, and the agent decides process questions from t
   assert.doesNotMatch(await render({ PREFS_AUTONOMY: 'ask' }), /read the primary source/);
 });
 
-test('the capable model rules: research, polish, investigations and plans on high effort, a new look on extra-high, small tasks on Sonnet high', async () => {
+test('the capable model rules: medium effort for research, plans, audits and polish, high for a new look and an unknown-cause bug hunt, small tasks on a faster model at medium', async () => {
   const models = sectionOf((await renderHomes())['models-and-research'], 'Models and effort');
-  assert.match(models, /Run research on the most capable model at high effort\./);
-  assert.match(models, /The research agent plans and checks the work\. It hands bulk fetching to the bulk research CLI, reading and summaries to the reader subagent, and drafting to a faster model at high effort\./);
-  assert.match(models, /to a faster model at high effort, and re-run it on the most capable model at medium effort after a failed check\./);
+  assert.match(models, /Use the most capable model at medium effort by default, for building and for everything else\./);
+  assert.match(models, /Give the design of a new frontend look that is not yet settled \(screens, look, layout, clickable journeys\) to the most capable model at high effort\./);
+  assert.match(models, /Give polish of a prototype whose look is already settled \(spacing, copy, states, small layout fixes, fixes from a usability check\) to the most capable model at medium effort\./);
+  assert.match(models, /Give a code bug hunt whose cause is unknown to the most capable model at high effort\./);
+  assert.match(models, /Give scouts, audits, plans, research, slides and documents to the most capable model at medium effort\. Start security audits and hard-to-undo plans at high\./);
+  assert.match(models, /Re-run weak work once at one effort level higher\. Use extra-high only as the second re-run of a bug hunt or new look, or when the user names it\. Never use extra-high or max by rule\./);
+  assert.match(models, /to a faster model at medium effort, and re-run it on the most capable model at medium effort after a failed check\./);
+  assert.match(models, /The research agent plans and checks the work\. It hands bulk fetching to the bulk research CLI, reading and summaries to the reader subagent, and drafting to a faster model at medium effort\./);
+  assert.match(models, /Give reading, lookup and summary sub-tasks to the fastest model at medium effort \(for example the reader subagent\), low for a one-fact lookup\./);
+  assert.doesNotMatch(models, /Run research on the most capable model at high effort/);
   assert.doesNotMatch(models, /raise it to high after a failed check/);
-  assert.match(models, /Give the design of a new frontend look that is not yet settled \(screens, look, layout, clickable journeys\) to the most capable model at extra-high effort\./);
-  assert.match(models, /Give polish of a prototype whose look is already settled \(spacing, copy, states, small layout fixes, fixes from a usability check\) to the most capable model at high effort\./);
-  assert.match(models, /Give investigations, diagnosis and plans to the most capable model at high effort\./);
-  assert.match(models, /Re-run an investigation, diagnosis or plan at extra-high effort when the result is weak or the cause is hard to find\. Fix or build at medium effort once the cause is proven or the plan is settled\./);
-  assert.doesNotMatch(models, /investigations, diagnosis and plans to the most capable model at extra-high effort/);
+  // No rule starts any work at extra-high or max.
+  for (const line of models.split('\n').filter((l) => /extra-high|\bmax\b/.test(l))) assert.match(line, /only as the second re-run|Never use extra-high or max/);
   assert.doesNotMatch(models, /investigation, research or design work starts/);
   assert.match(models, /Before planning, investigation or design work starts/);
   const other = await render({ PREFS_MODEL_ROUTING: 'balanced' });

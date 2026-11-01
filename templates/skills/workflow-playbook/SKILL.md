@@ -372,14 +372,15 @@ Why: one supervisor that checks every phase against the same method catches drif
    | Job | Model and effort |
    | --- | --- |
    | Building, and anything not named below | The strongest model at medium effort |
-   | Research, investigations, diagnosis and plans | The strongest model at high effort. Re-run at extra-high effort when the result is weak or the cause is hard to find, then build at medium once the cause is proven or the plan is settled |
-   | A new look that is not settled yet (screens, layout, clickable journeys) | The strongest model at extra-high effort |
-   | Polish of a look that is already settled (spacing, copy, states, small layout fixes) | The strongest model at high effort |
-   | Small, clear tasks (a bug with a clear reproduction, a docs or copy edit, a version bump, a config tweak) | A faster model at high effort. After a failed check, re-run it on the strongest model at medium effort |
-   | Bulk fetching, reading and summaries | Cheap helpers: a fetcher finds the information, a reader on the fastest model summarizes it, and a faster model at high effort drafts |
+   | Research, scouts, audits, plans, specs, slides and documents | The strongest model at medium effort. Re-run once at high effort when the result is weak. Start security audits and hard-to-undo plans at high |
+   | A code bug hunt whose cause is unknown | The strongest model at high effort. Re-run at extra-high effort only as the second re-run, then fix at medium once the cause is proven |
+   | A new look that is not settled yet (screens, layout, clickable journeys) | The strongest model at high effort. Re-run at extra-high effort only as the second re-run |
+   | Polish of a look that is already settled (spacing, copy, states, small layout fixes) | The strongest model at medium effort |
+   | Small, clear tasks (a bug with a clear reproduction, a docs or copy edit, a version bump, a config tweak) | A faster model at medium effort. After a failed check, re-run it on the strongest model at medium effort |
+   | Bulk fetching, reading and summaries | Cheap helpers: a fetcher finds the information, a reader on the fastest model at medium effort summarizes it (low for a one-fact lookup), and a faster model at medium effort drafts |
 
    - Give each helper one task, and check its work yourself.
-   - Use a model above these only when the owner names it for a task.
+   - Use a model above these only when the owner names it for a task. Never set extra-high or max effort by rule.
    - A coordinator running at a lower effort than this table picks never writes the plan itself. It hands planning to a worker at the right effort and checks the effort that actually started.
 
    Why: quota is limited, and planning at the wrong effort quietly lowers the quality of everything built on it.
