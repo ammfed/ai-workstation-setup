@@ -17,7 +17,7 @@ starting point to adjust to your own work and limits.
 | Code review (no-mistakes) | Opus 5.5 | medium | Catches more bugs with fewer false alarms. |
 | Reading, lookup and summaries inside a session | Haiku 5.5 | medium (low for a one-fact lookup) | Bulk reading does not need a large model; the `reader` subagent does it at medium. |
 | Research | Opus 5.5 | medium | It plans and checks, and hands the bulk work to helpers (the next two rows). Run it again at high when the result is weak. |
-| Research: bulk fetching and web reading | agy with Gemini 3.8 Flash high; Claude Sonnet 4.6 on a Gemini quota error | (set by the model) | Keeps bulk fetching off your Claude limits; judge the result with Claude. |
+| Research: bulk fetching and web reading | agy with Gemini 3.8 Flash medium; Claude Sonnet 4.6 on a Gemini quota error | (set by the model) | Keeps bulk fetching off your Claude limits; judge the result with Claude. |
 | Research: drafting from a clear outline | Sonnet 5.5 | medium | A clear outline does not need the larger model. |
 | Long, hard work Opus 5.5 at xhigh did not finish | Fable 5.1 | high | Only when you ask for it by name: it is slower and can cost more. |
 
@@ -46,7 +46,7 @@ starting point to adjust to your own work and limits.
 | Example worker dispatch profiles (`config/crew-dispatch.json`) | firstmate | `FIRSTMATE_DISPATCH` | `capable` |
 | Second mates (`config/secondmate-harness`) | firstmate | `FIRSTMATE_SECONDMATE_HARNESS` | `claude claude-opus-5-5 medium` with the `capable` profiles on Claude, otherwise `default` |
 | backpass, which turns past sessions into rule suggestions | backpass | `BACKPASS_MODEL` | `claude-opus-5-5` (`gpt-5.5` on Codex); a dotted Claude id such as `claude-opus-5.5` is read as `claude-opus-5-5` |
-| Research model for the bulk-reading CLI | preferences | `PREFS_DELEGATE_MODEL` | `gemini-3.8-flash-high` for agy |
+| Research model for the bulk-reading CLI | preferences | `PREFS_DELEGATE_MODEL` | `gemini-3.8-flash-medium` for agy |
 | Model for the same work after a Gemini quota error | preferences | `PREFS_DELEGATE_FALLBACK_MODEL` | `claude-sonnet-4-6` for agy |
 
 Claude Code's own `effortLevel` no longer reaches Opus 5.5 and newer models; they take

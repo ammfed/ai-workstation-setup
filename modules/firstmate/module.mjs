@@ -60,7 +60,7 @@ export function dispatchProfiles(kind, harness) {
         {
           when: 'The task is research, a scout report, an audit, a plan, a spec, an architecture decision, polish of a settled frontend look (spacing, copy, states, small layout fixes, usability fixes), or slides and documents.',
           use: [profile('claude-opus-5-5', 'medium')],
-          why: 'The most capable model starts at medium effort; re-run once at high effort when the result is weak. Security audits and hard-to-undo plans start at high. Research hands bulk fetching to agy with gemini-3.8-flash-high (claude-sonnet-4-6 on a Gemini quota error), reading and summaries to the reader subagent, and drafting to Sonnet 5.5 at medium effort.',
+          why: 'The most capable model starts at medium effort; re-run once at high effort when the result is weak. Security audits and hard-to-undo plans start at high. Research hands bulk fetching to agy with gemini-3.8-flash-medium (claude-sonnet-4-6 on a Gemini quota error), reading and summaries to the reader subagent, and drafting to Sonnet 5.5 at medium effort.',
         },
         {
           when: 'A small, well-defined task with a clear outcome and little ambiguity: a bug fix with a clear repro, a docs or copy edit, a version bump, a config tweak, or another narrow mechanical change.',

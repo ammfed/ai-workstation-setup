@@ -261,7 +261,7 @@ test('the example dispatch profiles: Opus medium default, Opus high for a new lo
   assert.match(medium.when, /slides and documents/);
   assert.match(medium.why, /re-run once at high effort when the result is weak/);
   assert.match(medium.why, /Security audits and hard-to-undo plans start at high/);
-  assert.match(medium.why, /bulk fetching to agy with gemini-3\.8-flash-high/);
+  assert.match(medium.why, /bulk fetching to agy with gemini-3\.8-flash-medium/);
   assert.match(medium.why, /claude-sonnet-4-6 on a Gemini quota error/);
   assert.match(medium.why, /reading and summaries to the reader subagent/);
   assert.match(medium.why, /drafting to Sonnet 5\.5 at medium effort/);
@@ -274,17 +274,17 @@ test('the example dispatch profiles: Opus medium default, Opus high for a new lo
   assert.deepEqual(dispatchProfiles('capable', 'codex').default, [{ harness: 'codex', effort: 'medium' }]);
 });
 
-test('agy research runs on gemini-3.8-flash-high by default', async () => {
+test('agy research runs on gemini-3.8-flash-medium by default', async () => {
   const ctx = context(os.tmpdir(), { answers: { PREFS_DELEGATE_RETRIEVAL: 'agy' }, dryRun: true });
   for (const q of preferences.questions) {
     if (q.when && !q.when(ctx)) continue;
     await ctx.ask(q);
   }
-  assert.equal(ctx.get('PREFS_DELEGATE_MODEL'), 'gemini-3.8-flash-high');
+  assert.equal(ctx.get('PREFS_DELEGATE_MODEL'), 'gemini-3.8-flash-medium');
   assert.equal(ctx.get('PREFS_DELEGATE_FALLBACK_MODEL'), 'claude-sonnet-4-6');
   const models = (get) => renderPreferenceSkills(get, { cardsPath: path.join(os.tmpdir(), 'cards.html') })['models-and-research'];
   const text = models((key) => ctx.get(key));
-  assert.match(text, /to `agy --model gemini-3\.8-flash-high`/);
+  assert.match(text, /to `agy --model gemini-3\.8-flash-medium`/);
   assert.match(text, /If it reports a Gemini quota error, use `agy --model claude-sonnet-4-6` instead\./);
 
   const other = context(os.tmpdir(), { answers: { PREFS_DELEGATE_RETRIEVAL: 'other-cli' }, dryRun: true });

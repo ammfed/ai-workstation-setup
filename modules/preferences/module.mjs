@@ -286,7 +286,7 @@ export default {
       key: 'PREFS_DELEGATE_MODEL',
       type: 'text',
       message: 'Models: the model that CLI uses for this work (empty: its own default)',
-      default: (ctx) => (String(ctx.get('PREFS_DELEGATE_RETRIEVAL')).trim() === 'agy' ? 'gemini-3.8-flash-high' : ''),
+      default: (ctx) => (String(ctx.get('PREFS_DELEGATE_RETRIEVAL')).trim() === 'agy' ? 'gemini-3.8-flash-medium' : ''),
       when: (ctx) => Boolean(String(ctx.get('PREFS_DELEGATE_RETRIEVAL') || '').trim()),
     },
     {
