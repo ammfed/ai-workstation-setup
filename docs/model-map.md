@@ -6,17 +6,19 @@ starting point to adjust to your own work and limits.
 
 | Work | Model | Effort | Why |
 |---|---|---|---|
-| Small, clear task (bug with a clear repro, docs or copy edit, typo, version bump, config value) | Sonnet 5.5 | high | Enough for a narrow change; re-run it on Opus 5.5 at medium after a failed check. |
+| Small, clear task (bug with a clear repro, docs or copy edit, typo, version bump, config value) | Sonnet 5.5 | medium | Enough for a well-specified change; re-run it on Opus 5.5 at medium after a failed check. |
 | Building a feature, normal everyday work | Opus 5.5 | medium | The best quality for the cost; raise effort before you change the model. |
-| Prototype frontend and visual design: a new look, not yet settled | Opus 5.5 | xhigh | The look is the product, and the extra effort shows. |
-| Polish of a prototype frontend whose look is settled (spacing, copy, states, small layout fixes, fixes from a usability check) | Opus 5.5 | high | The look is decided; the remaining work needs care, not invention. |
-| Investigation and diagnosis | Opus 5.5 | high | Run it again at xhigh when the result is weak or the cause is hard to find; fix it at medium once the cause is proven. |
-| Planning and architecture | Opus 5.5 | high | Run it again at xhigh when the plan is weak; build it at medium once the plan is settled. |
+| Prototype frontend and visual design: a new look, not yet settled | Opus 5.5 | high | The look is the product. Run it again at xhigh only as a second re-run after a weak result. |
+| Polish of a prototype frontend whose look is settled (spacing, copy, states, small layout fixes, fixes from a usability check) | Opus 5.5 | medium | The look is decided; this is clear-scope work. |
+| A code bug hunt whose cause is unknown | Opus 5.5 | high | Run it again at xhigh only as the second re-run when the cause stays hidden; fix it at medium once the cause is proven. |
+| Scouts, audits and reports that mostly read and compare | Opus 5.5 | medium | Run it again at high when the result is weak. Start security audits at high. |
+| Planning and architecture | Opus 5.5 | medium | Run it again at high when the plan is weak. Start plans that are hard to undo (data migration, public interface, security) at high. |
+| Slides and documents | Opus 5.5 | medium | For knowledge work, medium matched high in Anthropic's runs. |
 | Code review (no-mistakes) | Opus 5.5 | medium | Catches more bugs with fewer false alarms. |
-| Reading, lookup and summaries inside a session | Haiku 5.5 | (subagent) | Bulk reading does not need a large model; the `reader` subagent does it. |
-| Research | Opus 5.5 | high | It plans and checks, and hands the bulk work to helpers (the next three rows). |
+| Reading, lookup and summaries inside a session | Haiku 5.5 | medium (low for a one-fact lookup) | Bulk reading does not need a large model; the `reader` subagent does it at medium. |
+| Research | Opus 5.5 | medium | It plans and checks, and hands the bulk work to helpers (the next two rows). Run it again at high when the result is weak. |
 | Research: bulk fetching and web reading | agy with Gemini 3.8 Flash high; Claude Sonnet 4.6 on a Gemini quota error | (set by the model) | Keeps bulk fetching off your Claude limits; judge the result with Claude. |
-| Research: drafting from a clear outline | Sonnet 5.5 | high | A clear outline does not need the larger model. |
+| Research: drafting from a clear outline | Sonnet 5.5 | medium | A clear outline does not need the larger model. |
 | Long, hard work Opus 5.5 at xhigh did not finish | Fable 5.1 | high | Only when you ask for it by name: it is slower and can cost more. |
 
 ## Rules of thumb
@@ -24,12 +26,13 @@ starting point to adjust to your own work and limits.
 1. Pick the model and effort when a task starts. Switching inside a running session breaks
    the prompt cache.
 2. Change effort before you change the model.
-3. Escalate one step at a time. A small task on Sonnet 5.5 high re-runs on Opus 5.5 medium
-   after a failed check. An investigation or plan on Opus 5.5 high re-runs at xhigh when the
-   result is weak or the cause is hard to find. After that, when a check fails twice: Opus 5.5
-   xhigh, then Fable 5.1 high if you ask for it.
+3. Escalate one step at a time. A small task on Sonnet 5.5 medium re-runs on Opus 5.5 medium
+   after a failed check. Work on Opus 5.5 medium re-runs once at high when the result is weak.
+   A bug hunt or a new look on Opus 5.5 high re-runs at xhigh only as the second re-run. After
+   that, Fable 5.1 high if you ask for it.
 4. Drop back to Opus 5.5 medium once the hard part (a plan, a proven cause) is done.
-5. Leave max effort for when you name it; it costs the most for the smallest gain.
+5. Never set xhigh or max by rule. Use them only as a second re-run after high failed, or when
+   you name them.
 
 ## Where the installer sets each one
 
@@ -38,7 +41,7 @@ starting point to adjust to your own work and limits.
 | Default model in `~/.claude/settings.json` (`model`) | claude-code | `CLAUDE_MODEL` | `opus` (Opus 5.5) |
 | Default effort in `~/.claude/settings.json` (`effortLevel`; it reaches Opus 5, Fable 5.1 and older models only) | claude-code | `CLAUDE_EFFORT` | `medium` |
 | Opus 5.5 effort in `~/.claude/settings.json` (`modelSettings`) | claude-code | `CLAUDE_MODEL_EFFORTS` | `claude-opus-5-5=medium` |
-| `reader` subagent in `~/.claude/agents/reader.md` (`model: haiku`, read-only tools) | claude-code | `CLAUDE_READER_AGENT` | yes; a reader you wrote is kept |
+| `reader` subagent in `~/.claude/agents/reader.md` (`model: haiku`, `effort: medium`, read-only tools) | claude-code | `CLAUDE_READER_AGENT` | yes; a reader you wrote is kept |
 | no-mistakes review model (`agent_config.claude` in `~/.no-mistakes/config.yaml`, or `$NM_HOME`) | agent-clis | `NO_MISTAKES_REVIEW_MODEL` | `claude-opus-5-5 medium` |
 | Example worker dispatch profiles (`config/crew-dispatch.json`) | firstmate | `FIRSTMATE_DISPATCH` | `capable` |
 | Second mates (`config/secondmate-harness`) | firstmate | `FIRSTMATE_SECONDMATE_HARNESS` | `claude claude-opus-5-5 medium` with the `capable` profiles on Claude, otherwise `default` |
@@ -55,8 +58,8 @@ no-mistakes takes one model per harness for all repositories, and re-reads its c
 run, so a change applies to the next run without restarting its daemon. An `agent_config`
 entry for `claude` that you already have is kept.
 
-The `capable` dispatch profiles run Opus 5.5 at medium by default, Opus 5.5 at xhigh for a
-new frontend look that is not yet settled, Opus 5.5 at high for polish of a settled look, for
-investigations, diagnosis and plans (re-run at xhigh when the result is weak) and for research,
-and Sonnet 5.5 at high for small, clear tasks. They name no Fable rule: ask for Fable 5.1 by
-name when you want it.
+The `capable` dispatch profiles run Opus 5.5 at medium by default and for research, scout
+reports, audits, plans, specs, architecture, polish of a settled look, and slides and documents.
+They run Opus 5.5 at high for a new frontend look that is not yet settled and for a code bug
+hunt whose cause is unknown, and Sonnet 5.5 at medium for small, clear tasks. They name no
+Fable rule: ask for Fable 5.1 by name when you want it.

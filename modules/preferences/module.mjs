@@ -269,7 +269,7 @@ export default {
       message: 'Models: effort and model routing',
       default: 'capable',
       choices: [
-        { value: 'capable', label: 'capable - the most capable model at medium effort, extra-high effort for a new frontend look, high effort for polish, investigations, plans and research with helpers, a faster model for small tasks' },
+        { value: 'capable', label: 'capable - the most capable model at medium effort for most work, including research with helpers, plans and polish, high effort for a new frontend look and a bug hunt with an unknown cause, a faster model at medium effort for small tasks' },
         { value: 'economical', label: 'economical - low effort by default, more for planning, design and hard reasoning, the strongest model for building' },
         { value: 'balanced', label: 'balanced - medium effort by default, high for planning, design, hard reasoning and building' },
         { value: 'none', label: 'none - no rule' },

@@ -48,29 +48,24 @@ export function dispatchProfiles(kind, harness) {
     return {
       rules: [
         {
-          when: "The task designs a new look for a prototype's user-facing frontend, one that is not yet settled: screens, visual look, layout, characters, or clickable user journeys.",
-          use: [profile('claude-opus-5-5', 'xhigh')],
-          why: 'A new frontend look gets the most capable model at extra-high effort.',
+          when: "The task designs a prototype's user-facing frontend whose look is not yet settled: new screens, a new visual look, layout, characters, or new clickable user journeys.",
+          use: [profile('claude-opus-5-5', 'high')],
+          why: 'A new frontend look gets the most capable model at high effort. Re-run at extra-high effort only as a second re-run after a weak result, or when you name it.',
         },
         {
-          when: 'The task polishes a prototype frontend whose look is already settled: spacing, copy, states, small layout fixes, or fixes from a usability check.',
+          when: 'A code bug hunt whose cause is not yet known: a root-cause investigation or diagnosis of a failure, crash, or wrong behaviour in code.',
           use: [profile('claude-opus-5-5', 'high')],
-          why: 'Polish of a settled look gets the most capable model at high effort.',
+          why: 'A bug hunt with an unknown cause gets high effort. Re-run at extra-high effort only as the second re-run when the cause stays hidden, and fix at medium effort once the cause is proven.',
         },
         {
-          when: 'The task investigates or diagnoses a problem whose cause is not yet known, or writes a plan, a design or an architecture before the build.',
-          use: [profile('claude-opus-5-5', 'high')],
-          why: 'Investigations, diagnosis and plans get high effort; re-run the same task at extra-high effort when the result is weak or the cause is hard to find, and fix or build at medium effort once the cause is proven or the plan is settled.',
-        },
-        {
-          when: 'The task researches a question: it gathers and reads sources, compares them and reports what it found.',
-          use: [profile('claude-opus-5-5', 'high')],
-          why: 'The research worker plans and checks, and hands bulk fetching to agy with gemini-3.8-flash-high (claude-sonnet-4-6 on a Gemini quota error), reading and summaries to the reader subagent, and drafting to Sonnet 5.5 at high effort.',
+          when: 'The task is research, a scout report, an audit, a plan, a spec, an architecture decision, polish of a settled frontend look (spacing, copy, states, small layout fixes, usability fixes), or slides and documents.',
+          use: [profile('claude-opus-5-5', 'medium')],
+          why: 'The most capable model starts at medium effort; re-run once at high effort when the result is weak. Security audits and hard-to-undo plans start at high. Research hands bulk fetching to agy with gemini-3.8-flash-high (claude-sonnet-4-6 on a Gemini quota error), reading and summaries to the reader subagent, and drafting to Sonnet 5.5 at medium effort.',
         },
         {
           when: 'A small, well-defined task with a clear outcome and little ambiguity: a bug fix with a clear repro, a docs or copy edit, a version bump, a config tweak, or another narrow mechanical change.',
-          use: [profile('claude-sonnet-5-5', 'high')],
-          why: 'Small, clear tasks go to the faster model at high effort; after a failed check, re-run on Opus 5.5 at medium effort.',
+          use: [profile('claude-sonnet-5-5', 'medium')],
+          why: 'Small, clear tasks go to the faster model at medium effort; after a failed check, re-run on Opus 5.5 at medium effort.',
         },
       ],
       default: [profile('claude-opus-5-5', 'medium')],
@@ -235,7 +230,7 @@ export default {
       message: 'Crew dispatch profiles (config/crew-dispatch.json)',
       default: 'capable',
       choices: [
-        { value: 'capable', label: 'capable - Opus at medium effort, Opus at xhigh for a new frontend look, Opus at high for polish, investigations, plans and research with helpers, small clear tasks on Sonnet at high (docs/model-map.md)' },
+        { value: 'capable', label: 'capable - Opus at medium effort for research with helpers, plans, audits, polish and documents, Opus at high for a new frontend look and a bug hunt with an unknown cause, small clear tasks on Sonnet at medium (docs/model-map.md)' },
         { value: 'starter', label: 'starter - strong model for builds, more effort for planning, light default' },
         { value: 'none', label: 'none - every worker uses the crew harness' },
       ],
