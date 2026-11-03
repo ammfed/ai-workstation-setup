@@ -49,7 +49,8 @@ The preferences module adds two more with the `firstmate` target. `config/brief-
 which Firstmate appends to every worker brief (its docs/configuration.md, "Home brief
 include"), carries the standing worker rules that apply ([what it holds](working-preferences.md)).
 The same rules go into each local second-mate home's `config/brief-include.md` as a marked
-block, keeping that home's own lines.
+block, keeping that home's own lines. In a home file that has no block yet, a section with the
+same heading as a generated one (as in a copy of the main home's file) gives way to the block.
 `data/captain-shared.md` gets that file's Everywhere and Second mates lines,
 only when there are any ([Your private rules](working-preferences.md#your-private-rules)).
 
