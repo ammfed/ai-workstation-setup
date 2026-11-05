@@ -61,7 +61,7 @@ function tasteSection(tastePreset, also) {
 
 // Firstmate's config/brief-include.md, appended to every worker brief: the house style for what
 // workers write to firstmate (never the deliverable itself), the vault-first line, the helper-model rule, the standing
-// build rules, the principle checker before done, the taste preset's Everywhere lines when it is on,
+// build rules, the principle checker and fresh reviewer before done, the taste preset's Everywhere lines when it is on,
 // and the private Everywhere and Workers lines.
 // Empty when none of them applies. `checkerPath` is the installed principle checker, or null.
 export function renderBriefInclude(get, { checkerPath, privateRules, tastePreset, vault } = {}) {
@@ -83,11 +83,14 @@ export function renderBriefInclude(get, { checkerPath, privateRules, tastePreset
   parts.push(bullets('Helper models', [delegateRule(get)]));
   parts.push(bullets('Building', [get('PREFS_KUN') && KUN_RULE, get('PREFS_TEST_FIRST') && TEST_FIRST_RULE, get('PREFS_GLOSSARY_ADR') && GLOSSARY_RULE]));
   const checker = checkerPath && (/\s/.test(checkerPath) ? JSON.stringify(checkerPath) : checkerPath);
+  // Workers run the checks their brief names, so the playbook's fresh reviewer (rule 4.7) is named here too.
+  const checks = get('PREFS_PRINCIPLE_CHECKS') && checker;
   parts.push(
     bullets('Principle checks', [
-      get('PREFS_PRINCIPLE_CHECKS') &&
-        checker &&
+      checks &&
         `Before you report done on anything with a screen (a page, an app screen, a prototype, a document layout), run \`node ${checker} <its files or folder>\`. Add \`--phone\` when it is built for other people. Fix every \`fail\` line first. List each \`check\` line in your report for the reviewer. The full list is in principles/checks.md beside the checker.`,
+      checks &&
+        'Before a page or screen goes to the user, have a fresh reviewer that did not build it check its screenshots, briefed as "Reviewer brief" in principles/checks.md says. Fix each finding or turn it into a card for the user, and list the findings in your report.',
     ]),
   );
   parts.push(tasteSection(tastePreset, 'workers'));
