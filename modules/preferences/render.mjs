@@ -101,6 +101,8 @@ export function renderBriefInclude(get, { checkerPath, privateRules, tastePreset
 
 // A second-mate home's config/brief-include.md keeps its own lines, so the generated lines go in
 // a marked block: a re-run replaces only the block, and a file without one gets it at the end.
+// A file without one may be a copy of the main home's file (a new home can start from it), so
+// its sections with the same heading as a generated one go, and the block is their one copy.
 export const BRIEF_BLOCK_START = '<!-- ai-workstation-setup: start of generated lines. A re-run replaces this block; keep your own lines outside it. -->';
 export const BRIEF_BLOCK_END = '<!-- ai-workstation-setup: end of generated lines -->';
 export function mergeBriefBlock(current, brief) {
@@ -108,7 +110,11 @@ export function mergeBriefBlock(current, brief) {
   const text = String(current || '');
   const start = text.indexOf('<!-- ai-workstation-setup: start');
   const end = text.indexOf(BRIEF_BLOCK_END);
-  if (start === -1 && end === -1) return text.trim() ? `${text.trimEnd()}\n\n${block}` : block;
+  if (start === -1 && end === -1) {
+    const generated = new Set(brief.split('\n').filter((l) => l.startsWith('## ')));
+    const own = text.split(/^(?=## )/m).filter((part) => !generated.has(part.split('\n')[0])).join('').trimEnd();
+    return own ? `${own}\n\n${block}` : block;
+  }
   if (start === -1 || end < start) throw new Error('the generated-lines block has a missing or misplaced marker; fix the markers by hand');
   const after = text.slice(end + BRIEF_BLOCK_END.length).replace(/^\n/, '');
   return `${text.slice(0, start)}${block}${after}`;

@@ -57,7 +57,8 @@ lines into `config/brief-include.md` of every local second-mate home listed in t
 `data/secondmates.md` (a home without its `.fm-secondmate-home` marker is skipped). There the
 lines go in a block between two `ai-workstation-setup` comment markers: lines the home wrote
 itself stay around the block, a re-run replaces only the block, and a dry run lists each file.
-Keep your own edits outside the block. A home added later gets the lines on the next run.
+On the first run, in a file that has no block yet (such as a copy of the main home's file), a
+section whose heading matches a generated one is dropped, so the block is its one copy. Keep your own edits outside the block. A home added later gets the lines on the next run.
 
 Your own rules that are not generic go in a private rules file outside the clone; see
 [Your private rules](#your-private-rules).

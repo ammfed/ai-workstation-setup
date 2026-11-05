@@ -720,6 +720,22 @@ test('the generated block goes after the home lines once, replaces only itself, 
   assert.throws(() => mergeBriefBlock(`${BRIEF_BLOCK_START}\n- no end\n`, '- x\n'), /missing or misplaced marker/);
 });
 
+test('a home file without markers that holds a copy of the generated sections gets them once, not twice', () => {
+  // A new second-mate home can start from a copy of the main home's file, which has no markers.
+  const copy = '## Our own rule\n\n- Keep this.\n\n## Helper models\n\n- Use the old model.\n\n## Building\n\n- Old build line.\n';
+  const brief = '## Helper models\n\n- Use the new model.\n\n## Building\n\n- New build line.\n';
+  const merged = mergeBriefBlock(copy, brief);
+  assert.equal(merged.match(/^## Helper models$/gm).length, 1, merged);
+  assert.equal(merged.match(/^## Building$/gm).length, 1, merged);
+  assert.ok(!merged.includes('old model') && !merged.includes('Old build line'), merged);
+  assert.ok(merged.startsWith('## Our own rule\n\n- Keep this.\n'), merged);
+  assert.equal(merged, `## Our own rule\n\n- Keep this.\n\n${BRIEF_BLOCK_START}\n\n${brief.trimEnd()}\n\n${BRIEF_BLOCK_END}\n`);
+  assert.equal(mergeBriefBlock(merged, brief), merged);
+  // A heading of the home's own that only starts like a generated one stays.
+  const own = '## Helper models (our quota rule)\n\n- Ours.\n';
+  assert.ok(mergeBriefBlock(own, brief).startsWith(own), mergeBriefBlock(own, brief));
+});
+
 test('every local second-mate home in the registry gets the worker lines as a block around its own lines', { skip: process.platform === 'win32' }, async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'preferences-'));
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
