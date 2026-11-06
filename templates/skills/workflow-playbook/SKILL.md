@@ -436,4 +436,11 @@ This section is phase 10. It keeps the way of working, and this playbook, curren
 - It holds 25 steps in three checkpoints, most with a reusable prompt. The steps named above (step 12, step 18) are its steps.
 - Add the next checkpoint only when the owner says the next stage is good.
 
+## 11. Making a video
+
+- When the work is a video of any kind, read `video.md` in this skill's folder. It says which of its twelve stages the kind of video needs and where AI generation fits.
+- Its rules add to this playbook. The phases, gates, review pages and wording rules here still apply.
+
+Why: a video has its own stages and risks, so one companion file keeps them out of the general rules.
+
 Why: writing down the steps and prompts makes a direction that took many rounds to find faster to reach next time.
