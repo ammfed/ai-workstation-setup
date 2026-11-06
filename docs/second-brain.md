@@ -167,7 +167,7 @@ tools you installed.
 Earlier versions also installed a `second-brain` skill with the same read routes. Sessions
 never called it, so the rules file now carries its lines and the skill is retired. On a rerun,
 `~/.claude/skills/second-brain/SKILL.md` is removed when it is a copy this setup shipped (a
-backup, `SKILL.md.bak-<time>`, stays next to it). A copy you edited is left in place, and the
+backup, `SKILL.md.bak-<time>`, goes to `~/.config/ai-workstation-setup/backups/skills/second-brain/`). A copy you edited is left in place, and the
 install summary lists a to-do to delete it by hand.
 
 By default the rule says vault content never goes to an outside model or service. Answer

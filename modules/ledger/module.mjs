@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { cronCommand, ensureCronLine, shellQuote } from '../../lib/cron.mjs';
-import { Skip } from '../../lib/context.mjs';
+import { Skip, withoutPath } from '../../lib/context.mjs';
 import { SYNC_QUESTIONS, installSync } from './sync.mjs';
 
 // One append-only record of what you say and decide and of the work under way, captured the
@@ -88,7 +88,7 @@ async function systemdService(ctx, { unit, what, script }) {
     'WantedBy=default.target',
     '',
   ].join('\n');
-  const wrote = await ctx.writeFile(file, text, { onConflict: 'ask' });
+  const wrote = await ctx.writeFile(file, text, { onConflict: 'ask', same: withoutPath });
   const enabled = ctx.capture(`systemctl --user is-enabled ${unit}.service`) === 'enabled';
   const active = ctx.capture(`systemctl --user is-active ${unit}.service`) === 'active';
   if (wrote || !enabled || !active) ctx.run(`systemctl --user daemon-reload && systemctl --user enable ${unit}.service && systemctl --user restart ${unit}.service`);
@@ -119,7 +119,7 @@ async function launchdAgent(ctx, { label, script, log }) {
 </dict>
 </plist>
 `;
-  if (await ctx.writeFile(plist, content, { onConflict: 'ask' })) {
+  if (await ctx.writeFile(plist, content, { onConflict: 'ask', same: withoutPath })) {
     ctx.run(`launchctl bootout gui/$(id -u)/${label} 2>/dev/null; launchctl bootstrap gui/$(id -u) "${plist}"`);
   }
   ctx.info(`logs: ${logFile}; stop it with: launchctl bootout gui/$(id -u)/${label} (and delete ${plist})`);

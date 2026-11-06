@@ -40,7 +40,13 @@ Why: a phase that waits for a skill no agent can start stalls with nobody doing 
 - Run `/kun` again only in a new session or after compaction.
 - A check is a pass the agent runs, not a page and not a question to the owner.
 - A finding that changes the plan goes on the phase's outcomes page.
-- Where Kun and this playbook disagree, Kun wins, and the conflict goes on that page too.
+- Kun fills the gaps this playbook leaves. When two sources of rules disagree, the first in this order wins, and the conflict goes on that page too:
+  1. What the owner says now, within its exact scope.
+  2. The owner's always-loaded rules (working-preferences.md and the rule skills it names).
+  3. This playbook.
+  4. Kun.
+  5. Any other installed skill pack.
+- A fleet tool's own mechanics (how it starts, tracks and lands workers) stay its own. The owner's rules reach its workers through the briefs.
 - If `/kun` cannot load, say so in the status and go on with this playbook alone.
 
 Why: one supervisor that checks every phase against the same method catches drift early, and a supervisor that stops the work when it is offline costs more than it saves.
@@ -58,7 +64,7 @@ Why: one supervisor that checks every phase against the same method catches drif
 | 9. Ship and hand over | No extra check: validation is the step Kun names. It runs through no-mistakes when the repository has it. Without it, offer to set it up, or use a fresh adversarial reviewer. The merge waits for the owner's word |
 | 10. Improve | Check Kun's tools list for one that turns repeated corrections into checks, such as backpass. Bring each proposal as a card |
 
-**Skills that own no phase.** This setup installs four more skills. Each one helps inside a phase when its moment comes. None of them starts a phase or takes over from its owner.
+**Skills that own no phase.** This setup installs six more skills. Each one helps inside a phase when its moment comes. None of them starts a phase or takes over from its owner.
 
 | Skill | Use it when |
 | --- | --- |
@@ -66,6 +72,8 @@ Why: one supervisor that checks every phase against the same method catches drif
 | to-questionnaire (owner starts it) | A gap only someone else can fill, such as a colleague, a vendor or real users: turn it into a short questionnaire for that person, including the real-user try-out (rule 1.6) |
 | teach (owner starts it) | The owner asks to learn a new skill or concept |
 | composio-cli | The work needs an outside app the owner has connected, such as email, a calendar or a tracker |
+| diagnosing-bugs | A bug or a slowdown whose cause is unknown: find and prove the cause before the fix (the bug path below) |
+| stow | Before compacting or a long break: save what the session learned into the files where it belongs (rule 9.3) |
 
 **Which phases a piece of work needs.** Pick by the kind of work, never by a guess of how long it takes.
 
@@ -74,7 +82,7 @@ Why: one supervisor that checks every phase against the same method catches drif
 | A foggy goal, more than one session | All ten | The goal is bigger than one session |
 | A product or feature with a look | All ten. Vision once per project | There is a look or a flow to choose |
 | A change with no look or design choice | 1, 7, 9, and 8 if the owner will look at it | One worker, an existing item |
-| A bug | 1, find the cause, 7 with the reproduction as the regression test, 9 | Something that worked is broken |
+| A bug | 1, find the cause with diagnosing-bugs, 7 with the reproduction as the regression test, 9 | Something that worked is broken |
 | A prototype the owner will show soon | 1 to 5 | Nothing is built for real before approval |
 | A report or research only | 1, 3, 8 | No pull request |
 
@@ -269,15 +277,12 @@ Why: one supervisor that checks every phase against the same method catches drif
    - Put every decision, and every change to look or experience, on a review page before it is built.
 
    Why: people judge what they can see, and a question asked before the page exists is noise.
-2. **One card at a time.**
-   - Each card holds one decision or rule, a picture beside it where the picture makes the point clearer, little text, and clear choices (for example Agree, Change it, Reject).
-   - End each card with a short "Based on" line that names the types of sources behind it, such as the owner's notes, a design system or a usability study.
-   - Check the page before sharing it (rules 4.5 and 4.7).
+2. **Build, open and send the page the way the review-pages skill says.**
+   - That skill holds the card template, the layout, the "Based on" line, the screenshot checks, and when to open and send the link.
+   - Without it: one card at a time, each with one decision, a picture where it helps, little text and clear choices. End each card with a short "Based on" line that names the types of sources behind it.
    - At every stage end, send a short results page: what was found, what was decided and by whom, and what is still open.
-   - Create the page without opening it, check it, then open it once for the owner and give the link. Do not only link it.
-   - While the owner is away, open nothing: the link goes into the brief they get on return.
 
-   Why: long pages overwhelm, a page that is only linked is often never seen, and a page that opens itself before it is checked can show the owner a broken page.
+   Why: page rules kept in two places drift apart, and the owner then gets pages built two ways.
 3. **Every element has a reason.**
    - Each element on a page or screen helps someone decide or act.
    - Remove filler text, captions and decoration.
@@ -290,13 +295,11 @@ Why: one supervisor that checks every phase against the same method catches drif
 
    Why: answers given in the room are recorded at once, and the summary goes straight into the meeting notes.
 5. **Check the page before sharing it.**
-   - Open it at the owner's target screen size first (checkpoints.md, step 18), then at laptop width and phone width.
-   - Check that font sizes and column positions stay the same on every card and tab.
-   - Use plain names, never internal codes made of a letter and a number.
+   - Run the review-pages skill's screenshot checks, at the owner's target screen size first (checkpoints.md, step 18).
    - Then open the hosted page itself. Check that it loads, has no answers yet and includes every source it cites.
    - Only then tell the owner it is ready.
 
-   Why: the owner notices changes in font size or column position before the content, codes force them to look things up, and a page marked ready that is broken or already answered wastes a round.
+   Why: a page marked ready that is broken or already answered wastes a round.
 6. **Four review points.** The owner reviews at four points, each on a page built from the same card template:
 
    | Review point | Phase | What the page shows | The owner answers |
@@ -367,23 +370,14 @@ Why: one supervisor that checks every phase against the same method catches drif
 
 ## 7. Models and briefs
 
-1. **Match the model to the job.** Pick by the kind of job:
-
-   | Job | Model and effort |
-   | --- | --- |
-   | Building, and anything not named below | The strongest model at medium effort |
-   | Research, scouts, audits, plans, specs, slides and documents | The strongest model at medium effort. Re-run once at high effort when the result is weak. Start security audits and hard-to-undo plans at high |
-   | A code bug hunt whose cause is unknown | The strongest model at high effort. Re-run at extra-high effort only as the second re-run, then fix at medium once the cause is proven |
-   | A new look that is not settled yet (screens, layout, clickable journeys) | The strongest model at high effort. Re-run at extra-high effort only as the second re-run |
-   | Polish of a look that is already settled (spacing, copy, states, small layout fixes) | The strongest model at medium effort |
-   | Small, clear tasks (a bug with a clear reproduction, a docs or copy edit, a version bump, a config tweak) | A faster model at medium effort. After a failed check, re-run it on the strongest model at medium effort |
-   | Bulk fetching, reading and summaries | Cheap helpers: a fetcher finds the information, a reader on the fastest model at medium effort summarizes it (low for a one-fact lookup), and a faster model at medium effort drafts |
-
+1. **Match the model to the job.**
+   - Follow the models-and-research skill for the model and effort of each job.
+   - Without it: the strongest model at medium effort for most work, high effort for a code bug hunt whose cause is unknown and for a new look, and a faster model for small, clear tasks and bulk reading.
    - Give each helper one task, and check its work yourself.
    - Use a model above these only when the owner names it for a task. Never set extra-high or max effort by rule.
-   - A coordinator running at a lower effort than this table picks never writes the plan itself. It hands planning to a worker at the right effort and checks the effort that actually started.
+   - A coordinator running at a lower effort than these rules pick never writes the plan itself. It hands planning to a worker at the right effort and checks the effort that actually started.
 
-   Why: quota is limited, and planning at the wrong effort quietly lowers the quality of everything built on it.
+   Why: quota is limited, planning at the wrong effort quietly lowers the quality of everything built on it, and a model table kept in two places drifts apart.
 2. **One complete brief.**
    - Each worker gets one brief: the owner's exact words, the whole goal, every earlier report and version (not a chosen subset), the current rulings, the tools ruled out, and the finish line.
    - Never drip steps.
@@ -432,7 +426,7 @@ This section is phase 10. It keeps the way of working, and this playbook, curren
    Why: the coordinator never starts work in an empty queue, so a look back runs only if it is an approved item, and a lesson that does not become a check is made again. A fact each session finds again, and a tool no session uses, cost tokens in every session, and a session whose tools change must write its cached prompt again.
 3. **Save, then compact, at a phase boundary.**
    - When the context needs compacting, finish the phase step in hand.
-   - Save the session's lessons and the owner's rulings (rule 8.1), then compact.
+   - Save the session's lessons and the owner's rulings (rule 8.1) with the stow skill when it is installed, then compact.
 
    Why: compacting in the middle of a step loses the half-done work, and compacting before a save loses what the owner taught.
 

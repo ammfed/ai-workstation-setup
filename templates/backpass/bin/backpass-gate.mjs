@@ -21,7 +21,8 @@
 //   node backpass-gate.mjs --project <path>     one allowed project
 //   node backpass-gate.mjs --scheduled          the most overdue allowed project that passes the
 //                                               checks, so a project that is always skipped
-//                                               does not hold up the others
+//                                               does not hold up the others; a project
+//                                               whose last run failed is due again after a day
 //   add --dry-run to do every check without calling a model
 //
 // Logs one line per run to runs.log next to this script (counts only, never content).
@@ -42,6 +43,7 @@ const FILES = {
 };
 const LOCK_STALE_MS = 2 * 60 * 60 * 1000;
 const BUSY_MS = 30 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
@@ -145,7 +147,8 @@ function runProject(project, config, pattern) {
     '--quiet',
   ]);
   const state = readJson(FILES.state, {});
-  state[project] = { lastRun: Date.now() };
+  // A failed run (offline, a model outage) is retried after a day, not after the full cooldown.
+  state[project] = r.status === 0 ? { lastRun: Date.now() } : { lastRun: Date.now(), failed: true };
   fs.writeFileSync(FILES.state, JSON.stringify(state, null, 2));
   if (r.status !== 0) {
     log(project, `failed: backpass exited ${r.status}`);
@@ -180,8 +183,9 @@ function main() {
     targets = [wanted];
   } else if (flag('--scheduled')) {
     const state = readJson(FILES.state, {});
-    const cooldown = (Number(config.cooldownDays) || 7) * 24 * 60 * 60 * 1000;
-    const due = projects.filter((p) => Date.now() - (state[p]?.lastRun || 0) >= cooldown);
+    const cooldown = (Number(config.cooldownDays) || 7) * DAY_MS;
+    const wait = (p) => (state[p]?.failed ? Math.min(DAY_MS, cooldown) : cooldown);
+    const due = projects.filter((p) => Date.now() - (state[p]?.lastRun || 0) >= wait(p));
     if (!due.length) return log(null, 'skipped: every project ran recently');
     targets = due.sort((a, b) => (state[a]?.lastRun || 0) - (state[b]?.lastRun || 0));
   }

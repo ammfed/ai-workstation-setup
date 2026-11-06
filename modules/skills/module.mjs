@@ -35,6 +35,7 @@ const SKILLS = [
   { value: 'to-spec', repo: 'mattpocock/skills', label: 'to-spec - turn the current conversation into a spec in your issue tracker' },
   { value: 'to-tickets', repo: 'mattpocock/skills', label: 'to-tickets - break a plan or spec into tickets with their blocking edges' },
   { value: 'to-questionnaire', repo: 'mattpocock/skills', label: 'to-questionnaire - turn an open decision into a questionnaire' },
+  { value: 'diagnosing-bugs', repo: 'mattpocock/skills', label: 'diagnosing-bugs - find the cause of a hard bug or a slowdown before fixing it' },
   {
     value: 'wayfinder',
     repo: 'mattpocock/skills',
@@ -51,8 +52,15 @@ const SKILLS = [
   {
     value: 'no-mistakes',
     repo: 'kunchenguid/no-mistakes',
-    label: 'no-mistakes - run the no-mistakes validation pipeline from chat (agent-clis installs the tool; skipped without it)',
+    label: 'no-mistakes - run the no-mistakes validation pipeline from chat, at the version of the installed tool (agent-clis installs the tool; skipped without it)',
     needs: { bin: 'no-mistakes', what: 'the no-mistakes CLI' },
+    // The skill documents the commands of one release, so it comes from the installed tool's tag.
+    ref: (ctx) => ctx.capture('no-mistakes --version')?.match(/version (v\d+\.\d+\.\d+)/)?.[1],
+  },
+  {
+    value: 'stow',
+    repo: 'kunchenguid/firstmate',
+    label: 'stow - before compacting or a break, save what this session learned into the files where it belongs',
   },
   {
     value: 'workflow-playbook',
@@ -119,7 +127,7 @@ async function tallied(ctx, tally, label, fn) {
 export default {
   name: 'skills',
   title: 'Agent skills',
-  description: 'Claude Code skills, downloaded from their upstreams: kun, vision, grilling, teach, tdd, codebase-design, to-spec, to-tickets, to-questionnaire, wayfinder, find-docs, no-mistakes, workflow-playbook, composio-cli',
+  description: 'Claude Code skills, downloaded from their upstreams: kun, vision, grilling, teach, tdd, codebase-design, to-spec, to-tickets, to-questionnaire, diagnosing-bugs, wayfinder, find-docs, no-mistakes, stow, workflow-playbook, composio-cli',
   order: 50,
   group: 'assistant',
   summary: 'skills for planning and test-first coding',
@@ -162,7 +170,7 @@ export default {
       const missing = missingTool(ctx, s);
       await tallied(ctx, tally, s.value, () => {
         if (missing) throw new Skip(missing);
-        return s.install ? s.install(ctx) : installSkill(ctx, s.repo, s.value, opts);
+        return s.install ? s.install(ctx) : installSkill(ctx, s.repo, s.value, { ...opts, ref: s.ref?.(ctx) });
       });
       if (missing) continue;
       for (const h of s.helpers ?? []) await tallied(ctx, tally, `${h} (for ${s.value})`, () => installSkill(ctx, s.repo, h, opts));

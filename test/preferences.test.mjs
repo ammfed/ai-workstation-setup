@@ -67,6 +67,15 @@ test('the defaults ask through both the question tool and card pages, and grill 
   assert.match(sectionOf(homes['review-pages'], 'Opening and sending'), /--no-open/, 'card-page rules still apply with both');
 });
 
+test('grilling asks through the question tool, one question at a time, when the question tool is in use', async () => {
+  const decisions = async (given) => sectionOf((await renderHomes(given)).core, 'Decisions');
+  const line = /When grilling, ask through the question tool, one question at a time\./;
+  assert.match(await decisions({}), line, 'on by default');
+  assert.match(await decisions({ PREFS_DECISIONS: 'tool', PREFS_GRILL: 'gaps' }), line);
+  assert.doesNotMatch(await decisions({ PREFS_DECISIONS: 'chat' }), line);
+  assert.doesNotMatch(await decisions({ PREFS_GRILL: 'off' }), line);
+});
+
 test('the default status leads with what needs the user, then what is at risk, the table and the links', async () => {
   assert.equal((await answer()).get('PREFS_STATUS'), 'needs-you');
   const status = sectionOf((await renderHomes())['status-and-away'], 'Status replies');

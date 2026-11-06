@@ -553,7 +553,9 @@ test('claude files: a second-brain skill this setup shipped is removed with a ba
     const out = (await claudeFilesInto(home)).out;
     assert.match(out, /removed .*skills[\\/]second-brain[\\/]SKILL\.md \(the second-brain rules file now carries its lines\)/);
     assert.ok(!fs.existsSync(skillFile));
-    assert.ok(fs.readdirSync(path.dirname(skillFile)).some((f) => f.startsWith('SKILL.md.bak-')), 'a backup is kept');
+    const backups = path.join(home, '.config', 'ai-workstation-setup', 'backups', 'skills', 'second-brain');
+    assert.ok(fs.readdirSync(backups).some((f) => f.startsWith('SKILL.md.bak-')), 'a backup is kept outside the skill folder');
+    assert.ok(!fs.readdirSync(path.dirname(skillFile)).some((f) => f.includes('.bak-')), 'the skill folder holds no backup');
     assert.doesNotMatch((await claudeFilesInto(home)).out, /SKILL\.md/, 'a rerun has nothing to remove');
 
     // A copy with local edits is not one this setup shipped: it stays, and the user gets a to-do.
