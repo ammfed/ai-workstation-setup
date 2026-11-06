@@ -13,6 +13,7 @@ import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Context, Skip, detectPlatform, withoutPath } from '../lib/context.mjs';
+import { Prompter } from '../lib/prompt.mjs';
 import { installSkill, setHook, settingsPath } from '../lib/claude.mjs';
 import { cswapThreshold, researchBrowserPort } from '../modules/agent-clis/module.mjs';
 import { createHash } from 'node:crypto';
@@ -20,7 +21,7 @@ import { PATCH_MARKER, PRISTINE_SHA256, earlierOfficeNamesHelper, mergePixelSett
 import { PR_MERGE_RULES, registerContextReminder, reminderTokens } from '../modules/claude-code/module.mjs';
 import { findOpenWhisprAppImage, lavishUnits, openGuardSeconds } from '../modules/extras/module.mjs';
 import firstmate, { isLinkedWorktree, stowTokens } from '../modules/firstmate/module.mjs';
-import openrouter, { withEnv } from '../modules/openrouter/module.mjs';
+import openrouter, { MODEL_CHOICES, withEnv } from '../modules/openrouter/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
 import { renderBriefInclude } from '../modules/preferences/render.mjs';
 import skills, { writeBundledSkill } from '../modules/skills/module.mjs';
@@ -966,7 +967,7 @@ async function runOpenrouter(home, fmHome, answers, { dryRun = false } = {}) {
     platform: { ...detectPlatform(), home },
     dryRun,
     interactive: false,
-    answers: new Map(Object.entries({ OPENROUTER_FIRSTMATE_HOME: fmHome, ...answers })),
+    answers: new Map(Object.entries({ OPENROUTER_FIRSTMATE_HOME: fmHome, OPENROUTER_MODEL: 'typesafe/jev-1.13', ...answers })),
     prompter: null,
     repoRoot,
   });
@@ -1062,6 +1063,69 @@ test('a missing Firstmate home is skipped, not created, so a later clone is not 
   const { out } = await runOpenrouter(home, fmHome, { OPENROUTER_FIRSTMATE: 'yes' });
   assert.match(out, /skipped: Firstmate dispatch: .*firstmate does not exist/);
   assert.equal(fs.existsSync(fmHome), false);
+});
+
+test('with no OpenRouter model answer, nothing is picked: the model steps are skipped and a to-do is listed', { skip: !unix }, async () => {
+  const home = tempHome();
+  const fmHome = path.join(home, 'fm');
+  fs.mkdirSync(fmHome);
+  const { out } = await runOpenrouter(home, fmHome, { OPENROUTER_MODEL: '', OPENROUTER_FIRSTMATE: 'yes' });
+  assert.deepEqual(fs.readdirSync(fmHome), []);
+  assert.match(out, /to do: choose an OpenRouter model/);
+  assert.match(out, /skipped: Firstmate dispatch: no OpenRouter model chosen/);
+  assert.doesNotMatch(out, /set FM_DISPATCH/);
+  // The key file is still handled.
+  assert.equal(fs.existsSync(path.join(home, '.config', 'ai-workstation-setup', 'openrouter', '.env')), true);
+  // A question with no saved answer in a non-interactive run stays empty too.
+  const bare = await runOpenrouter(home, fmHome, { OPENROUTER_MODEL: undefined, OPENROUTER_FIRSTMATE: 'yes' });
+  assert.match(bare.out, /to do: choose an OpenRouter model/);
+  assert.deepEqual(fs.readdirSync(fmHome), []);
+});
+
+// The openrouter model question asked through the real prompter, with typed input stood in.
+async function askModel(typed) {
+  const q = openrouter.questions.find((x) => x.key === 'OPENROUTER_MODEL');
+  const prompter = new Prompter();
+  const inputs = [...typed];
+  prompter.question = async () => inputs.shift();
+  const ctx = new Context({ platform: { ...detectPlatform(), home: tempHome() }, interactive: true, answers: new Map(), prompter, repoRoot });
+  ctx.beginModule('openrouter');
+  const out = [];
+  const write = process.stdout.write;
+  process.stdout.write = (t) => (out.push(String(t)), true);
+  try {
+    return { value: await ctx.ask(q), shown: out.join('') };
+  } finally {
+    process.stdout.write = write;
+  }
+}
+
+test('the model question lists Jev with no default, and takes a list pick or a typed id', async () => {
+  const q = openrouter.questions.find((x) => x.key === 'OPENROUTER_MODEL');
+  assert.equal(q.default, '');
+  assert.ok(MODEL_CHOICES.some((c) => c.value === 'typesafe/jev-1.13'));
+  assert.ok(q.alwaysAsk);
+  const jev = await askModel(['1']);
+  assert.equal(jev.value, 'typesafe/jev-1.13');
+  assert.match(jev.shown, /1\) typesafe\/jev-1\.13/);
+  assert.doesNotMatch(jev.shown, /\(default\)/);
+  const typed = await askModel([String(MODEL_CHOICES.length + 1), 'acme/some-model-2.1']);
+  assert.equal(typed.value, 'acme/some-model-2.1');
+  // A moving alias is refused and asked again.
+  const alias = await askModel([String(MODEL_CHOICES.length + 1), 'acme/some-model-latest', 'acme/some-model-2.1']);
+  assert.equal(alias.value, 'acme/some-model-2.1');
+  assert.match(alias.shown, /Not valid/);
+  const skip = await askModel(['']);
+  assert.equal(skip.value, '');
+});
+
+test('a typed custom id reaches the Firstmate dispatch line, and a bad id in an answers file is refused', { skip: !unix }, async () => {
+  const home = tempHome();
+  const fmHome = path.join(home, 'fm');
+  fs.mkdirSync(fmHome);
+  await runOpenrouter(home, fmHome, { OPENROUTER_MODEL: 'acme/some-model-2.1', OPENROUTER_FIRSTMATE: 'yes' });
+  assert.match(fs.readFileSync(path.join(fmHome, '.env'), 'utf8'), /^FM_DISPATCH_MODEL=acme\/some-model-2\.1$/m);
+  await assert.rejects(runOpenrouter(home, fmHome, { OPENROUTER_MODEL: 'acme/some-model-latest' }), /not one of/);
 });
 
 const hasAnalyze = spawnSync('systemd-analyze', ['--version'], { stdio: 'ignore' }).status === 0;
