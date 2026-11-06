@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { cronCommand, ensureCronLine, shellQuote } from '../../lib/cron.mjs';
-import { Skip } from '../../lib/context.mjs';
+import { Skip, withoutPath } from '../../lib/context.mjs';
 import { windowsPathOf } from '../../lib/wsl.mjs';
 import { addSessionStartHook, claudeDir, setClaudeEnv } from '../../lib/claude.mjs';
 import { versionCheck } from '../agent-clis/tools.mjs';
@@ -115,11 +115,6 @@ export function launchAgent({ label, hours, vault, script, all, log }) {
 </plist>
 `;
 }
-
-// PATH is whatever the shell that ran the installer had, so it is left out of the comparison.
-const withoutPath = (text) => text
-  .replace(/^Environment="PATH=.*$/m, '')
-  .replace(/<key>PATH<\/key><string>[^<]*<\/string>/, '');
 
 /**
  * Write a unit this setup owns. A unit that is exactly what an earlier version of this setup

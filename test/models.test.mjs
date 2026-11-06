@@ -343,18 +343,13 @@ test('the model map lists the installer defaults and sends small tasks to Sonnet
   assert.doesNotMatch(map, /\| (xhigh|max) \|/);
 });
 
-test('the workflow-playbook skill routes models and waits at a review page the way the shipped preferences do', () => {
+test('the workflow-playbook skill points to the model rules and waits at a review page the way the shipped preferences do', () => {
   const skill = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
   const routing = skill.slice(skill.indexOf('**Match the model to the job.**'), skill.indexOf('2. **One complete brief.**'));
-  const row = (job) => routing.split('\n').map((l) => l.trim()).find((l) => l.startsWith(`| ${job}`)) || '';
-  assert.match(row('Building'), /strongest model at medium effort/);
-  assert.match(row('Research, scouts'), /strongest model at medium effort.*high effort when the result is weak.*security audits and hard-to-undo plans at high/);
-  assert.match(row('A code bug hunt'), /strongest model at high effort.*extra-high effort only as the second re-run/);
-  assert.match(row('A new look'), /strongest model at high effort.*extra-high effort only as the second re-run/);
+  assert.match(routing, /Follow the models-and-research skill for the model and effort of each job\./);
+  assert.match(routing, /Without it: the strongest model at medium effort for most work, high effort for a code bug hunt whose cause is unknown and for a new look/);
+  assert.doesNotMatch(routing, /\| Job \|/, 'the model table lives in the models-and-research skill only');
   assert.doesNotMatch(skill, /highest effort/);
-  assert.match(row('Polish'), /strongest model at medium effort/);
-  assert.match(row('Small, clear tasks'), /faster model at medium effort.*failed check, re-run it on the strongest model at medium effort/);
-  assert.match(row('Bulk fetching'), /fastest model at medium effort.*faster model at medium effort drafts/);
   assert.match(routing, /above these only when the owner names it/);
 
   const rules = renderPreferenceSkills((k) => ({ PREFS_MODEL_ROUTING: 'capable' })[k])['models-and-research'];

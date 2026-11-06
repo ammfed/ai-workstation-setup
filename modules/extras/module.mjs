@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { Skip } from '../../lib/context.mjs';
+import { Skip, withoutPath } from '../../lib/context.mjs';
 import { versionCheck, warnPathOrder } from '../agent-clis/tools.mjs';
 
 // Optional desktop and document tools that sit next to an agent setup. Nothing is
@@ -81,8 +81,8 @@ async function installLavishLibrary(ctx) {
   const prefix = ctx.capture('npm prefix -g');
   const lavishBin = prefix && fs.existsSync(path.join(prefix, 'bin', 'lavish-axi')) ? path.join(prefix, 'bin', 'lavish-axi') : null;
   const rendered = lavishUnits(dir, lavishBin);
-  const api = await ctx.writeFile(path.join(units, 'lavish-library-api.service'), rendered.api, { onConflict: 'ask' });
-  const ui = await ctx.writeFile(path.join(units, 'lavish-library.service'), rendered.ui, { onConflict: 'ask' });
+  const api = await ctx.writeFile(path.join(units, 'lavish-library-api.service'), rendered.api, { onConflict: 'ask', same: withoutPath });
+  const ui = await ctx.writeFile(path.join(units, 'lavish-library.service'), rendered.ui, { onConflict: 'ask', same: withoutPath });
   const running = ctx.capture('systemctl --user is-active lavish-library.service') === 'active';
   if (api || ui || !running) ctx.run('systemctl --user daemon-reload && systemctl --user enable --now lavish-library-api.service lavish-library.service');
   else ctx.ok('lavish-library.service is enabled and running');

@@ -12,7 +12,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { Context, Skip, detectPlatform } from '../lib/context.mjs';
+import { Context, Skip, detectPlatform, withoutPath } from '../lib/context.mjs';
 import { installSkill, setHook, settingsPath } from '../lib/claude.mjs';
 import { cswapThreshold, researchBrowserPort } from '../modules/agent-clis/module.mjs';
 import { createHash } from 'node:crypto';
@@ -455,6 +455,51 @@ test('an installed skill is kept, or updated through the skills CLI, or added ag
   }
 });
 
+test('a skill pinned to a tag is added at that tag, and an update adds it again instead of moving it to the newest version', async () => {
+  const home = skillsHome();
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const ctx = context(home, { dryRun: true });
+    const pinned = { update: true, ref: 'v1.2.3' };
+    assert.match(await capture(() => installSkill(ctx, 'example/skills', 'grilling', pinned)), /would run: npx -y skills add example\/skills#v1\.2\.3 --skill grilling -g -a claude-code -y/);
+    assert.match(await capture(() => installSkill(ctx, 'example/skills', 'tdd', { ref: 'v1.2.3' })), /would run: npx -y skills add example\/skills#v1\.2\.3 --skill tdd/);
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+  }
+});
+
+test('a backup of a file inside a skill folder goes to the setup backups folder, not into the skill', async () => {
+  const home = tempHome();
+  const skill = path.join(home, '.claude', 'skills', 'example');
+  fs.mkdirSync(skill, { recursive: true });
+  const file = path.join(skill, 'SKILL.md');
+  fs.writeFileSync(file, 'old\n');
+  const other = path.join(home, 'notes.txt');
+  fs.writeFileSync(other, 'old\n');
+  const ctx = context(home);
+  await ctx.writeFile(file, 'new\n', { onConflict: 'replace' });
+  await ctx.writeFile(other, 'new\n', { onConflict: 'replace' });
+  assert.deepEqual(fs.readdirSync(skill), ['SKILL.md'], 'nothing but the skill stays in its folder');
+  const kept = path.join(home, '.config', 'ai-workstation-setup', 'backups', 'skills', 'example');
+  const copies = fs.readdirSync(kept).filter((n) => n.startsWith('SKILL.md.bak-'));
+  assert.equal(copies.length, 1);
+  assert.equal(fs.readFileSync(path.join(kept, copies[0]), 'utf8'), 'old\n');
+  assert.equal(fs.readdirSync(home).filter((n) => n.startsWith('notes.txt.bak-')).length, 1, 'other files keep their backup beside them');
+});
+
+test('a service file that differs only in its PATH line is up to date', async () => {
+  const home = tempHome();
+  const file = path.join(home, 'example.service');
+  const unit = (p) => `[Service]\nEnvironment="PATH=${p}"\nExecStart=/bin/true\n`;
+  fs.writeFileSync(file, unit('/old/bin'));
+  const ctx = context(home);
+  assert.equal(await ctx.writeFile(file, unit('/new/bin'), { onConflict: 'ask', same: withoutPath }), false);
+  assert.equal(fs.readFileSync(file, 'utf8'), unit('/old/bin'));
+  const plist = (p) => `<dict><key>PATH</key><string>${p}</string></dict>\n`;
+  assert.equal(withoutPath(plist('/a')), withoutPath(plist('/b')));
+  assert.notEqual(withoutPath(unit('/a').replace('true', 'false')), withoutPath(unit('/b')), 'any other difference still counts');
+});
+
 test('the skill update question is asked only when a chosen skill is installed, and defaults to yes', async () => {
   const home = skillsHome();
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
@@ -753,7 +798,7 @@ test('the end of the install lists the skills installed and skipped, then says t
   const { code, out } = skillsDryRun();
   assert.equal(code, 0, out);
   const tail = out.slice(out.indexOf('\nSummary'));
-  assert.match(tail, /would install: kun, vision, grilling, teach, tdd, codebase-design, to-spec, to-tickets, to-questionnaire, wayfinder, domain-modeling \(for wayfinder\), research \(for wayfinder\), prototype \(for wayfinder\), find-docs, workflow-playbook\n/);
+  assert.match(tail, /would install: kun, vision, grilling, teach, tdd, codebase-design, to-spec, to-tickets, to-questionnaire, diagnosing-bugs, wayfinder, domain-modeling \(for wayfinder\), research \(for wayfinder\), prototype \(for wayfinder\), find-docs, stow, workflow-playbook\n/);
   assert.match(tail, /skipped: no-mistakes: the no-mistakes CLI is not installed/);
   assert.match(tail, /skipped: composio-cli: the composio CLI is not installed/);
   assert.doesNotMatch(tail, /failed:/);

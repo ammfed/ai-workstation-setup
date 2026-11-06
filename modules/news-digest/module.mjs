@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { Skip } from '../../lib/context.mjs';
+import { Skip, withoutPath } from '../../lib/context.mjs';
 
 // A scheduled collector: every few hours it reads the sources you list (feeds and pages), keeps
 // the items it has not seen, and writes one Markdown digest. The work is plain scripting in
@@ -56,7 +56,7 @@ async function systemdTimer(ctx, script, hours) {
     'WantedBy=timers.target',
     '',
   ].join('\n');
-  const a = await ctx.writeFile(path.join(unitDir, `${NAME}.service`), service, { onConflict: 'ask' });
+  const a = await ctx.writeFile(path.join(unitDir, `${NAME}.service`), service, { onConflict: 'ask', same: withoutPath });
   const b = await ctx.writeFile(path.join(unitDir, `${NAME}.timer`), timer, { onConflict: 'ask' });
   const enabled = ctx.capture(`systemctl --user is-enabled ${NAME}.timer`) === 'enabled';
   if (a || b || !enabled) ctx.run(`systemctl --user daemon-reload && systemctl --user enable --now ${NAME}.timer`);
@@ -88,7 +88,7 @@ async function launchdAgent(ctx, script, hours) {
 </dict>
 </plist>
 `;
-  if (await ctx.writeFile(plist, content, { onConflict: 'ask' })) {
+  if (await ctx.writeFile(plist, content, { onConflict: 'ask', same: withoutPath })) {
     ctx.run(`launchctl bootout gui/$(id -u)/${LAUNCHD_LABEL} 2>/dev/null; launchctl bootstrap gui/$(id -u) "${plist}"`);
   }
   ctx.info(`disable it with: launchctl bootout gui/$(id -u)/${LAUNCHD_LABEL} (and delete ${plist})`);

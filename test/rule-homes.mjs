@@ -94,6 +94,7 @@ export const RULE_HOMES = [
   row('List what the user ruled out', 'core'),
   row('Every round of questions to the user runs the grilling method', 'core'),
   row('Keep it balanced.', 'core'),
+  row('When grilling, ask through the question tool', 'core'),
   row('A gap only someone else can fill', WFO),
   row('Question the user hard about a plan', 'core', undefined, { PREFS_GRILL: 'gaps' }),
 

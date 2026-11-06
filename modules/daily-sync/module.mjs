@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { Skip } from '../../lib/context.mjs';
+import { Skip, withoutPath } from '../../lib/context.mjs';
 import { addSessionStartHook } from '../../lib/claude.mjs';
 
 // One scheduled pass a day that keeps what you depend on current: fast-forward clean repos,
@@ -148,7 +148,7 @@ export async function systemdTimer(ctx, script, time) {
       'WantedBy=timers.target',
       '',
     ].join('\n');
-    const wroteService = await ctx.writeFile(path.join(unitDir, `${u.name}.service`), service, { onConflict: 'ask' });
+    const wroteService = await ctx.writeFile(path.join(unitDir, `${u.name}.service`), service, { onConflict: 'ask', same: withoutPath });
     const wroteTimer = await ctx.writeFile(path.join(unitDir, `${u.name}.timer`), timer, { onConflict: 'ask' });
     wrote = wrote || wroteService || wroteTimer;
     if (ctx.capture(`systemctl --user is-enabled ${u.name}.timer`) !== 'enabled') notEnabled.push(u.name);
@@ -190,7 +190,7 @@ async function launchdAgent(ctx, script, time) {
 </dict>
 </plist>
 `;
-  if (await ctx.writeFile(plist, content, { onConflict: 'ask' })) {
+  if (await ctx.writeFile(plist, content, { onConflict: 'ask', same: withoutPath })) {
     ctx.run(`launchctl bootout gui/$(id -u)/${LAUNCHD_LABEL} 2>/dev/null; launchctl bootstrap gui/$(id -u) "${plist}"`);
   }
   ctx.info('launchd runs a missed time when the Mac wakes from sleep; a run missed while it was off is reported as FAILED by the next one');

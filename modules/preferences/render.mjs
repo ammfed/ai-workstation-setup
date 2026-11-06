@@ -252,6 +252,8 @@ function placeRules(get, { cardsPath, hideKitPath, decisionsPath } = {}) {
       'Keep it balanced. When the intent and the request are clear enough, go ahead without asking. Ask only where a real gap would change the result, and never loop with questions for their own sake.',
     grill === 'gaps' &&
       'Question the user hard about a plan only when it has a real gap: an underspecified instruction, an untested premise, or something irreversible whose reasoning was never tested. Never as the default way to ask.',
+    (grill === 'every' || grill === 'gaps') && (decisions === 'tool' || decisions === 'both') &&
+      'When grilling, ask through the question tool, one question at a time.',
   ]);
 
   add('core', 'Focus and priorities', [
@@ -440,7 +442,7 @@ function placeRules(get, { cardsPath, hideKitPath, decisionsPath } = {}) {
         '5 Build: one builder builds the whole spec test-first (tdd, codebase-design). ' +
         '6 Ship: validate, open a pull request, and merge once approved (no-mistakes).',
     get('PREFS_ROUTE') &&
-      'Short paths: a small clear change goes Plan, Build, Ship. A bug goes Plan, find the cause, Build with the reproduction as the regression test, Ship. Documents, review pages, research and one-off tasks do not take the route.',
+      'Short paths: a small clear change goes Plan, Build, Ship. A bug goes Plan, find the cause (diagnosing-bugs), Build with the reproduction as the regression test, Ship. Documents, review pages, research and one-off tasks do not take the route.',
     get('PREFS_TEST_FIRST') && TEST_FIRST_RULE,
     get('PREFS_GLOSSARY_ADR') && GLOSSARY_RULE,
     get('PREFS_MODEL_GUIDE') && "When a model is named for a task, read that vendor's official prompting guide first and brief the model the way it says.",
