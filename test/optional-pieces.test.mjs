@@ -463,6 +463,13 @@ test('a skill pinned to a tag is added at that tag, and an update adds it again 
     const pinned = { update: true, ref: 'v1.2.3' };
     assert.match(await capture(() => installSkill(ctx, 'example/skills', 'grilling', pinned)), /would run: npx -y skills add example\/skills#v1\.2\.3 --skill grilling -g -a claude-code -y/);
     assert.match(await capture(() => installSkill(ctx, 'example/skills', 'tdd', { ref: 'v1.2.3' })), /would run: npx -y skills add example\/skills#v1\.2\.3 --skill tdd/);
+    // A skill already at its pinned tag is kept, even with updates on; a new tag adds it again, even with updates off.
+    fs.mkdirSync(path.join(home, '.config', 'ai-workstation-setup'), { recursive: true });
+    fs.writeFileSync(path.join(home, '.config', 'ai-workstation-setup', 'skill-pins.json'), JSON.stringify({ grilling: 'v1.2.3' }));
+    const same = await capture(() => installSkill(ctx, 'example/skills', 'grilling', pinned));
+    assert.match(same, /skill grilling already installed at v1\.2\.3/);
+    assert.doesNotMatch(same, /would run/);
+    assert.match(await capture(() => installSkill(ctx, 'example/skills', 'grilling', { ref: 'v1.3.0' })), /would run: npx -y skills add example\/skills#v1\.3\.0 --skill grilling/);
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
   }
