@@ -2,14 +2,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Skip } from '../../lib/context.mjs';
 
-// One OpenRouter key and one decision model (Jev by default) for the tools that can reach a model
+// One OpenRouter key and one decision model you choose for the tools that can reach a model
 // through OpenRouter by their own documented settings. The key is taken from OPENROUTER_API_KEY or
 // pasted on the last screen and stored only in a local env file (mode 600), outside this clone. Tools are
 // wired only through settings they document; where a tool offers none, it is named, not patched.
 // See docs/openrouter.md.
 
 const NAME = 'openrouter';
-const DEFAULT_MODEL = 'typesafe/jev-1.13';
+
+// Ids confirmed on OpenRouter's live model list on 2026-11-06. There is no default: the person picks.
+export const MODEL_CHOICES = [
+  { value: 'typesafe/jev-1.13', label: 'typesafe/jev-1.13 (Jev, TypeSafe fast structured decision model)' },
+  { value: 'anthropic/claude-haiku-5.5', label: 'anthropic/claude-haiku-5.5 (Claude Haiku 5.5)' },
+  { value: 'google/gemini-3.8-flash', label: 'google/gemini-3.8-flash (Gemini 3.8 Flash)' },
+];
+// A versioned id is owner/name with a number in the name. Moving aliases such as "-latest" do not match.
+export const MODEL_ID = /^[a-z0-9][\w.-]*\/(?=[^/]*\d)[\w.:-]+$/i;
 
 export function keyFile(ctx) {
   return path.join(ctx.home, '.config', 'ai-workstation-setup', NAME, '.env');
@@ -69,7 +77,7 @@ function storeKey(ctx, file, current, key) {
 export default {
   name: NAME,
   title: 'OpenRouter key (optional)',
-  description: 'Opt-in: one OpenRouter key and decision model (Jev by default) for the tools that support it, kept in a local env file',
+  description: 'Opt-in: one OpenRouter key and a decision model you pick (Jev is one choice) for the tools that support it, kept in a local env file',
   // Before voice-mode, which reads the key file and model from these answers.
   order: 85,
   group: 'tools',
@@ -85,9 +93,16 @@ export default {
     },
     {
       key: 'OPENROUTER_MODEL',
-      type: 'text',
-      message: 'Decision model on OpenRouter for tools that ask one (voice mode actions, Firstmate dispatch)',
-      default: DEFAULT_MODEL,
+      type: 'choice',
+      message: 'Decision model on OpenRouter for tools that ask one (voice mode actions, Firstmate dispatch). There is no default.',
+      choices: MODEL_CHOICES,
+      custom: MODEL_ID,
+      customLabel: 'Another model (you type its versioned id)',
+      customPrompt: 'Versioned model id, as on openrouter.ai/models',
+      customHint: 'a versioned OpenRouter model id such as typesafe/jev-1.13, not a moving alias',
+      allowEmpty: true,
+      default: '',
+      alwaysAsk: true,
     },
     {
       key: 'OPENROUTER_FIRSTMATE',
@@ -121,10 +136,19 @@ export default {
       });
     });
 
-    if (ctx.get('OPENROUTER_FIRSTMATE')) {
+    const model = ctx.get('OPENROUTER_MODEL');
+    if (!model) {
+      ctx.todo('choose an OpenRouter model: set OPENROUTER_MODEL (for example typesafe/jev-1.13 for Jev, or any versioned id from openrouter.ai/models) and rerun with --modules openrouter');
+    }
+
+    if (ctx.get('OPENROUTER_FIRSTMATE') && !model) {
+      await ctx.step('Firstmate dispatch', () => {
+        throw new Skip('no OpenRouter model chosen; set OPENROUTER_MODEL, then rerun');
+      });
+    } else if (ctx.get('OPENROUTER_FIRSTMATE')) {
       await ctx.step('Firstmate dispatch', () => {
         const env = path.join(firstmateHome(ctx), '.env');
-        writeDispatch(ctx, env, ctx.get('OPENROUTER_MODEL') || DEFAULT_MODEL);
+        writeDispatch(ctx, env, model);
         const text = fs.existsSync(env) ? fs.readFileSync(env, 'utf8') : '';
         if (!process.env.OPENROUTER_API_KEY && !/^\s*OPENROUTER_API_KEY=\S/m.test(text)) {
           ctx.todo(`put your OpenRouter key as OPENROUTER_API_KEY in ${env} or your environment; Firstmate's resolver reads it there, not from ${file}`);
@@ -135,9 +159,11 @@ export default {
     await ctx.step('tools', () => {
       const voice = (ctx.values.MODULES || []).includes('voice-mode');
       ctx.info(
-        voice
-          ? `voice mode reads this key file and uses ${ctx.get('OPENROUTER_MODEL')} for its actions`
-          : 'voice mode, when you install it, reads this key file for its actions',
+        voice && model
+          ? `voice mode reads this key file and uses ${model} for its actions`
+          : voice
+            ? 'voice mode reads this key file for its actions and keeps its own model setting until you choose an OpenRouter model'
+            : 'voice mode, when you install it, reads this key file for its actions',
       );
       ctx.info('compact-adviser calls TypeSafe directly and documents no OpenRouter setting; it uses TYPESAFE_API_KEY (see docs/openrouter.md)');
       if (!ctx.get('OPENROUTER_FIRSTMATE')) {

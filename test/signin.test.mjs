@@ -152,7 +152,7 @@ test('--yes: no sign-in screen; every sign-in stays a to-do', () => {
 // The parts that need a key, picked under customise: a dry run at a terminal on simulated macOS.
 async function runWithKeys({ interactive = true, secrets = [] } = {}) {
   const prompter = fakePrompter([], secrets);
-  const answers = new Map(Object.entries({ MCP_SERVERS: 'context7', CLICKUP_DEFAULT_LIST: 'Inbox' }));
+  const answers = new Map(Object.entries({ MCP_SERVERS: 'context7', CLICKUP_DEFAULT_LIST: 'Inbox', OPENROUTER_MODEL: 'typesafe/jev-1.13' }));
   const ctx = new Context({ platform: detectPlatform('macos'), dryRun: true, interactive, answers, prompter, repoRoot });
   ctx.acceptPlan = true;
   const parts = [mcpServers, clickup, openrouter];

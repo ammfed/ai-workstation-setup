@@ -68,7 +68,7 @@ brackets; nothing is vendored. Items marked optional are off until you pick them
 - Ledger: one record of what you say and decide and of every status line, a live Now page and a read-only board, and an optional task sync that keeps linked items the same across your homes, TickTick, ClickUp and your vault (ledger; [guide](docs/ledger.md)).
 - Voice mode: talk with your assistant through OpenAI Realtime or Gemini Live, with desktop and browser actions chosen by a fast decision model (voice-mode; [guide](docs/voice-mode.md)).
 - News digest: every few hours, new items from the feeds and pages you list, in one Markdown digest, summarised only by a model you name (news-digest; [guide](docs/news-digest.md)).
-- One [OpenRouter](https://openrouter.ai) key and decision model ([Jev](https://openrouter.ai/typesafe/jev-1.13) by default), kept in a local env file and used where a tool documents it (openrouter; [notes](docs/openrouter.md)).
+- One [OpenRouter](https://openrouter.ai) key and decision model you choose (no default; [Jev](https://openrouter.ai/typesafe/jev-1.13) is one listed choice), kept in a local env file and used where a tool documents it (openrouter; [notes](docs/openrouter.md)).
 
 **Desktop extras (optional)**
 - [docling](https://github.com/docling-project/docling) documents to Markdown, [OpenWhispr](https://github.com/OpenWhispr/openwhispr) dictation, [llama.cpp](https://github.com/ggml-org/llama.cpp) for local models (extras); [WezTerm](https://wezterm.org) with a translucent theme and [JetBrainsMono Nerd Font](https://github.com/ryanoasis/nerd-fonts) (terminal); WSL with Ubuntu on Windows (wsl).

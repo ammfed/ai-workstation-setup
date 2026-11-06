@@ -2,8 +2,9 @@
 
 The opt-in `openrouter` module keeps one [OpenRouter](https://openrouter.ai) key and one
 decision model for the tools that can reach a model through OpenRouter by their own
-documented settings. The default model is [Jev](https://openrouter.ai/typesafe/jev-1.13),
-TypeSafe's fast structured decision model.
+documented settings. There is no default model: the installer asks which one to use.
+[Jev](https://openrouter.ai/typesafe/jev-1.13), TypeSafe's fast structured decision model, is one
+of the listed choices, and you can type any other versioned model id from openrouter.ai/models.
 
 ```sh
 export OPENROUTER_API_KEY=...        # or leave it unset and paste it on the last screen
@@ -14,8 +15,11 @@ The key is read from `OPENROUTER_API_KEY` or pasted hidden on the setup's last s
 terminal, after the install), never from an answers file,
 and stored only in `~/.config/ai-workstation-setup/openrouter/.env` (mode 600), outside this
 clone. With no key given, the module creates that file empty for you to fill in.
-`OPENROUTER_MODEL` sets the model (default `typesafe/jev-1.13`). Keep a versioned model id
-such as this one, not a moving alias, so a tool's behavior changes only when you change it.
+`OPENROUTER_MODEL` sets the model. The list is `typesafe/jev-1.13`, `anthropic/claude-haiku-5.5`
+and `google/gemini-3.8-flash`, or you type another id. Keep a versioned model id, not a moving
+alias, so a tool's behavior changes only when you change it. With no answer (for example an
+unattended run), the module does not pick one. It skips the model steps, including the Firstmate
+dispatch setting, and lists the missing answer as a to-do. The key is still handled.
 
 ## Which tools use it
 

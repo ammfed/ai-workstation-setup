@@ -41,7 +41,7 @@ mic ──► realtime voice provider (OpenAI Realtime or Gemini Live) ──►
   that read your records and one that hands a question or task to your assistant's own
   session. It has no tool that changes a file, runs a command or sends a message.
 - **A decision model chooses, code acts.** While you speak, the partial transcript goes to a
-  fast decision model ([Jev](https://openrouter.ai/typesafe/jev-1.13), through OpenRouter's
+  fast decision model (for example [Jev](https://openrouter.ai/typesafe/jev-1.13), through OpenRouter's
   Decisions API), which returns one choice from a fixed catalog with a probability per option.
   Plain code carries out the chosen item only when that probability clears a threshold, so the
   app can open before you finish the sentence. The model never produces a command, a path or
