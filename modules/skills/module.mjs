@@ -11,6 +11,7 @@ const BUNDLED_EXTRAS = {
     ['principles/bin/principle-check.mjs', 'principles/bin/principle-check.mjs'],
     ['skills/workflow-playbook/checkpoints.md', 'checkpoints.md'],
     ['skills/workflow-playbook/video.md', 'video.md'],
+    ['skills/workflow-playbook/slides.md', 'slides.md'],
   ],
 };
 

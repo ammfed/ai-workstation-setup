@@ -126,6 +126,7 @@ Why: one supervisor that checks every phase against the same method catches drif
    - **A handover item.** When real people will run or use it, an item names who runs it and how they learn it, blocked by the last build item.
    - Finished items stay on the list, marked done, never deleted.
    - Dates belong to the owner. Agents never set or move a date; they only flag one that has passed.
+   - Plans show the order of the work, never days, hours or estimates. This is about plans only. The journey showcase in rule 1.5 records hours already spent, so it stays.
 
    Why: each of these is easy to forget until it blocks a launch, and a date moved by an agent hides the slip the owner needs to see.
 
@@ -436,6 +437,8 @@ This section is phase 10. It keeps the way of working, and this playbook, curren
 - It holds 25 steps in three checkpoints, most with a reusable prompt. The steps named above (step 12, step 18) are its steps.
 - Add the next checkpoint only when the owner says the next stage is good.
 
+Why: writing down the steps and prompts makes a direction that took many rounds to find faster to reach next time.
+
 ## 11. Making a video
 
 - When the work is a video of any kind, read `video.md` in this skill's folder. It says which of its twelve stages the kind of video needs and where AI generation fits.
@@ -443,4 +446,8 @@ This section is phase 10. It keeps the way of working, and this playbook, curren
 
 Why: a video has its own stages and risks, so one companion file keeps them out of the general rules.
 
-Why: writing down the steps and prompts makes a direction that took many rounds to find faster to reach next time.
+## 12. Making a presentation
+
+- When the work is a presentation, read `slides.md` in this skill's folder. It maps the stages of a deck onto these phases and gates.
+
+Why: a deck has risks of its own, such as the back row, the show app and a stage that is not under the owner's control.
