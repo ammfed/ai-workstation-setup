@@ -74,6 +74,7 @@ const SKILLS = [
     install: (ctx) => writeBundledSkill(ctx, 'workflow-playbook'),
     brings: ['kun'],
   },
+  { value: 'motion-designer', repo: 'dylantarre/animation-principles', label: 'motion-designer - plan and review the motion in any video: timing, easing, staging and follow-through' },
   {
     value: 'composio-cli',
     label: "composio-cli - Composio's own Claude Code plugin and skill, added by `composio setup` (agent-clis installs the tool; skipped without it)",
@@ -129,7 +130,7 @@ async function tallied(ctx, tally, label, fn) {
 export default {
   name: 'skills',
   title: 'Agent skills',
-  description: 'Claude Code skills, downloaded from their upstreams: kun, vision, grilling, teach, tdd, codebase-design, to-spec, to-tickets, to-questionnaire, diagnosing-bugs, wayfinder, find-docs, no-mistakes, stow, workflow-playbook, composio-cli',
+  description: 'Claude Code skills, downloaded from their upstreams: kun, vision, grilling, teach, tdd, codebase-design, to-spec, to-tickets, to-questionnaire, diagnosing-bugs, wayfinder, find-docs, no-mistakes, stow, workflow-playbook, motion-designer, composio-cli',
   order: 50,
   group: 'assistant',
   summary: 'skills for planning and test-first coding',
