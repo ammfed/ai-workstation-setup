@@ -2640,7 +2640,7 @@ test('round 3: folders in the file manager, pop-ups closed with Escape, and "wri
   await ctl.performControl(cat.get('place:downloads'), { run, home, env: {}, activeApp: async () => 'org.kde.dolphin' });
   assert.deepEqual(ran.splice(0), ['ydotool key 29:1 38:1 38:0 29:0', `ydotool type --key-delay 8 -- ${path.join(home, 'Downloads')}`, 'ydotool key 28:1 28:0']);
   await ctl.performControl(cat.get('place:downloads'), { run, home, env: {}, activeApp: async () => 'firefox' });
-  assert.deepEqual(ran.splice(0), [`xdg-open ${path.join(home, 'Downloads')}`]);
+  assert.deepEqual(ran.splice(0), [`${process.platform === 'darwin' ? 'open' : 'xdg-open'} ${path.join(home, 'Downloads')}`]);
   await assert.rejects(ctl.performControl(cat.get('place:music'), { run, home: path.join(tmp, 'no-such-home'), env: {}, activeApp: async () => '' }), /no Music folder/);
   assert.equal(describe(cat.get('place:home')), 'went to your home folder');
 });
