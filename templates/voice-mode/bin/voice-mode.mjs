@@ -37,6 +37,7 @@ import { fileURLToPath } from 'node:url';
 import { CONFIG_DIR, loadConfig, merge, readKey } from './config.mjs';
 import { Records, TOOLS, runTool } from './records.mjs';
 import { Chooser, TEXT_KINDS, buildCatalog, describe, documentFolders, perform, quickPick } from './desk.mjs';
+import { prepare } from './control.mjs';
 import { Browser, asksAbout, isYes, pageCatalog, performPage } from './browser.mjs';
 import { Mic, Speaker, audioTools, has, play, resample, rms, startEchoCancel, tone, wavToPcm } from './audio.mjs';
 import { PROVIDERS, createProvider, synthesize } from './providers.mjs';
@@ -130,10 +131,10 @@ const RULES = `How you work:
 - The briefing below (when there is one) is your own memory: your recent conversation with the user, the work under way and who is doing it, your notes and what you have learned. Speak from it as yourself; never call it a briefing.
 - When the briefing answers a question, answer at once without tools, unless the user asks you to read, look up or check notes, files or records: then always read them with the tools, since they are newer than your memory.
 - For anything else about notes, files, documents, memories, records, people, projects, plans, decisions or work, look it up yourself first, in the same reply: search_records with a few keywords (and the source, when the user names one), list_records for what is newest in a source, read_record to read one in full. Then answer from what they return, the newest record first when they disagree. Never make up a status.
-- Only when those do not answer (after you looked), or the user asks for real work (changing, renaming, moving or deleting files, code, tasks or messages, running or checking anything now, research, anything that takes effort), or for something outside your records (mail, messages, other people's replies), say one short line such as "Let me check; I'll tell you here as soon as it's back" and call hand_off in that same reply, with the request in the user's words. Saying you will check without calling a tool leaves the user waiting for nothing. It goes to your own working session, which can do it; never say the work is done until an answer says so. Every new request needs its own hand_off, even one asked before. Never hand off what the desktop helper below does (opening an app, a website or a web address, a web search, typing, closing an app): those are done here, at once.
+- Only when those do not answer (after you looked), or the user asks for real work (changing, renaming, moving or deleting files, code, tasks or messages, running or checking anything now, research, anything that takes effort), or for something outside your records (mail, messages, other people's replies), say one short line such as "Let me check; I'll tell you here as soon as it's back" and call hand_off in that same reply, with the request in the user's words. Saying you will check without calling a tool leaves the user waiting for nothing. It goes to your own working session, which can do it; never say the work is done until an answer says so. Every new request needs its own hand_off, even one asked before. Never hand off what the desktop helper below does (opening an app, a website or a web address, a web search, typing, pressing keys and shortcuts, the mouse, windows and tabs, closing an app, moving or copying one named file): those are done here, at once.
 - When an answer to a hand-off arrives (a line starting "Answer arrived"), tell the user at once, briefly, as your own answer. You are one assistant: never say that someone else, another session or another assistant answered.
-- A separate desktop helper acts on the computer while the user is still talking: it opens apps, websites, folders and records, switches to an open app, closes an open app the way its close button does (so the app still asks about unsaved work), minimizes, maximizes or moves the window in front, shows the desktop or the overview, turns the volume up or down or mutes it, plays, pauses or skips media, changes screen brightness, takes a screenshot, locks the screen, writes a note, searches the web, and types dictated text. What it did may already be in the conversation as a line starting "Desktop helper:"; then confirm it in a few words. Otherwise, when the user asked for one of those, call desktop_action with the request in the user's words, which also does it when the helper missed it. If it still did nothing, say in a few words that you did not catch what to do and ask the user to say it again.
-- The helper itself never deletes or moves files, sends messages or email, buys anything, changes settings, runs commands, or closes all windows at once. That limits only the helper: such requests are real work, so hand them off.
+- A separate desktop helper acts on the computer while the user is still talking: it opens apps, websites, folders and records, switches to an open app, closes an open app the way its close button does (so the app still asks about unsaved work), minimizes, maximizes or moves the window in front, shows the desktop or the overview, turns the volume up or down or mutes it, plays, pauses or skips media, changes screen brightness, takes a screenshot, locks the screen, writes a note, searches the web, and types dictated text. It is also the user's hands, for someone who cannot touch the keyboard or the mouse: it presses any key or keyboard shortcut they name (Enter, Escape, Tab, the arrows, "control shift t"), copies, cuts, pastes, selects all, undoes and redoes, clicks, double-clicks, right-clicks and scrolls where the mouse pointer is and moves the pointer, switches to the next window and closes or restores the window in front, opens, closes, switches to, numbers and reopens tabs, reloads and goes back, and moves, copies or sends to the trash a file they name between their home, Downloads, Documents and Desktop folders. What it did may already be in the conversation as a line starting "Desktop helper:"; then confirm it in a few words. Otherwise, when the user asked for one of those, call desktop_action with the request in the user's words, which also does it when the helper missed it. If it still did nothing, say in a few words that you did not catch what to do and ask the user to say it again.
+- The helper itself never deletes anything for good, sends messages or email, buys anything, changes settings, runs commands, or closes all windows at once. It moves a file or sends it to the trash, or presses a shortcut that sends, only after a yes: when a line says it is not done yet, ask the user one short question with the word it gives, and it is done only if they then say yes. Anything bigger is real work, so hand it off.
 - You are heard, not read: short spoken sentences, no lists, no markdown, no links read aloud. Keep an answer under about twenty seconds unless asked for more.
 - Talk about the work the way a colleague would, by its project and what it is about. Never read task ids, slugs, codes, file names or links aloud; say a name only when two items would otherwise be confused, and then naturally ("the one called banner fix").`;
 
@@ -199,7 +200,7 @@ const NOTES_TOOL = {
 
 const DESKTOP_TOOL = {
   name: 'desktop_action',
-  description: 'Call when the user asked the computer or the browser page to do something (open an app, a website or a web address, switch, close, volume, media, a note, a web search, typing, click, scroll, read the page...): returns what the desktop and browser helpers did this turn, and does a plain command the helpers missed.',
+  description: 'Call when the user asked the computer or the browser page to do something (open an app, a website or a web address, switch, close, volume, media, a note, a web search, typing, press a key or shortcut, copy, paste, undo, click, scroll, move the pointer, next window, tabs, move or copy a file, read the page...): returns what the desktop and browser helpers did this turn, and does a plain command the helpers missed.',
   parameters: { type: 'object', properties: { request: { type: 'string', description: "the request in the user's words, such as \"open google.com\" or \"search the web for food\"" } } },
 };
 
@@ -460,20 +461,40 @@ export class Session {
     const started = performance.now();
     const turn = this.turn;
     const slot = info.slot || '';
-    const done = describe(item, slot);
+    // A file action is planned first (which file, from where to where); a move, a trash or a
+    // shortcut that sends waits for a spoken yes.
+    let prep;
+    try {
+      prep = prepare(item, slot, { exclude: this.config.exclude });
+    } catch (err) {
+      turn?.actions.push({ key, error: err.message });
+      this.provider.note?.(`Desktop helper: nothing was done: ${err.message}. Tell the user.`);
+      this.log({ event: 'action-failed', target: key, error: this.config.logTranscripts ? err.message : 'not planned' });
+      return;
+    }
+    const { plan } = prep;
+    const done = describe(item, slot, { plan });
     // The same thing opened twice in a row (a repeated or split sentence) opens once;
-    // "volume up" twice is meant twice.
+    // "volume up" or "press down" twice is meant twice.
     const last = this.lastAction;
-    if (item.kind !== 'system' && !TEXT_KINDS.has(item.kind) && last && last.key === key && started - last.at < 8000) {
+    if (['app', 'site', 'folder', 'file', 'record', 'focus', 'close', 'files'].includes(item.kind) && last && last.key === key && last.slot === slot && started - last.at < 8000) {
       turn?.actions.push({ key, done, ms: turn ? Math.round(started - turn.t0) : null, repeat: true });
       return;
     }
-    this.lastAction = { key, at: started };
+    if (prep.hold) {
+      this.confirm = { desk: true, key, item, slot, plan, label: prep.word, what: prep.hold, at: Date.now(), turn };
+      this.provider.note?.(`Desktop helper: ready to ${prep.hold}, but not done yet. Ask the user in one short question whether to ${prep.hold}, using the word "${prep.word}" and saying what it is (here a file's name is needed); it is done only if they then say yes.`);
+      turn?.actions.push({ key, done: `not done yet: ask the user whether to ${prep.hold}`, ms: turn ? Math.round(started - turn.t0) : null, at: performance.now() });
+      this.log({ event: 'action-held', target: key, why: `needs a yes to ${this.config.logTranscripts ? prep.hold : prep.word}`, p: info.p, ms_from_speech_start: turn ? Math.round(started - turn.t0) : null });
+      return;
+    }
+    // Only what was really done counts as the last action: a held move asked again is asked again.
+    this.lastAction = { key, slot, at: started };
     try {
-      await this.performImpl(item, { roots: this.roots, exclude: this.config.exclude, has, slot, browser: this.browser, ...(this.config.actions.dryRun ? { ...this.dryRun(slot), browser: null } : {}) });
+      await this.performImpl(item, { roots: this.roots, exclude: this.config.exclude, has, slot, plan, browser: this.browser, ...(this.config.actions.dryRun ? { ...this.dryRun(slot), browser: null } : {}) });
       this.provider.note?.(`Desktop helper: ${done} for the user.`);
       const rec = { event: 'action', target: key, done, words: info.text.split(/\s+/).length, final: info.final, p: info.p };
-      if (!this.config.logTranscripts) rec.done = describe(item, slot, { words: false });
+      if (!this.config.logTranscripts) rec.done = describe(item, slot, { words: false, plan });
       rec.ms_from_speech_start = turn ? Math.round(performance.now() - turn.t0) : null;
       rec.launch_ms = Math.round(performance.now() - started);
       turn?.actions.push({ key, done, ms: rec.ms_from_speech_start, at: performance.now() });
@@ -534,26 +555,30 @@ export class Session {
   async answerConfirm(text) {
     const c = this.confirm;
     if (!c || c.turn === this.turn) return;
-    const label = c.item.label;
+    const label = c.label ?? c.item.label;
+    // A held desktop action (a move, a trash) or a held browser button.
+    const who = c.desk ? 'Desktop helper' : 'Browser helper';
+    const not = c.desk ? `nothing was done (it was to ${c.what})` : `"${label}" was not pressed`;
     if (!c.asked) {
       this.confirm = null;
       this.log({ event: 'confirm', pressed: false, why: 'the voice did not ask about it' });
-      return this.provider.note?.(`Browser helper: "${label}" was not pressed: it was not asked about, so a yes cannot count. The user can ask for it again.`);
+      return this.provider.note?.(`${who}: ${not}: it was not asked about, so a yes cannot count. The user can ask for it again.`);
     }
     if (this.turn?.overReply) {
       this.log({ event: 'confirm-ignored', why: 'said over the reply' });
       return;
     }
     this.confirm = null;
-    const say = (line) => this.provider.note?.(`Browser helper: ${line}`);
+    const say = (line) => this.provider.note?.(`${who}: ${line}`);
     if (Date.now() - c.at > (this.config.browser.confirmSec || 30) * 1000) {
       this.log({ event: 'confirm', pressed: false, why: 'too late' });
-      return say(`"${label}" was not pressed: the yes came too late. Ask again if it is still wanted.`);
+      return say(`${not}: the yes came too late. Ask again if it is still wanted.`);
     }
     if (!isYes(text)) {
       this.log({ event: 'confirm', pressed: false, why: 'no clear yes' });
-      return say(`"${label}" was not pressed: the user did not say yes.`);
+      return say(`${not}: the user did not say yes.`);
     }
+    if (c.desk) return this.actConfirmed(c, say);
     const snap = await this.browser.snapshot();
     const same = pageCatalog(snap, { maxItems: this.config.browser.maxItems }).filter(
       ([, it]) => it.op === 'click' && it.label === label && it.el === c.item.el && it.tab.id === c.item.tab.id && it.tab.url.split('#')[0] === c.item.tab.url.split('#')[0],
@@ -578,6 +603,26 @@ export class Session {
     }
   }
 
+  /** A held desktop action, after a plain yes: planned again (the files may have changed), then done. */
+  async actConfirmed(c, say) {
+    let plan = c.plan;
+    try {
+      if (plan) {
+        plan = prepare(c.item, c.slot, { exclude: this.config.exclude }).plan;
+        if (plan.src !== c.plan.src || plan.dst !== c.plan.dst) throw new Error('the files changed since the question');
+      }
+      await this.performImpl(c.item, { roots: this.roots, exclude: this.config.exclude, has, slot: c.slot, plan, ...(this.config.actions.dryRun ? this.dryRun(c.slot) : {}) });
+    } catch (err) {
+      this.log({ event: 'action-failed', target: c.key, error: this.config.logTranscripts ? err.message : 'failed after a yes' });
+      return say(`nothing was done (it was to ${c.what}): ${err.message}.`);
+    }
+    const done = describe(c.item, c.slot, { plan });
+    this.log({ event: 'action', target: c.key, done: this.config.logTranscripts ? done : describe(c.item, c.slot, { words: false, plan }), confirmed: true, ms_from_speech_start: this.turn ? Math.round(performance.now() - this.turn.t0) : null });
+    this.turn?.actions.push({ key: c.key, done });
+    say(`${done} after the user said yes.`);
+    this.onAction?.(done);
+  }
+
   /** actions.dryRun: log what would run instead of running it (the dictated words only with logTranscripts). */
   dryRun(slot) {
     const hide = (a) => (slot && !this.config.logTranscripts && String(a).includes(slot.trim().slice(0, 12)) ? '<dictated words>' : a);
@@ -585,6 +630,7 @@ export class Session {
       run: async (argv) => this.log({ event: 'dry-run', argv: argv.map(hide) }),
       exec: async (argv) => (this.log({ event: 'dry-run', argv: argv.slice(0, 9) }), '(0,)'),
       note: (folder) => path.join(folder, '(dry run).md'),
+      fileOps: Object.fromEntries(['move', 'copy', 'trash'].map((op) => [op, async () => this.log({ event: 'dry-run', files: op })])),
     };
   }
 
@@ -715,7 +761,7 @@ export class Session {
     // A held button waits for a yes only when the voice's reply really asked about it.
     const c = this.confirm;
     if (c && c.turn === t) {
-      c.asked = asksAbout(t.reply, c.item.label);
+      c.asked = asksAbout(t.reply, c.label ?? c.item.label);
       this.log({ event: 'confirm-asked', asked: c.asked });
     }
     // Said it would check but called no tool at all: ask the notes (a promise about the notes)
@@ -1268,13 +1314,28 @@ export async function doRequest(config, text, { log = () => {}, performImpl = pe
       }
       return;
     }
-    const done = describe(item, slot);
-    const logged = config.logTranscripts ? done : describe(item, slot, { words: false });
+    // Nobody can say yes here: a move, a trash or a shortcut that sends is never done.
+    let prep;
+    try {
+      prep = prepare(item, slot, { exclude: config.exclude });
+    } catch (err) {
+      result = { key, name: item.name, error: err.message, ms: ms() };
+      log({ event: 'action-failed', target: key, error: err.message });
+      return;
+    }
+    if (prep.hold) {
+      result = { key, name: item.name, error: `to ${prep.hold} needs the user's spoken yes in a conversation`, ms: ms() };
+      log({ event: 'action-held', target: key, why: `needs a yes to ${prep.word}` });
+      return;
+    }
+    const { plan } = prep;
+    const done = describe(item, slot, { plan });
+    const logged = config.logTranscripts ? done : describe(item, slot, { words: false, plan });
     const argv = [];
     // A dry run goes through the same checks and only records what would have run.
-    const stub = dryRun ? { run: async (a) => argv.push(a), exec: async (a) => (argv.push(a), '(0,)'), note: (folder) => path.join(folder, '(dry run).md') } : {};
+    const stub = dryRun ? { run: async (a) => argv.push(a), exec: async (a) => (argv.push(a), '(0,)'), note: (folder) => path.join(folder, '(dry run).md'), fileOps: Object.fromEntries(['move', 'copy', 'trash'].map((op) => [op, async (p) => argv.push([op, p.src, p.dst || 'trash'])])) } : {};
     try {
-      await performImpl(item, { roots, exclude: config.exclude, has, slot, browser: dryRun ? null : browser, ...stub });
+      await performImpl(item, { roots, exclude: config.exclude, has, slot, plan, browser: dryRun ? null : browser, ...stub });
       result = { key, name: item.name, done, ms: ms(), ...(dryRun ? { dry_run: true, would_run: argv[0] || null } : {}) };
       log({ event: 'action', target: key, done: logged, p: info.p, ms_from_request: result.ms, ...(dryRun ? { dry_run: true } : {}) });
     } catch (err) {

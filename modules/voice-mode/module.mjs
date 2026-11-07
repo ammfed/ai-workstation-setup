@@ -10,7 +10,7 @@ import { keyFile as openrouterKeyFile } from '../openrouter/module.mjs';
 // templates/voice-mode/bin, with the system's own audio tools. See docs/voice-mode.md.
 
 const NAME = 'voice-mode';
-const SCRIPTS = ['voice-mode.mjs', 'config.mjs', 'providers.mjs', 'records.mjs', 'desk.mjs', 'audio.mjs', 'orb.mjs', 'orb.qml', 'briefing.mjs', 'handoff.mjs', 'browser.mjs', 'lookout.mjs', 'notes.mjs', 'pc.mjs', 'tasks.mjs'];
+const SCRIPTS = ['voice-mode.mjs', 'config.mjs', 'providers.mjs', 'records.mjs', 'desk.mjs', 'control.mjs', 'audio.mjs', 'orb.mjs', 'orb.qml', 'briefing.mjs', 'handoff.mjs', 'browser.mjs', 'lookout.mjs', 'notes.mjs', 'pc.mjs', 'tasks.mjs'];
 // The orb runs on Qt 6's own `qml` tool with KDE's layer-shell module (overlay above every window).
 const ORB_PKGS = { apt: 'qml-qt6 qml6-module-qtquick-window qml6-module-qtquick-shapes qml6-module-org-kde-layershell', pacman: 'qt6-declarative layer-shell-qt' };
 const ORB_RUNNERS = ['/usr/lib/qt6/bin/qml', 'qml6', 'qml-qt6'];

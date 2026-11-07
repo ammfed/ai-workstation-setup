@@ -62,6 +62,10 @@ export const DEFAULTS = {
     // PC control: window, media, volume, brightness, screenshot, lock, switching to an open
     // app (KDE Plasma), notes, web search and typing dictated text (with ydotool).
     control: true,
+    // Hands-free control, with control on: keys and shortcuts, the mouse at the pointer, windows,
+    // browser tabs, and moving, copying or trashing files in the common folders (a move or a
+    // trash waits for a spoken yes).
+    handsFree: true,
     // Where notes go (default: a Notes folder in the documents folder); opened with the default app.
     notes: { folder: '' },
     searchUrl: 'https://duckduckgo.com/?q={q}',

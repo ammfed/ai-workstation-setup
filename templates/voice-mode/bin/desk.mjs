@@ -2,8 +2,9 @@
 // one of them from a partial transcript, and plain code that carries the pick out.
 // The model only chooses: an id from the catalog, and for the few actions that take words
 // (a note, a web search, text to type) which span of the user's own words they are. It
-// never produces a command, a path or a URL. Nothing here deletes, moves, sends, buys,
-// changes settings, closes apps or runs an arbitrary command.
+// never produces a command, a path or a URL. Nothing here deletes for good, sends, buys,
+// changes settings or runs an arbitrary command. Keys, the mouse, windows, tabs and moving
+// files (control.mjs) are read from the words by plain code; a move or a trash waits for a yes.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -11,6 +12,7 @@ import path from 'node:path';
 import { execFile, spawn, spawnSync } from 'node:child_process';
 import { excluded, readKey } from './config.mjs';
 import { inside } from './records.mjs';
+import { controlPick, describeControl, handsFreeItems, performControl } from './control.mjs';
 
 // Launchers and scripts are never opened as files, whatever the catalog says.
 const NEVER_OPEN = /\.(desktop|sh|bash|zsh|fish|py|pl|rb|js|mjs|cjs|exe|bat|cmd|ps1|com|msi|appimage|run|bin|jar|deb|rpm|app|command|scpt|applescript|lnk|url)$/i;
@@ -133,7 +135,16 @@ export function controlActions(config, { platform = process.platform, env = proc
   out.push(['note:new', { kind: 'note', name: TEXT.note.what, folder: a.notes.folder || path.join(a.documents || os.homedir(), 'Notes') }]);
   if (a.searchUrl && /^https:\/\/[^\s]*\{q\}/.test(a.searchUrl)) out.push(['search:web', { kind: 'search', name: TEXT.search.what, url: a.searchUrl }]);
   out.push(['url:web', { kind: 'url', name: TEXT.url.what }]);
-  if (platform === 'linux' && has('ydotool')) out.push(['type:text', { kind: 'type', name: TEXT.type.what, final: true }]);
+  if (platform === 'linux' && has('ydotool')) {
+    out.push(['type:text', { kind: 'type', name: TEXT.type.what, final: true }]);
+    // "type hello and press enter": read only by plain code (quickPick).
+    out.push(['type:enter', { kind: 'type', name: 'Type text they dictate, then press Enter', enter: true, local: true, final: true }]);
+  }
+  // Hands-free control (control.mjs): keys and the mouse with ydotool, windows with KWin, files anywhere.
+  if (a.handsFree !== false) {
+    const kwin = platform === 'linux' && isKde(env) && has('gdbus');
+    out.push(...handsFreeItems({ keys: platform === 'linux' && has('ydotool'), kwin, files: true, trash: platform === 'linux' && has('gio') }));
+  }
   return out;
 }
 
@@ -179,7 +190,8 @@ export function criteria(catalog) {
       'buying something, changing settings, running a command. Also this when it is not yet clear what should be done. ' +
       'Pressing a named button or link on the browser page is its own choice, whatever the button does (the helper asks before pressing anything that sends or changes something).',
   };
-  for (const [key, it] of catalog) out[key] = VERB[it.kind] ? `${VERB[it.kind]} ${it.name}` : it.name;
+  // Items that take words only plain code reads (a key combination, a file name) are not the model's to pick.
+  for (const [key, it] of catalog) if (!it.local) out[key] = VERB[it.kind] ? `${VERB[it.kind]} ${it.name}` : it.name;
   return out;
 }
 
@@ -213,7 +225,7 @@ const ALIASES = {
   calculator: ['calc'],
 };
 // Words around a request that do not change it.
-const LEAD = /^(?:(?:hey|hi|hello|ok|okay|so|well|wait|now|um+|uh+|right|alright|yes|yeah|no|please|just|and|then|go ahead and|can you|could you|would you|will you|can u|i want you to|i'd like you to|i need you to)\b[\s,.!]*)+/;
+const LEAD = /^(?:(?:hey|hi|hello|ok|okay|so|well|wait|now|um+|uh+|right(?![- ]?click)|alright|yes|yeah|no|please|just|and|then|go ahead and|can you|could you|would you|will you|can u|i want you to|i'd like you to|i need you to)\b[\s,.!]*)+/;
 const TAIL = /(?:[\s,]+(?:please|for me|now|right now|thanks|thank you|again))+$/;
 const NOT = /\b(?:don'?t|do not|dont|never|not|stop|shouldn'?t|no need)\b/;
 const quickNames = new WeakMap();
@@ -252,6 +264,9 @@ export function quickPick(text, catalog) {
   if (!t || NOT.test(t)) return null;
   t = t.replace(/,? so (?:that )?(?:i|we) can .*$/, '').replace(LEAD, '').replace(TAIL, '').trim();
   const has = (key) => catalog.has(key);
+  // Keys, shortcuts, the mouse, windows, tabs and files (control.mjs).
+  const c = controlPick(t, has);
+  if (c) return c;
   let m;
   // A web search.
   if (has('search:web') && (m = t.match(/^(?:search|look up|look for|find)(?: (?:on|in))? (?:the web|the internet|online|google|duckduckgo) for (.+)$|^(?:search|look up|look for|find) (.+?) (?:on the web|on the internet|online|on google)$|^(?:google|web search(?: for)?) (.+)$|^(?:search(?: for)?|look up) (?:the (?:term|word|phrase)|the meaning of) (.+)$/))) {
@@ -260,7 +275,13 @@ export function quickPick(text, catalog) {
   }
   // With a browser page's fields on offer, where the words go (and whether a field is a password
   // field) is the chooser's call.
-  if (has('type:text') && ![...catalog.values()].some((it) => it.kind === 'field' || it.op === 'refuse') && (m = t.match(/^type(?: out| in)? (.+)$/))) return { key: 'type:text', slot: String(text).trim().replace(/^.*?\btype(?: out| in)?\s+/i, '').replace(/[\s,]+please[.!]?$/i, '').replace(/\.$/, '') };
+  if (has('type:text') && ![...catalog.values()].some((it) => it.kind === 'field' || it.op === 'refuse') && (m = t.match(/^(?:type|dictate)(?: out| in)? (.+)$/))) {
+    const slot = String(text).trim().replace(/^.*?\b(?:type|dictate)(?: out| in)?\s+/i, '').replace(/[\s,]+please[.!]?$/i, '').replace(/\.$/, '');
+    // "type hello and press enter": the words, then Enter.
+    const enter = /[\s,.]+(?:and |then |and then )?(?:press|hit) (?:the )?(?:enter|return)(?: key)?[.!]?$/i;
+    if (enter.test(slot) && has('type:enter')) return { key: 'type:enter', slot: slot.replace(enter, '') };
+    return { key: 'type:text', slot };
+  }
   m = t.match(/^(open|launch|start|try|bring up|pull up|show me|show|go to|visit|load|close|quit|exit|shut down|shut|switch to) (.+)$/);
   if (!m) return null;
   const verb = m[1];
@@ -527,7 +548,8 @@ export class Chooser {
                     'A person is speaking to their desktop voice assistant and may not have finished the sentence. ' +
                     'From what they have said so far, which one thing do they explicitly want done on their computer right now? ' +
                     'Opening an app starts it; switching to an app brings its open window to the front; closing an app closes its open window. Opening files means opening the file manager. ' +
-                    'Clicking, pressing, typing into a field, scrolling, going back and tabs mean the web page open in their browser. ' +
+                    'Pressing a key or a keyboard shortcut, copy, cut, paste and undo act on the window in front. ' +
+                    'Clicking or pressing something named on the page, typing into a field of the page, and reading the page mean the web page open in their browser. ' +
                     'A question about something is not a request to do it.',
                   criteria: this.criteria,
                 },
@@ -679,9 +701,14 @@ export const typeable = (text) => String(text).replace(/[\u0000-\u001f\u007f]+/g
  * files and folders must still sit inside the documents folder or a record source. The
  * only words it takes are a note's text, a search's words and text to type (`slot`).
  */
-export async function perform(item, { roots = [], exclude = [], platform = process.platform, run = launch, has = () => true, slot = '', exec = capture, journal, note = writeNote, browser = null } = {}) {
+export async function perform(item, { roots = [], exclude = [], platform = process.platform, run = launch, has = () => true, slot = '', exec = capture, journal, note = writeNote, browser = null, plan, fileOps, home, env } = {}) {
   if (!item) throw new Error('not in the catalog');
   switch (item.kind) {
+    case 'keys':
+    case 'mouse':
+    case 'window':
+    case 'files':
+      return performControl(item, { run, kwin: (js) => kwinRun(js, { exec }), slot, plan, exclude, home, env, ...(fileOps ? { fileOps } : {}) });
     case 'system':
       return run(item.invoke ? kdeShortcut(item.invoke) : item.argv);
     case 'focus':
@@ -709,7 +736,11 @@ export async function perform(item, { roots = [], exclude = [], platform = proce
       const text = typeable(slot);
       if (!text) throw new Error('nothing to type');
       const sock = path.join(process.env.XDG_RUNTIME_DIR || '/tmp', '.ydotool_socket');
-      return run(['ydotool', 'type', '--key-delay', '8', '--', text], fs.existsSync(sock) ? { YDOTOOL_SOCKET: sock } : undefined);
+      const env = fs.existsSync(sock) ? { YDOTOOL_SOCKET: sock } : undefined;
+      if (!item.enter) return run(['ydotool', 'type', '--key-delay', '8', '--', text], env);
+      // Enter only once every character is in.
+      await run(['ydotool', 'type', '--key-delay', '8', '--', text], env, { waitMs: 20000 });
+      return run(['ydotool', 'key', '28:1', '28:0'], env, { waitMs: 5000 });
     }
     case 'app':
       if (item.command) return run(item.command);
@@ -747,7 +778,8 @@ export async function perform(item, { roots = [], exclude = [], platform = proce
   }
 }
 
-export function describe(item, slot = '', { words = true } = {}) {
+export function describe(item, slot = '', { words = true, plan } = {}) {
+  if (['keys', 'mouse', 'window', 'files'].includes(item.kind)) return describeControl(item, slot, { words, plan });
   // Without the words (logs, unless transcripts are on): how many there were.
   const short = !words ? `${slot.split(/\s+/).filter(Boolean).length} words` : slot.length > 40 ? `${slot.slice(0, 38)}...` : slot;
   const q = words ? `"${short}"` : `(${short})`;
@@ -765,7 +797,7 @@ export function describe(item, slot = '', { words = true } = {}) {
     case 'search':
       return `searched the web for ${q}`;
     case 'type':
-      return `typed ${q}`;
+      return `typed ${q}${item.enter ? ' and pressed Enter' : ''}`;
     case 'url':
       return `opened ${words ? webAddress(slot).replace(/^https:\/\//, '') || slot : 'a web address'}`;
     case 'field':
