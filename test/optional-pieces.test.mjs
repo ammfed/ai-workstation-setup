@@ -548,6 +548,8 @@ test('the workflow-playbook skill is written to ~/.claude/skills with valid SKIL
       assert.equal(fs.readFileSync(path.join(home, '.claude', 'skills', 'workflow-playbook', companion), 'utf8'), fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', companion), 'utf8'), `${companion} sits beside SKILL.md`);
       assert.match(text, new RegExp(`\\x60${companion.replace('.', '\\.')}\\x60`), `SKILL.md points to ${companion}`);
     }
+    const style = path.join(home, '.claude', 'skills', 'government-build-style', 'SKILL.md');
+    assert.equal(fs.readFileSync(style, 'utf8'), fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'government-build-style', 'SKILL.md'), 'utf8'), 'the opt-in government style is written beside the playbook');
     const checks = path.join(home, '.claude', 'skills', 'workflow-playbook', 'principles', 'checks.md');
     assert.equal(fs.readFileSync(checks, 'utf8'), fs.readFileSync(path.join(repoRoot, 'templates', 'principles', 'checks.md'), 'utf8'), 'the principle check list sits in the playbook folder');
     const checker = path.join(home, '.claude', 'skills', 'workflow-playbook', 'principles', 'bin', 'principle-check.mjs');
