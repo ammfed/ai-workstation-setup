@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { excluded } from './config.mjs';
+import { isReadScreen, parseClick, screenRisk } from './screen.mjs';
 
 // ------------------------------------------------------------------ keys
 
@@ -218,8 +219,15 @@ const SYSTEM_SAY = [
  * need only the common folders. Items marked `local` take words only plain code reads (a key
  * combination, a tab number, a file name) and are never offered to the decision model.
  */
-export function handsFreeItems({ keys = true, kwin = true, files = true, trash = true } = {}) {
+export function handsFreeItems({ keys = true, kwin = true, files = true, trash = true, screen = '' } = {}) {
   const out = [];
+  // Pressing a named button and reading the window in front (screen.mjs). `screen` is true, or
+  // the reason they cannot work on this computer, which is said when they are asked for.
+  if (screen) {
+    const unsupported = screen === true ? undefined : String(screen);
+    out.push(['screen:click', { kind: 'screen', op: 'click', name: 'Press a button or link they name in the window in front', local: true, final: true, ...(unsupported ? { unsupported } : {}) }]);
+    out.push(['screen:read', { kind: 'screen', op: 'read', name: 'Read aloud what the window in front says, in any app (what does this say, read the screen)', done: 'read the window in front', final: true, handsFree: true, ...(unsupported ? { unsupported, local: true } : {}) }]);
+  }
   if (keys) {
     for (const s of SHORTCUTS) out.push([s.id, { kind: 'keys', name: s.name, done: s.done, keys: s.keys, final: true, handsFree: true }]);
     out.push(['keys:combo', { kind: 'keys', combo: true, name: 'Press the keys or keyboard shortcut they name', local: true, final: true }]);
@@ -272,6 +280,8 @@ export function controlPick(t, has) {
   // Files first: "copy report to documents" is a file, "copy" alone is the shortcut.
   const f = parseFileCommand(t);
   if (f) return has(`files:${f.op}`) ? { key: `files:${f.op}`, slot: t } : null;
+  // "what does this say", "read the screen": the window in front, read aloud.
+  if (isReadScreen(t) && has('screen:read')) return { key: 'screen:read' };
   const { rest, times } = repeats(t);
   const slot = times > 1 ? `${times}` : '';
   // With the assistant's own browser page on offer (browser.mjs), scrolling and going back or
@@ -319,7 +329,8 @@ export function controlPick(t, has) {
   m = rest.match(/^(?:press|hit|push|tap|use) (.+)$/);
   const said = m ? m[1].replace(/ (?:key|keys|button)$/, '') : rest;
   const chords = parseKeys(said);
-  if (!chords) return null;
+  // Not a key: "click Accept", "press the OK button" name a button in the window in front.
+  if (!chords) return times === 1 && parseClick(rest) && has('screen:click') ? { key: 'screen:click', slot: rest } : null;
   // On its own (no "press"), only a named key or a combination counts: never one letter or a
   // number word, and never Delete (in a file manager it trashes the selection).
   if (!m && (/^the /.test(rest) || chords.every((c) => c.length === 1 && (/^[a-z0-9]$/.test(c[0]) || c[0] === 'delete')))) return null;
@@ -477,7 +488,7 @@ if (a && a.normalWindow && a.closeable) a.closeWindow();
  * Carry out one hands-free item. `run` starts a program and waits for it, `kwin` runs a
  * KWin script, `fileOps` moves, copies or trashes (FILE_OPS, or a dry run's stand-ins).
  */
-export async function performControl(item, { run, kwin, activeApp, slot = '', plan, fileOps = FILE_OPS, home, env, exclude = [] } = {}) {
+export async function performControl(item, { run, kwin, activeApp, slot = '', plan, fileOps = FILE_OPS, home, env, exclude = [], screen = null } = {}) {
   const wait = { waitMs: 15000 };
   switch (item.kind) {
     case 'keys': {
@@ -512,6 +523,15 @@ export async function performControl(item, { run, kwin, activeApp, slot = '', pl
       }
       return run([process.platform === 'darwin' ? 'open' : 'xdg-open', dir]);
     }
+    case 'screen': {
+      if (item.unsupported) throw new Error(item.unsupported);
+      if (!screen) throw new Error('the screen helper is not available here');
+      if (item.op === 'read') return screen.read();
+      // A plan comes from prepare (and, for a button that waits for a yes, only after the yes).
+      const p = plan || (await screen.locate(parseClick(slot) || { name: slot }));
+      if (!plan && screenRisk(p.name, p.role)) throw new Error(`"${p.name}" ${screenRisk(p.name, p.role)}: it is pressed only after a spoken yes`);
+      return screen.press(p);
+    }
     case 'files': {
       const p = plan || planFiles(parseFileCommand(slot), { home, env, exclude });
       return fileOps[p.op](p, run);
@@ -537,16 +557,34 @@ export function describeControl(item, slot = '', { words = true, plan } = {}) {
     if (!words || !plan) return `${did} a ${plan?.dir ? 'folder' : 'file'}`;
     return `${plan.op === 'copy' ? 'copied' : 'moved'} ${planText(plan).replace(/^\w+ /, '')}`;
   }
+  if (item.kind === 'screen' && item.op === 'click') {
+    if (!words) return 'pressed a button by its name';
+    const name = plan?.name || parseClick(slot)?.name || slot;
+    return `pressed "${name}"${plan?.window ? ` in "${plan.window}"` : ''}`;
+  }
   return item.done;
 }
 
 /**
  * What a hands-free pick needs before it runs: a file action's plan (which throws a plain
- * reason when the file is not found, unclear or the destination is taken), and what waits
- * for a spoken yes: a move, a trash, or a shortcut that usually sends. `word` is the word
- * the voice's question must use for a yes to count.
+ * reason when the file is not found, unclear or the destination is taken), a named button's
+ * plan (which one, in which window), and what waits for a spoken yes: a move, a trash, a
+ * shortcut that usually sends, or a button that sends, deletes or buys. `word` is the word
+ * the voice's question must use for a yes to count. A named button is found on screen, so
+ * that answer comes as a promise; every caller awaits it.
  */
-export function prepare(item, slot = '', { exclude = [], home, env } = {}) {
+export function prepare(item, slot = '', { exclude = [], home, env, screen = null } = {}) {
+  if (item.kind === 'screen') {
+    if (item.unsupported) throw new Error(item.unsupported);
+    if (item.op !== 'click') return { hold: '' };
+    const said = parseClick(slot);
+    if (!said) throw new Error(`"${slot}" does not name a button`);
+    if (!screen) throw new Error('the screen helper is not available here');
+    return screen.locate(said).then((plan) => {
+      const why = screenRisk(plan.name, plan.role);
+      return { plan, hold: why ? `press "${plan.name}" (it ${why})` : '', word: 'press' };
+    });
+  }
   if (item.kind === 'files') {
     const plan = planFiles(parseFileCommand(slot), { exclude, home, env });
     return { plan, hold: item.ask ? planText(plan) : '', word: plan.op === 'trash' ? 'trash' : 'move' };
@@ -559,4 +597,11 @@ export function prepare(item, slot = '', { exclude = [], home, env } = {}) {
     } catch {}
   }
   return { hold: '' };
+}
+
+/** Whether a plan made again after a spoken yes is still the one the question was about. */
+export function samePlan(a, b) {
+  if (!a || !b) return a === b;
+  if (a.src || b.src) return a.src === b.src && a.dst === b.dst;
+  return a.via === b.via && a.name === b.name && a.role === b.role && String(a.box) === String(b.box) && a.front?.pid === b.front?.pid && a.front?.caption === b.front?.caption;
 }

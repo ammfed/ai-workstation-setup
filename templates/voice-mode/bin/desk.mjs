@@ -13,6 +13,7 @@ import { execFile, spawn, spawnSync } from 'node:child_process';
 import { excluded, readKey } from './config.mjs';
 import { inside } from './records.mjs';
 import { controlPick, describeControl, handsFreeItems, performControl } from './control.mjs';
+import { Screen, parseClick } from './screen.mjs';
 
 // Launchers and scripts are never opened as files, whatever the catalog says.
 const NEVER_OPEN = /\.(desktop|sh|bash|zsh|fish|py|pl|rb|js|mjs|cjs|exe|bat|cmd|ps1|com|msi|appimage|run|bin|jar|deb|rpm|app|command|scpt|applescript|lnk|url)$/i;
@@ -123,8 +124,18 @@ function kdeComponents() {
   return new Set([...(r.stdout || '').matchAll(/\/component\/([A-Za-z0-9_]+)/g)].map((m) => m[1]));
 }
 
+/**
+ * Whether a named button can be pressed and the window in front read here: true, or why not.
+ * They need the desktop's accessibility interface (AT-SPI) through python3-gi on Linux.
+ */
+export function screenSupport({ platform = process.platform, has = defaultHas, atspi } = {}) {
+  if (platform !== 'linux') return 'pressing a button by its name and reading the screen are not supported on this computer yet: they need the Linux desktop\'s accessibility interface (AT-SPI)';
+  const ok = atspi ?? (has('python3') && spawnSync('python3', ['-I', '-c', "import gi; gi.require_version('Atspi', '2.0'); from gi.repository import Atspi"], { stdio: 'ignore', timeout: 5000 }).status === 0);
+  return ok || "pressing a button by its name and reading the screen need the desktop's accessibility interface for Python (python3-gi and gir1.2-atspi-2.0), which is not installed; run the installer's voice-mode module again";
+}
+
 /** The PC-control part of the catalog for this machine: [key, item] pairs. */
-export function controlActions(config, { platform = process.platform, env = process.env, has = defaultHas, components } = {}) {
+export function controlActions(config, { platform = process.platform, env = process.env, has = defaultHas, components, atspi } = {}) {
   const a = config.actions;
   const out = [];
   if (!a.control) return out;
@@ -153,7 +164,7 @@ export function controlActions(config, { platform = process.platform, env = proc
   // Hands-free control (control.mjs): keys and the mouse with ydotool, windows with KWin, files anywhere.
   if (a.handsFree !== false) {
     const kwin = platform === 'linux' && isKde(env) && has('gdbus');
-    out.push(...handsFreeItems({ keys: platform === 'linux' && has('ydotool'), kwin, files: true, trash: platform === 'linux' && has('gio') }));
+    out.push(...handsFreeItems({ keys: platform === 'linux' && has('ydotool'), kwin, files: true, trash: platform === 'linux' && has('gio'), screen: screenSupport({ platform, has, atspi }) }));
   }
   return out;
 }
@@ -279,12 +290,69 @@ function namesOf(catalog) {
  * Returns { key, slot } or null.
  */
 export function quickPick(text, catalog) {
+  const one = quickOne(text, catalog);
+  // Typing ("clear the field and type hello") and a run of keys ("press tab then enter") read
+  // the whole sentence as one command already.
+  if (one && (catalog.get(one.key)?.kind === 'type' || one.key === 'keys:combo')) return one;
+  const steps = chainPick(text, catalog);
+  return steps ? { ...steps[0], steps } : one;
+}
+
+// The words that join two steps of one sentence ("open the file manager and go to home").
+const JOIN = /(?:\s*,)?\s+(?:and then|and after that|after that|and|then)\s+|\s*,\s*then\s+/gi;
+const MAX_STEPS = 6;
+// Steps that take the user's own words take the rest of the sentence, "and" included.
+const WORDY = new Set(['type', 'search', 'note', 'field']);
+
+/**
+ * Two or more plain commands in one sentence, joined by "and", "then" or "and then", as
+ * steps to do in order: [{ key, slot, said }]. Every part must be a plain command on its
+ * own; otherwise (a name with "and" in it, a question) it is not split, and null is returned.
+ * A step that takes dictated words (typing, a search) takes the rest of the sentence.
+ */
+export function chainPick(text, catalog) {
+  const s = String(text || '').trim();
+  const cuts = [...s.matchAll(JOIN)];
+  if (!cuts.length || cuts.length >= MAX_STEPS) return null;
+  const parts = [];
+  let at = 0;
+  for (const c of cuts) {
+    parts.push({ start: at, words: s.slice(at, c.index) });
+    at = c.index + c[0].length;
+  }
+  parts.push({ start: at, words: s.slice(at) });
+  const steps = [];
+  for (const p of parts) {
+    if (!p.words.trim()) return null;
+    const q = quickOne(p.words, catalog);
+    if (!q || q.steps) return null;
+    const kind = catalog.get(q.key)?.kind;
+    if (WORDY.has(kind)) {
+      // "type salt and pepper": the words run to the end of the sentence.
+      const rest = s.slice(p.start);
+      const whole = quickOne(rest, catalog);
+      if (!whole) return null;
+      steps.push({ ...whole, said: rest.trim() });
+      break;
+    }
+    steps.push({ ...q, said: p.words.trim() });
+  }
+  return steps.length >= 2 ? steps : null;
+}
+
+function quickOne(text, catalog) {
   let t = String(text || '').toLowerCase().replace(/[’`]/g, "'").replace(/[?!]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/[.,;:]+$/, '');
   if (!t || NOT.test(t)) return null;
   t = t.replace(/,? so (?:that )?(?:i|we) can .*$/, '').replace(LEAD, '').replace(TAIL, '').trim();
   const has = (key) => catalog.has(key);
   // Keys, shortcuts, the mouse, windows, tabs and files (control.mjs).
   const c = controlPick(t, has);
+  if (c?.key === 'screen:click') {
+    // A button on the assistant's own browser page with exactly that name is that page's (browser.mjs).
+    const name = parseClick(c.slot)?.name || '';
+    const page = [...catalog].filter(([, it]) => it.kind === 'page' && it.op === 'click' && String(it.label || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim() === name);
+    if (page.length === 1) return { key: page[0][0] };
+  }
   if (c) return c;
   let m;
   // A web search.
@@ -434,8 +502,8 @@ export class Chooser {
     this.done = true;
     this.pending = null;
     this.picked?.(q.key);
-    this.log({ event: 'chooser', words: text.split(/\s+/).length, final: true, choice: q.slot ? `${q.key} (${q.slot.split(/\s+/).length} words)` : q.key, p: 1, ms: 0, quick: from, text: q.slot || text });
-    await this.run(q.key, { text, p: 1, final: true, slot: q.slot || '' });
+    this.log({ event: 'chooser', words: text.split(/\s+/).length, final: true, choice: q.steps ? q.steps.map((s) => s.key).join(' + ') : q.slot ? `${q.key} (${q.slot.split(/\s+/).length} words)` : q.key, p: 1, ms: 0, quick: from, text: q.slot || text });
+    await this.run(q.key, { text, p: 1, final: true, slot: q.slot || '', ...(q.steps ? { steps: q.steps } : {}) });
     return true;
   }
 
@@ -721,17 +789,29 @@ async function kwinClose(item, { exec = capture, journal = userJournal } = {}) {
   throw new Error(`asked to close ${name}, but could not confirm it`);
 }
 
-/** The window class of the window in front (such as "org.kde.dolphin"), through a KWin script and the user journal. */
-export async function activeApp({ exec = capture, journal = userJournal } = {}) {
-  const tag = `voice-mode-front-${process.pid}-${Date.now()} `;
+/** What a KWin script expression evaluates to, as text, through the user journal ('' when nothing came). */
+export async function kwinAsk(expr, { exec = capture, journal = userJournal } = {}) {
+  const tag = `voice-mode-ask-${process.pid}-${Date.now()}-${++asks} `;
   const since = Math.floor(Date.now() / 1000) - 1;
-  await kwinRun(`const a = workspace.activeWindow;\nprint(${JSON.stringify(tag)} + (a ? String(a.resourceClass) : ''));\n`, { exec });
-  for (let i = 0; i < 15; i++) {
+  await kwinRun(`print(${JSON.stringify(tag)} + (${expr}));\n`, { exec });
+  for (let i = 0; i < 25; i++) {
     const line = String(await journal(since).catch(() => '')).split('\n').find((l) => l.includes(tag));
     if (line) return line.slice(line.indexOf(tag) + tag.length).trim();
     await new Promise((res) => setTimeout(res, 60));
   }
   return '';
+}
+let asks = 0;
+
+/** The window class of the window in front (such as "org.kde.dolphin"), through a KWin script and the user journal. */
+export function activeApp({ exec = capture, journal = userJournal } = {}) {
+  return kwinAsk("workspace.activeWindow ? String(workspace.activeWindow.resourceClass) : ''", { exec, journal });
+}
+
+/** The helper that presses named buttons and reads the window in front (screen.mjs), with KWin on Plasma. */
+export function screenHelper({ exec = capture, journal = userJournal, env = process.env, has = defaultHas, log } = {}) {
+  const kde = isKde(env) && has('gdbus');
+  return new Screen({ ask: kde ? (expr) => kwinAsk(expr, { exec, journal }) : null, run: (argv, e) => launch(argv, e, { waitMs: 15000 }), ocr: kde && has('spectacle') && has('tesseract'), log });
 }
 
 let scripts = 0;
@@ -777,7 +857,7 @@ export const typeable = (text) => String(text).replace(/[\u0000-\u001f\u007f]+/g
  * files and folders must still sit inside the documents folder or a record source. The
  * only words it takes are a note's text, a search's words and text to type (`slot`).
  */
-export async function perform(item, { roots = [], exclude = [], platform = process.platform, run = launch, has = () => true, slot = '', exec = capture, journal, note = writeNote, browser = null, plan, fileOps, home, env } = {}) {
+export async function perform(item, { roots = [], exclude = [], platform = process.platform, run = launch, has = () => true, slot = '', exec = capture, journal, note = writeNote, browser = null, plan, fileOps, home, env, screen } = {}) {
   if (!item) throw new Error('not in the catalog');
   switch (item.kind) {
     case 'keys':
@@ -785,7 +865,8 @@ export async function perform(item, { roots = [], exclude = [], platform = proce
     case 'window':
     case 'files':
     case 'place':
-      return performControl(item, { run, kwin: (js) => kwinRun(js, { exec }), activeApp: () => activeApp({ exec, journal }), slot, plan, exclude, home, env, ...(fileOps ? { fileOps } : {}) });
+    case 'screen':
+      return performControl(item, { run, kwin: (js) => kwinRun(js, { exec }), activeApp: () => activeApp({ exec, journal }), slot, plan, exclude, home, env, screen: screen || (item.kind === 'screen' ? screenHelper({ exec, journal }) : null), ...(fileOps ? { fileOps } : {}) });
     case 'system':
       return run(item.invoke ? kdeShortcut(item.invoke) : item.argv);
     case 'focus':
@@ -861,7 +942,7 @@ export async function perform(item, { roots = [], exclude = [], platform = proce
 }
 
 export function describe(item, slot = '', { words = true, plan } = {}) {
-  if (['keys', 'mouse', 'window', 'files', 'place'].includes(item.kind)) return describeControl(item, slot, { words, plan });
+  if (['keys', 'mouse', 'window', 'files', 'place', 'screen'].includes(item.kind)) return describeControl(item, slot, { words, plan });
   // Without the words (logs, unless transcripts are on): how many there were.
   const short = !words ? `${slot.split(/\s+/).filter(Boolean).length} words` : slot.length > 40 ? `${slot.slice(0, 38)}...` : slot;
   const q = words ? `"${short}"` : `(${short})`;

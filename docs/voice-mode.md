@@ -149,6 +149,43 @@ submits it, as the key would. With browser control on, "scroll down" and "go bac
 the browser page's own choices, as before. When the assistant's own browser cannot be reached,
 web addresses, searches and sites open in your default browser instead.
 
+### Named buttons, reading the window, and several steps at once
+
+| Say something like | What happens | How |
+| --- | --- | --- |
+| "click Accept", "press the OK button", "select Downloads" | Presses the button, link, tab or menu item with that name in the window in front, in any app | The desktop's accessibility interface (AT-SPI), the way a screen reader presses it |
+| "click the second Reply", "click the last Next" | When several things in the window have that name, the voice says how many and asks which; an order word picks one, top to bottom | AT-SPI |
+| "what does this say", "read the screen", "what's the error" | Tells you in a sentence or two what the window in front says, or sums up its main text, then names its buttons | AT-SPI; tesseract when the app shows nothing there |
+| "open the file manager and go to home", "open firefox, then click Accept", "copy and then paste" | Does each step in order, each one done before the next starts; after opening or switching to an app it waits for that app's window to come to the front | The same commands as above, one after another |
+
+A button that sends, deletes, buys, pays, confirms, installs or uninstalls, or signs in or out
+(Send, Delete, Remove, Submit, Pay, Buy, Confirm, Uninstall, Sign out and the like, also in
+Arabic) is not pressed on the command alone: the voice names it and asks, and it is pressed
+only after your spoken yes, as with a move or a delete. Everyday answers to a dialog (Accept,
+OK, Save, Next, Cancel) are pressed at once. A greyed-out button, a name that is not in the
+window, or a window that changed between the question and the yes is said plainly, and
+nothing is pressed.
+
+Several steps are split only where you said "and", "then" or "and then", and only when every
+part is a command on its own; a name with "and" in it ("click Save and Close") stays one
+button, and typing takes the rest of the sentence ("type salt and pepper"). The steps stop at
+the first one that does not work or waits for a yes; the voice says which step stopped and
+that the rest was not done, and after a yes the rest follows.
+
+Everything stays on this computer. The accessibility interface is read first. Only when the
+window in front shows nothing there (an app without accessibility) is a screenshot of that one
+window read with tesseract, a local OCR engine; the picture lives in a private folder and is
+deleted as soon as it is read, and the pointer is then moved onto the words and clicks. What
+the window says goes only into the voice's reply, through the same voice connection as the
+rest of the conversation; logs record its length, never the text. Apps show their buttons to
+the accessibility interface only while the desktop's accessibility switch is on (what a screen
+reader turns on): the installer turns it on, and voice mode turns it on when it finds it off.
+Turn it off with `gsettings set org.gnome.desktop.interface toolkit-accessibility false`.
+
+These need Linux with AT-SPI (`python3-gi`, `gir1.2-atspi-2.0`) and, for the OCR fallback, KDE
+Plasma with `spectacle` and `tesseract`; the installer adds the packages. On macOS, asked for
+one of them, the voice says it is not supported there yet.
+
 The decision model takes at most 255 options per question. With many apps installed, the
 items plain code already reads (hands-free keys) are left out of the model's list first, then
 switching to and closing apps, then apps; the browser page, the desktop controls and the text
