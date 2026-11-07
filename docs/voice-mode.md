@@ -69,7 +69,7 @@ points at another one). Everything not in the file takes the defaults in `bin/co
 | `queue` | `{ "command": [...], "env": {} }`: how a hand-off reaches your assistant; the note is added as the last argument. Never run through a shell. Without it there is no hand-off. |
 | `handoff` | `replyCommand` (default `voice-mode reply`: the command written into each note; give the full path if your assistant's shell does not have it on PATH), `dir` (the reply queue; default `handoff/` next to the config), `waitMin` (15: how long a conversation stays open for an answer that is still coming), `stillComingSec` (20: when it says, once, that the answer is still coming; 0 never). |
 | `briefing` | `enabled`, `refreshMin` (3), `maxChars` (120000 in all; see What a big briefing costs), `parts` (see Briefing and hand-off). |
-| `actions` | `enabled`, `chooser` (`model`, `keyName`, `keyFile`, `threshold` 0.9 mid-sentence, `finalThreshold` 0.7 once you stop, `askThreshold` 0.5 for a browser button that is only asked about), `apps` (extra `{ id, name, desktop \| mac \| command }`), `discoverApps` (installed desktop apps on Linux), `sites` (`{ id, name, url }`, http and https only), `documents` (its folders can be opened), `files`, `decisionLog` (default on: one line per decision in `logs/decisions.log`), `control` (default on: the PC control below), `notes.folder`, `searchUrl` (`{q}` is replaced by the words), `dryRun`. |
+| `actions` | `enabled`, `chooser` (`model`, `keyName`, `keyFile`, `threshold` 0.9 mid-sentence, `finalThreshold` 0.5 once you stop, `askThreshold` 0.5 for a browser button that is only asked about, `closeThreshold` 0.8 to close an app), `apps` (extra `{ id, name, desktop \| mac \| command }`), `discoverApps` (installed desktop apps on Linux), `sites` (`{ id, name, url }`, http and https only), `documents` (its folders can be opened), `files`, `decisionLog` (default on: one line per decision in `logs/decisions.log`), `control` (default on: the PC control below), `notes.folder`, `searchUrl` (`{q}` is replaced by the words), `dryRun`. |
 | `browser` | `enabled` (off by default), `endpoint` (`http://127.0.0.1:9222`: the DevTools address of a Chrome started for the assistant; loopback only), `ignore` (URL prefixes of tabs it never reads, switches to or closes), `maxItems` (60 links, buttons and fields per page), `confirmSec` (30: how long a held button waits for a yes). See Browser control. |
 | `audio` | `duplex`: `full` (default: talk over a reply to cut in) or `half` (the mic is muted while a reply plays), `echoCancel` (default on; it wraps the `input` and `output` devices, or the default ones), `input` and `output` device names, `earcons` (a short tone when a conversation starts and ends). |
 | `listen.exitAfterMin` | End the conversation after this many minutes without speech (default 10). |
@@ -88,6 +88,7 @@ Everything the decision model can pick, and how plain code does it:
 | --- | --- | --- |
 | "open Firefox", "open my Projects folder", "show me the backlog" | Opens an installed app, a listed site, a documents folder, or a record | the desktop's launcher or default app |
 | "switch to Chrome" | Brings that app's open window to the front | a two-line KWin script (KDE Plasma) |
+| "close Firefox" | Closes that app's window the way its close button does, so unsaved work still asks to be saved; only once the sentence has ended and the request is clear (`closeThreshold`). With several windows of the app open, only the one in front is closed; if none of them is in front, or the app is not open, nothing is closed and the voice says so | a short KWin script (KDE Plasma) that reports what it did through the user journal |
 | "minimize this", "maximize it", "move it to the other screen", "next desktop" | Acts on the window in front | KWin's own shortcuts |
 | "show the desktop", "show me all my windows" | Show desktop, Overview | KWin's own shortcuts |
 | "turn it up", "volume down", "mute" | Volume | the volume shortcuts (Plasma), else `wpctl` |
@@ -109,7 +110,7 @@ once the sentence has ended, picks which span of your own words is the text: the
 API returns choices and scores, never free text, so the text is always words you said.
 
 It never deletes or moves files, sends messages or email, buys anything, changes settings,
-runs commands, or closes or quits apps. Those are not in the catalog; asked for one, the
+runs commands, force-quits an app, or closes all windows at once. Those are not in the catalog; asked for one, the
 decision model picks nothing and the voice says voice mode does not do that. Set
 `actions.control` to `false` to keep it to opening things, and `actions.dryRun` to `true` to
 log what each action would run instead of running it.

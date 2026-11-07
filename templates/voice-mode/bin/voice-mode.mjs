@@ -50,11 +50,14 @@ import { readTasks } from './tasks.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 
-// Node gives each address of a host only 250 ms to connect before it tries the next one. A
-// busy Wi-Fi link can take longer, and with no IPv6 route every address of a host then fails
-// at once ("fetch failed", cause ETIMEDOUT), which is what dropped decision calls whenever a
-// new connection was needed. One second per address.
-net.setDefaultAutoSelectFamilyAttemptTimeout?.(1000);
+// Node gives each address of a host only 250 ms to connect before it gives up on it and tries
+// the next one, and only the last address has no limit. When the IPv6 route is gone, the IPv6
+// addresses fail at once and one of them is last, so the IPv4 addresses get only this window:
+// a slower connect then fails the whole call ("fetch failed", cause ETIMEDOUT ETIMEDOUT
+// ENETUNREACH ETIMEDOUT ENETUNREACH). A connect whose first packet is lost is answered just
+// after one second (the system resends it then), so one second per address still failed;
+// two and a half seconds lets that connect, and a short Wi-Fi stall, finish.
+net.setDefaultAutoSelectFamilyAttemptTimeout?.(2500);
 const RUNTIME = process.env.XDG_RUNTIME_DIR || CONFIG_DIR;
 const SOCKET = process.platform === 'win32' ? '\\\\.\\pipe\\voice-mode' : path.join(RUNTIME, 'voice-mode.sock');
 const LOCK = path.join(RUNTIME, 'voice-mode.lock');
@@ -129,8 +132,8 @@ const RULES = `How you work:
 - For anything else about notes, files, documents, memories, records, people, projects, plans, decisions or work, look it up yourself first, in the same reply: search_records with a few keywords (and the source, when the user names one), list_records for what is newest in a source, read_record to read one in full. Then answer from what they return, the newest record first when they disagree. Never make up a status.
 - Only when those do not answer (after you looked), or the user asks for real work (changing, renaming, moving or deleting files, code, tasks or messages, running or checking anything now, research, anything that takes effort), or for something outside your records (mail, messages, the web, other people's replies), say one short line such as "Let me check; I'll tell you here as soon as it's back" and call hand_off in that same reply, with the request in the user's words. Saying you will check without calling a tool leaves the user waiting for nothing. It goes to your own working session, which can do it; never say the work is done until an answer says so. Every new request needs its own hand_off, even one asked before.
 - When an answer to a hand-off arrives (a line starting "Answer arrived"), tell the user at once, briefly, as your own answer. You are one assistant: never say that someone else, another session or another assistant answered.
-- A separate desktop helper acts on the computer while the user is still talking: it opens apps, websites, folders and records, switches to an open app, minimizes, maximizes or moves the window in front, shows the desktop or the overview, turns the volume up or down or mutes it, plays, pauses or skips media, changes screen brightness, takes a screenshot, locks the screen, writes a note, searches the web, and types dictated text. What it did may already be in the conversation as a line starting "Desktop helper:"; then confirm it in a few words. Otherwise, when the user asked for one of those, call desktop_action to learn what it did. If it did nothing, say you could not tell what to do.
-- The helper itself never deletes or moves files, sends messages or email, buys anything, changes settings, runs commands, or closes or quits apps. That limits only the helper: such requests are real work, so hand them off.
+- A separate desktop helper acts on the computer while the user is still talking: it opens apps, websites, folders and records, switches to an open app, closes an open app the way its close button does (so the app still asks about unsaved work), minimizes, maximizes or moves the window in front, shows the desktop or the overview, turns the volume up or down or mutes it, plays, pauses or skips media, changes screen brightness, takes a screenshot, locks the screen, writes a note, searches the web, and types dictated text. What it did may already be in the conversation as a line starting "Desktop helper:"; then confirm it in a few words. Otherwise, when the user asked for one of those, call desktop_action to learn what it did. If it did nothing, say you could not tell what to do.
+- The helper itself never deletes or moves files, sends messages or email, buys anything, changes settings, runs commands, or closes all windows at once. That limits only the helper: such requests are real work, so hand them off.
 - You are heard, not read: short spoken sentences, no lists, no markdown, no links read aloud. Keep an answer under about twenty seconds unless asked for more.
 - Talk about the work the way a colleague would, by its project and what it is about. Never read task ids, slugs, codes, file names or links aloud; say a name only when two items would otherwise be confused, and then naturally ("the one called banner fix").`;
 
@@ -477,6 +480,8 @@ export class Session {
       this.onAction?.(done);
     } catch (err) {
       turn?.actions.push({ key, error: err.message });
+      // Said aloud, so a failure (an app that would not start, or is not open to close) is not silent.
+      this.provider.note?.(`Desktop helper: it did not work (${item.name.replace(/ \(.*\)$/, '')}): ${err.message}. Tell the user.`);
       this.log({ event: 'action-failed', target: key, error: err.message });
     }
   }

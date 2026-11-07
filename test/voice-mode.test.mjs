@@ -15,7 +15,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const bin = path.join(repoRoot, 'templates', 'voice-mode', 'bin');
 const { merge, parseEnvFile, readKey, expandGlob, loadConfig, DEFAULTS } = await import(path.join(bin, 'config.mjs'));
 const { Records, runTool } = await import(path.join(bin, 'records.mjs'));
-const { Chooser, buildCatalog, criteria, perform, controlActions, spans, focusScript, describe, typeable, SYSTEM } = await import(path.join(bin, 'desk.mjs'));
+const { Chooser, buildCatalog, criteria, perform, launch, controlActions, spans, focusScript, closeScript, describe, typeable, SYSTEM } = await import(path.join(bin, 'desk.mjs'));
 const { OpenAIRealtime, GeminiLive, FakeProvider } = await import(path.join(bin, 'providers.mjs'));
 const { Session, Live, PROMISE, instructionsFor, streamClip, speechBounds, acquireLock, claimLock, releaseLock, lockHolder, decisionLine, doRequest, sayText, makeLogger } = await import(path.join(bin, 'voice-mode.mjs'));
 const net = await import('node:net');
@@ -149,7 +149,7 @@ test('perform: opens only catalog items, only inside the allowed folders, never 
   await perform({ kind: 'folder', path: path.join(docs, 'Projects') }, { roots, platform: 'linux', run });
   await perform({ kind: 'record', path: path.join(data, 'backlog.md') }, { roots, platform: 'darwin', run });
   assert.deepEqual(runs, [
-    ['kstart', '--application', 'firefox.desktop'],
+    ['kstart', '--application', 'firefox'],
     ['gtk-launch', 'firefox.desktop'],
     ['open', '-a', 'Safari'],
     ['xdg-open', 'https://mail.example.com'],
@@ -165,6 +165,31 @@ test('perform: opens only catalog items, only inside the allowed folders, never 
   await refuse({ kind: 'file', path: path.join(docs, 'app.desktop') }, /a program/);
   await refuse({ kind: 'folder', path: path.join(docs, 'notes.md') }, /not a folder/);
   assert.equal(runs.length, 6);
+});
+
+test('perform: an app opens through kstart by its bare name, waiting for kstart; when kstart fails, gtk-launch is tried', async () => {
+  // On the laptop, `kstart --application x.desktop` printed `No such service ""` and waited
+  // forever: nothing opened, yet the action was logged as opened.
+  const runs = [];
+  const run = async (argv, env, opts) => {
+    runs.push([argv, opts]);
+    if (argv[0] === 'kstart') throw new Error('kstart did not start it within 8 s');
+  };
+  await perform({ kind: 'app', name: 'Files', desktop: 'org.kde.dolphin.desktop' }, { platform: 'linux', run, has: () => true });
+  assert.deepEqual(runs, [
+    [['kstart', '--application', 'org.kde.dolphin'], { waitMs: 8000 }],
+    [['gtk-launch', 'org.kde.dolphin.desktop'], undefined],
+  ]);
+  await assert.rejects(perform({ kind: 'app', name: 'Files', desktop: 'org.kde.dolphin.desktop' }, { platform: 'linux', run, has: (b) => b === 'kstart' }), /did not start/);
+});
+
+test('launch: with waitMs, a launcher counts only when it exits 0 in time; a hanging one is stopped and fails', async () => {
+  const node = (code) => [process.execPath, '-e', code];
+  await launch(node('process.exit(0)'), undefined, { waitMs: 5000 });
+  await assert.rejects(launch(node('process.exit(3)'), undefined, { waitMs: 5000 }), /could not start it \(exit 3\)/);
+  const t0 = Date.now();
+  await assert.rejects(launch(node('setTimeout(() => {}, 60000)'), undefined, { waitMs: 300 }), /did not start it within 0.3 s/);
+  assert.ok(Date.now() - t0 < 5000);
 });
 
 test('chooser: acts once, mid-sentence, only above the threshold; a question opens nothing', async () => {
@@ -199,6 +224,26 @@ test('chooser: acts once, mid-sentence, only above the threshold; a question ope
   ch.hear('what is waiting on me', true);
   await new Promise((r) => setTimeout(r, 10));
   assert.deepEqual(done, []);
+});
+
+test('chooser: once the sentence ends, a pick that outweighs everything else acts; a split one does not', async () => {
+  const c = config();
+  const cat = buildCatalog(c, new Records(c));
+  const done = [];
+  // 0.62 is what the laptop logged for the file manager, which then did not open; 0.45 is split.
+  const fetchImpl = fakeDecisions([[/files/i, 'folder:documents', 0.62], [/email/i, 'site:mail', 0.45]]);
+  const ch = new Chooser(c, cat, { execute: async (k) => done.push(k), fetchImpl });
+  ch.key = 'test';
+  for (const [words, want] of [['open my files', ['folder:documents']], ['open my email in the browser', []]]) {
+    done.length = 0;
+    ch.reset(0);
+    ch.hear(words);
+    await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(done, [], 'never mid-sentence below the threshold');
+    ch.hear(words, true);
+    await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(done, want, words);
+  }
 });
 
 test('chooser: without a key it is off and never calls out', () => {
@@ -652,9 +697,66 @@ test('chooser: one call per new word, and a failed call logs its cause', async (
   assert.equal(logs[0].cause, 'ETIMEDOUT ETIMEDOUT ENETUNREACH');
 });
 
-test('connections: each address of a host gets a full second to connect', () => {
-  // The default (250 ms) failed every address whenever a connect was slow and there was no IPv6 route.
-  if (net.getDefaultAutoSelectFamilyAttemptTimeout) assert.equal(net.getDefaultAutoSelectFamilyAttemptTimeout(), 1000);
+test('connections: each address of a host gets long enough for a connect whose first packet was lost', () => {
+  // A lost first packet is sent again after one second, so a one-second window cut such
+  // connects off just before they finished.
+  if (net.getDefaultAutoSelectFamilyAttemptTimeout) assert.equal(net.getDefaultAutoSelectFamilyAttemptTimeout(), 2500);
+});
+
+// The laptop's failure, rebuilt: no IPv6 route (yet IPv6 addresses for the host) and an IPv4
+// connect that takes over one second. Runs in a throwaway network namespace with a delayed
+// loopback, so it needs Linux, unprivileged user namespaces and netem; otherwise it is skipped.
+test('connections: a slow IPv4 connect with no IPv6 route still reaches the chooser; one second per address did not', { skip: process.platform !== 'linux' }, async (t) => {
+  const dir = fs.mkdtempSync(path.join(tmp, 'netns-'));
+  fs.writeFileSync(path.join(dir, 'hosts'), '127.0.0.1 chooser.test\n127.0.0.2 chooser.test\n2001:db8::1 chooser.test\n2001:db8::2 chooser.test\n');
+  // One chooser call to a stand-in decisions server in the same namespace; prints what happened.
+  fs.writeFileSync(
+    path.join(dir, 'pick.mjs'),
+    `import http from 'node:http';
+import net from 'node:net';
+await import(${JSON.stringify(path.join(bin, 'voice-mode.mjs'))});
+const { merge, DEFAULTS } = await import(${JSON.stringify(path.join(bin, 'config.mjs'))});
+const { Chooser } = await import(${JSON.stringify(path.join(bin, 'desk.mjs'))});
+if (process.argv[2]) net.setDefaultAutoSelectFamilyAttemptTimeout(Number(process.argv[2]));
+const answer = JSON.stringify({ answers: { target: { choice: 'app:files', probabilities: { 'app:files': 0.99 } } } });
+const server = http.createServer((q, s) => q.resume().on('end', () => s.end(answer))).listen(8080, '0.0.0.0');
+await new Promise((r) => server.once('listening', r));
+const c = merge(DEFAULTS, { actions: { chooser: { url: 'http://chooser.test:8080/decide', timeoutMs: 6000 } } });
+const out = { picked: null, errors: [] };
+const ch = new Chooser(c, new Map([['app:files', { kind: 'app', name: 'Files' }]]), { execute: async (k) => (out.picked = k), log: (r) => r.event === 'chooser-error' && out.errors.push(r.cause) });
+ch.key = 'test';
+await ch.ask('open files', true);
+console.log(JSON.stringify(out));
+server.close();
+`,
+  );
+  const script = [
+    'ip link set lo up && ip addr add 127.0.0.2/8 dev lo && ip -6 addr add 2001:db8:ff::14/128 dev lo nodad || exit 77',
+    // About 1.1 s per connect: over the old one-second window, under the new one.
+    'tc qdisc add dev lo root netem delay 550ms && mount --bind "$1/hosts" /etc/hosts || exit 77',
+    `"${process.execPath}" "$1/pick.mjs" && "${process.execPath}" "$1/pick.mjs" 1000`,
+  ].join('\n');
+  const r = await new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn('unshare', ['-rnm', 'sh', '-c', script, 'sh', dir], { stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch {
+      return resolve({ code: 77 });
+    }
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => (stdout += d));
+    child.stderr.on('data', (d) => (stderr += d));
+    child.on('error', () => resolve({ code: 77 }));
+    child.on('close', (code) => resolve({ code, stdout, stderr }));
+  });
+  // Only a namespace that cannot be made skips; a failing chooser call fails the test.
+  if (r.code === 77 || /^unshare:/m.test(r.stderr)) return t.skip('needs unshare -rnm and netem');
+  assert.equal(r.code, 0, r.stderr);
+  const [now, before] = r.stdout.trim().split('\n').map((l) => JSON.parse(l));
+  assert.deepEqual(now, { picked: 'app:files', errors: [] });
+  // The control: the old window fails both tries with the cause the laptop logged.
+  assert.deepEqual(before, { picked: null, errors: ['ETIMEDOUT ETIMEDOUT ENETUNREACH ETIMEDOUT ENETUNREACH', 'ETIMEDOUT ETIMEDOUT ENETUNREACH ETIMEDOUT ENETUNREACH'] });
 });
 
 test('decisions log: one readable line per decision; the words heard only with transcripts on', () => {
@@ -672,7 +774,7 @@ test('decisions log: one readable line per decision; the words heard only with t
 
 const KDE = { platform: 'linux', env: { XDG_CURRENT_DESKTOP: 'KDE' }, has: () => true, components: new Set(['kwin', 'kmix', 'mediacontrol', 'org_kde_powerdevil', 'org_kde_spectacle_desktop', 'ksmserver']) };
 
-test('control: KDE shortcuts on Plasma, standard commands elsewhere, and nothing that deletes, sends or closes', () => {
+test('control: KDE shortcuts on Plasma, standard commands elsewhere, and no shortcut that deletes, sends or closes', () => {
   const c = config();
   const kde = new Map(controlActions(c, KDE));
   assert.deepEqual(kde.get('system:volume-up').invoke, ['kmix', 'increase_volume']);
@@ -691,7 +793,8 @@ test('control: KDE shortcuts on Plasma, standard commands elsewhere, and nothing
   assert.equal(controlActions(merge(c, { actions: { control: false } }), KDE).length, 0);
   // The fixed list has no destructive kind at all.
   for (const [key] of kde) assert.doesNotMatch(key, /delete|remove|move-file|send|mail|buy|settings|shell|close|quit|kill/);
-  assert.match(criteria(new Map()).none, /deleting or moving files, sending a message or email, buying something, changing settings, running a command, closing or quitting an app/);
+  // Closing is a named app's own choice (close:), never a shortcut; the rest stays out of reach.
+  assert.match(criteria(new Map()).none, /deleting or moving files, sending a message or email, buying something, changing settings, running a command\./);
 });
 
 test('control: each action runs exactly its fixed command; the words go only where they belong', async () => {
@@ -729,6 +832,52 @@ test('control: each action runs exactly its fixed command; the words go only whe
   assert.equal(describe(cat.get('system:volume-up')), 'turned the volume up');
   assert.equal(describe(cat.get('search:web'), 'cheap flights'), 'searched the web for "cheap flights"');
   assert.equal(describe(cat.get('note:new'), 'buy milk tomorrow', { words: false }), 'wrote a note (3 words)');
+});
+
+test('close: an open app is closed as its close button would, only once the sentence ends; not open or several out of sight closes nothing', async () => {
+  const c = merge(config(), { actions: { discoverApps: false } });
+  const cat = buildCatalog(c, new Records(c), KDE);
+  assert.deepEqual(cat.get('close:firefox'), { kind: 'close', name: 'Firefox web browser', desktop: 'firefox.desktop', final: true });
+  assert.match(criteria(cat)['close:firefox'], /^Close the open window of Firefox/);
+  assert.doesNotMatch(criteria(cat).none, /closing/);
+  // The script closes gracefully (closeWindow, never a kill), one window, or only the one in front.
+  const js = closeScript('firefox.desktop', 'T ');
+  assert.match(js, /ws\.length === 1\) \{ ws\[0\]\.closeWindow\(\)/);
+  assert.match(js, /ws\.indexOf\(active\) >= 0\) \{ active\.closeWindow\(\)/);
+  assert.doesNotMatch(js, /kill/i);
+  // KWin prints what it did; the stand-in reads the tag from the loaded script and answers.
+  const closeWith = async (result) => {
+    let tag = '';
+    const exec = async (argv) => {
+      const i = argv.indexOf('org.kde.kwin.Scripting.loadScript');
+      if (i >= 0) tag = JSON.parse(/print\(("[^"]*")/.exec(fs.readFileSync(argv[i + 1], 'utf8'))[1]);
+      return i >= 0 ? '(3,)' : '()';
+    };
+    return perform(cat.get('close:firefox'), { exec, journal: async () => `js: ${tag}${JSON.stringify(result)}\n` });
+  };
+  assert.deepEqual(await closeWith({ open: 1, closed: 1 }), { open: 1, closed: 1 });
+  await assert.rejects(closeWith({ open: 0, closed: 0 }), /Firefox web browser is not open, so nothing was closed/);
+  await assert.rejects(closeWith({ open: 3, closed: 0 }), /3 Firefox web browser windows are open and none of them is in front/);
+  assert.equal(describe(cat.get('close:firefox')), 'closed Firefox web browser');
+  // Mid-sentence, even a sure pick waits; the end of the sentence closes it.
+  const done = [];
+  const ch = new Chooser(c, cat, { execute: async (k) => done.push(k), fetchImpl: fakeDecisions([[/close firefox/i, 'close:firefox', 0.99]]) });
+  ch.key = 'test';
+  ch.reset(0);
+  ch.hear('close firefox');
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(done, []);
+  ch.hear('close firefox', true);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(done, ['close:firefox']);
+  // A doubtful sentence ("don't close firefox" scored up to 0.42) clears the end-of-sentence bar but not closing's.
+  done.length = 0;
+  const doubt = new Chooser(c, cat, { execute: async (k) => done.push(k), fetchImpl: fakeDecisions([[/close/i, 'close:firefox', 0.6]]) });
+  doubt.key = 'test';
+  doubt.reset(0);
+  doubt.hear("don't close firefox", true);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(done, []);
 });
 
 test('chooser: a note is picked mid-sentence and written with the words once the sentence ends; lock waits for the end', async () => {
