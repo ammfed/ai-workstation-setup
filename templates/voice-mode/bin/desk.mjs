@@ -160,19 +160,21 @@ export function buildCatalog(config, records, opts = {}) {
   // Switching to an app's open window needs the desktop's window manager (KWin on Plasma).
   if (control.length && (opts.platform || process.platform) === 'linux' && isKde(opts.env) && (opts.has || defaultHas)('gdbus')) {
     for (const [key, it] of [...items]) if (it.kind === 'app' && it.desktop) items.set(`focus:${key.slice(4)}`, { kind: 'focus', name: it.name, desktop: it.desktop });
+    // Closing waits for the end of the sentence ("close Firefox... no, leave it").
+    for (const [key, it] of [...items]) if (it.kind === 'app' && it.desktop) items.set(`close:${key.slice(4)}`, { kind: 'close', name: it.name, desktop: it.desktop, final: true });
   }
   for (const [key, it] of control) items.set(key, it);
   return items;
 }
 
-const VERB = { app: 'Open', site: 'Open the website', folder: 'Open', file: 'Open the file', record: 'Show on screen', focus: 'Switch to the already open window of' };
+const VERB = { app: 'Open', site: 'Open the website', folder: 'Open', file: 'Open the file', record: 'Show on screen', focus: 'Switch to the already open window of', close: 'Close the open window of' };
 
 export function criteria(catalog) {
   const out = {
     none:
       'Anything else: a question (including a question about what a record says, but not asking what the browser page says, which is reading the page), small talk, asking about status or news, ' +
       'asking for work to be done, or something the helper must not do: deleting or moving files, sending a message or email, ' +
-      'buying something, changing settings, running a command, closing or quitting an app. Also this when it is not yet clear what should be done. ' +
+      'buying something, changing settings, running a command. Also this when it is not yet clear what should be done. ' +
       'Pressing a named button or link on the browser page is its own choice, whatever the button does (the helper asks before pressing anything that sends or changes something).',
   };
   for (const [key, it] of catalog) out[key] = VERB[it.kind] ? `${VERB[it.kind]} ${it.name}` : it.name;
@@ -312,7 +314,8 @@ export class Chooser {
       this.log({ event: 'chooser', words: text.split(/\s+/).length, final, choice, p, ms: Math.round(performance.now() - started), text });
       const item = this.catalog.get(choice);
       // A button that sends or changes something is only asked about when picked, so the bar is lower.
-      const bar = final ? (item?.risky ? Math.min(this.cfg.askThreshold ?? 0.5, this.cfg.finalThreshold) : this.cfg.finalThreshold) : this.cfg.threshold;
+      // Closing an app needs a clear request ("don't close Firefox" scored up to 0.42).
+      const bar = final ? (item?.risky ? Math.min(this.cfg.askThreshold ?? 0.5, this.cfg.finalThreshold) : item?.kind === 'close' ? Math.max(this.cfg.closeThreshold ?? 0.8, this.cfg.finalThreshold) : this.cfg.finalThreshold) : this.cfg.threshold;
       if (choice !== 'none' && item && p >= bar && (final || !item.final || TEXT_KINDS.has(item.kind))) {
         this.done = true;
         this.pending = null;
@@ -384,7 +387,7 @@ export class Chooser {
                   instructions:
                     'A person is speaking to their desktop voice assistant and may not have finished the sentence. ' +
                     'From what they have said so far, which one thing do they explicitly want done on their computer right now? ' +
-                    'Opening an app starts it; switching to an app brings its open window to the front. Opening files means opening the file manager. ' +
+                    'Opening an app starts it; switching to an app brings its open window to the front; closing an app closes its open window. Opening files means opening the file manager. ' +
                     'Clicking, pressing, typing into a field, scrolling, going back and tabs mean the web page open in their browser. ' +
                     'A question about something is not a request to do it.',
                   criteria: this.criteria,
@@ -442,18 +445,56 @@ const kdeShortcut = ([component, name]) => ['gdbus', 'call', '--session', '--des
 const capture = (argv) =>
   new Promise((resolve, reject) => execFile(argv[0], argv.slice(1), { timeout: 3000 }, (err, out) => (err ? reject(err) : resolve(String(out)))));
 
-/** The KWin script that brings an app's most recent window to the front; the target is from the catalog. */
-export function focusScript(desktop) {
-  const id = JSON.stringify(desktop.replace(/\.desktop$/, ''));
-  return `const want = ${id};
+// KWin script lines that find an app's normal windows (ws) by its desktop file or window class.
+const appWindows = (desktop) => `const want = ${JSON.stringify(desktop.replace(/\.desktop$/, ''))};
 const cls = (w) => String(w.resourceClass).toLowerCase();
 const ws = workspace.windowList().filter((w) => w.normalWindow && (w.desktopFileName === want || cls(w) === want.toLowerCase() || cls(w) === want.toLowerCase().split(".").pop()));
-if (ws.length) {
+`;
+
+/** The KWin script that brings an app's most recent window to the front; the target is from the catalog. */
+export function focusScript(desktop) {
+  return `${appWindows(desktop)}if (ws.length) {
   const w = ws[ws.length - 1];
   w.minimized = false;
   workspace.activeWindow = w;
 }
 `;
+}
+
+/**
+ * The KWin script that closes an app's window the way its close button does (so unsaved work
+ * still asks to be saved; nothing is killed), then prints what it did after `tag`. One open
+ * window is closed; of several, only the one in front; otherwise none.
+ */
+export function closeScript(desktop, tag) {
+  return `${appWindows(desktop)}const active = workspace.activeWindow;
+let closed = 0;
+if (ws.length === 1) { ws[0].closeWindow(); closed = 1; }
+else if (ws.length > 1 && ws.indexOf(active) >= 0) { active.closeWindow(); closed = 1; }
+print(${JSON.stringify(tag)} + JSON.stringify({ open: ws.length, closed: closed }));
+`;
+}
+
+// What KWin scripts print lands in the user journal (Plasma runs KWin as a user service).
+const userJournal = (since) => capture(['journalctl', '--user', '--since', `@${since}`, '-o', 'cat', '--no-pager']);
+
+/** Close an app's window with closeScript, and say what happened: closed, not open, or several open. */
+async function kwinClose(item, { exec = capture, journal = userJournal } = {}) {
+  const tag = `voice-mode-close-${process.pid}-${Date.now()} `;
+  const since = Math.floor(Date.now() / 1000) - 1;
+  await kwinRun(closeScript(item.desktop, tag), { exec });
+  const name = item.name.replace(/ \(.*\)$/, '');
+  for (let i = 0; i < 20; i++) {
+    const line = String(await journal(since).catch(() => '')).split('\n').find((l) => l.includes(tag));
+    if (line) {
+      const r = JSON.parse(line.slice(line.indexOf(tag) + tag.length));
+      if (!r.open) throw new Error(`${name} is not open, so nothing was closed`);
+      if (!r.closed) throw new Error(`${r.open} ${name} windows are open and none of them is in front, so none was closed: switch to the one to close and ask again`);
+      return r;
+    }
+    await new Promise((res) => setTimeout(res, 100));
+  }
+  throw new Error(`asked to close ${name}, but could not confirm it`);
 }
 
 let scripts = 0;
@@ -499,13 +540,15 @@ export const typeable = (text) => String(text).replace(/[\u0000-\u001f\u007f]+/g
  * files and folders must still sit inside the documents folder or a record source. The
  * only words it takes are a note's text, a search's words and text to type (`slot`).
  */
-export async function perform(item, { roots = [], exclude = [], platform = process.platform, run = launch, has = () => true, slot = '', exec = capture, note = writeNote, browser = null } = {}) {
+export async function perform(item, { roots = [], exclude = [], platform = process.platform, run = launch, has = () => true, slot = '', exec = capture, journal, note = writeNote, browser = null } = {}) {
   if (!item) throw new Error('not in the catalog');
   switch (item.kind) {
     case 'system':
       return run(item.invoke ? kdeShortcut(item.invoke) : item.argv);
     case 'focus':
       return kwinRun(focusScript(item.desktop), { exec });
+    case 'close':
+      return kwinClose(item, { exec, journal });
     case 'note': {
       if (!slot.trim()) throw new Error('no text for the note');
       const file = note(item.folder, slot);
@@ -571,6 +614,8 @@ export function describe(item, slot = '', { words = true } = {}) {
       return item.done;
     case 'focus':
       return `switched to ${item.name.replace(/ \(.*\)$/, '')}`;
+    case 'close':
+      return `closed ${item.name.replace(/ \(.*\)$/, '')}`;
     case 'note':
       return `wrote a note ${q}`;
     case 'search':

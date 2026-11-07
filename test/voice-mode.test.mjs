@@ -15,7 +15,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const bin = path.join(repoRoot, 'templates', 'voice-mode', 'bin');
 const { merge, parseEnvFile, readKey, expandGlob, loadConfig, DEFAULTS } = await import(path.join(bin, 'config.mjs'));
 const { Records, runTool } = await import(path.join(bin, 'records.mjs'));
-const { Chooser, buildCatalog, criteria, perform, launch, controlActions, spans, focusScript, describe, typeable, SYSTEM } = await import(path.join(bin, 'desk.mjs'));
+const { Chooser, buildCatalog, criteria, perform, launch, controlActions, spans, focusScript, closeScript, describe, typeable, SYSTEM } = await import(path.join(bin, 'desk.mjs'));
 const { OpenAIRealtime, GeminiLive, FakeProvider } = await import(path.join(bin, 'providers.mjs'));
 const { Session, Live, PROMISE, instructionsFor, streamClip, speechBounds, acquireLock, claimLock, releaseLock, lockHolder, decisionLine, doRequest, sayText, makeLogger } = await import(path.join(bin, 'voice-mode.mjs'));
 const net = await import('node:net');
@@ -774,7 +774,7 @@ test('decisions log: one readable line per decision; the words heard only with t
 
 const KDE = { platform: 'linux', env: { XDG_CURRENT_DESKTOP: 'KDE' }, has: () => true, components: new Set(['kwin', 'kmix', 'mediacontrol', 'org_kde_powerdevil', 'org_kde_spectacle_desktop', 'ksmserver']) };
 
-test('control: KDE shortcuts on Plasma, standard commands elsewhere, and nothing that deletes, sends or closes', () => {
+test('control: KDE shortcuts on Plasma, standard commands elsewhere, and no shortcut that deletes, sends or closes', () => {
   const c = config();
   const kde = new Map(controlActions(c, KDE));
   assert.deepEqual(kde.get('system:volume-up').invoke, ['kmix', 'increase_volume']);
@@ -793,7 +793,8 @@ test('control: KDE shortcuts on Plasma, standard commands elsewhere, and nothing
   assert.equal(controlActions(merge(c, { actions: { control: false } }), KDE).length, 0);
   // The fixed list has no destructive kind at all.
   for (const [key] of kde) assert.doesNotMatch(key, /delete|remove|move-file|send|mail|buy|settings|shell|close|quit|kill/);
-  assert.match(criteria(new Map()).none, /deleting or moving files, sending a message or email, buying something, changing settings, running a command, closing or quitting an app/);
+  // Closing is a named app's own choice (close:), never a shortcut; the rest stays out of reach.
+  assert.match(criteria(new Map()).none, /deleting or moving files, sending a message or email, buying something, changing settings, running a command\./);
 });
 
 test('control: each action runs exactly its fixed command; the words go only where they belong', async () => {
@@ -831,6 +832,52 @@ test('control: each action runs exactly its fixed command; the words go only whe
   assert.equal(describe(cat.get('system:volume-up')), 'turned the volume up');
   assert.equal(describe(cat.get('search:web'), 'cheap flights'), 'searched the web for "cheap flights"');
   assert.equal(describe(cat.get('note:new'), 'buy milk tomorrow', { words: false }), 'wrote a note (3 words)');
+});
+
+test('close: an open app is closed as its close button would, only once the sentence ends; not open or several out of sight closes nothing', async () => {
+  const c = merge(config(), { actions: { discoverApps: false } });
+  const cat = buildCatalog(c, new Records(c), KDE);
+  assert.deepEqual(cat.get('close:firefox'), { kind: 'close', name: 'Firefox web browser', desktop: 'firefox.desktop', final: true });
+  assert.match(criteria(cat)['close:firefox'], /^Close the open window of Firefox/);
+  assert.doesNotMatch(criteria(cat).none, /closing/);
+  // The script closes gracefully (closeWindow, never a kill), one window, or only the one in front.
+  const js = closeScript('firefox.desktop', 'T ');
+  assert.match(js, /ws\.length === 1\) \{ ws\[0\]\.closeWindow\(\)/);
+  assert.match(js, /ws\.indexOf\(active\) >= 0\) \{ active\.closeWindow\(\)/);
+  assert.doesNotMatch(js, /kill/i);
+  // KWin prints what it did; the stand-in reads the tag from the loaded script and answers.
+  const closeWith = async (result) => {
+    let tag = '';
+    const exec = async (argv) => {
+      const i = argv.indexOf('org.kde.kwin.Scripting.loadScript');
+      if (i >= 0) tag = JSON.parse(/print\(("[^"]*")/.exec(fs.readFileSync(argv[i + 1], 'utf8'))[1]);
+      return i >= 0 ? '(3,)' : '()';
+    };
+    return perform(cat.get('close:firefox'), { exec, journal: async () => `js: ${tag}${JSON.stringify(result)}\n` });
+  };
+  assert.deepEqual(await closeWith({ open: 1, closed: 1 }), { open: 1, closed: 1 });
+  await assert.rejects(closeWith({ open: 0, closed: 0 }), /Firefox web browser is not open, so nothing was closed/);
+  await assert.rejects(closeWith({ open: 3, closed: 0 }), /3 Firefox web browser windows are open and none of them is in front/);
+  assert.equal(describe(cat.get('close:firefox')), 'closed Firefox web browser');
+  // Mid-sentence, even a sure pick waits; the end of the sentence closes it.
+  const done = [];
+  const ch = new Chooser(c, cat, { execute: async (k) => done.push(k), fetchImpl: fakeDecisions([[/close firefox/i, 'close:firefox', 0.99]]) });
+  ch.key = 'test';
+  ch.reset(0);
+  ch.hear('close firefox');
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(done, []);
+  ch.hear('close firefox', true);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(done, ['close:firefox']);
+  // A doubtful sentence ("don't close firefox" scored up to 0.42) clears the end-of-sentence bar but not closing's.
+  done.length = 0;
+  const doubt = new Chooser(c, cat, { execute: async (k) => done.push(k), fetchImpl: fakeDecisions([[/close/i, 'close:firefox', 0.6]]) });
+  doubt.key = 'test';
+  doubt.reset(0);
+  doubt.hear("don't close firefox", true);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(done, []);
 });
 
 test('chooser: a note is picked mid-sentence and written with the words once the sentence ends; lock waits for the end', async () => {

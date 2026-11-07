@@ -50,6 +50,8 @@ export const DEFAULTS = {
       finalThreshold: 0.5,
       // A browser button that sends or changes something is only asked about when picked.
       askThreshold: 0.5,
+      // Closing an app, once the sentence has ended.
+      closeThreshold: 0.8,
       timeoutMs: 3000,
     },
     // One line per decision in logs/decisions.log (what was chosen, how sure, how fast;
