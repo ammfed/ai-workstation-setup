@@ -1,6 +1,6 @@
 ---
 name: workflow-playbook
-description: A working method for long projects run by one owner with AI agents. Use when a new goal takes more than one session, when capturing an idea and choosing which phases it needs, when planning or running multi-stage work (research, concepts, layout options, wireframes, build), when reworking a weak prototype into a liked direction, an approved journey map and an aligned rules list, when any stage needs research, when briefing a worker or helper, when building a review page for the owner or a page for stakeholders, or when deciding whether to ask the owner or act.
+description: A working method for long projects run by one owner with AI agents. Use when a new goal takes more than one session, when capturing an idea and choosing which phases it needs, when planning or running multi-stage work (research, concepts, layout options, wireframes, build), when reworking a weak prototype into a liked direction, an approved journey map and an aligned rules list, when any stage needs research, when briefing a worker or helper, when building a review page for the owner or a page for stakeholders, when researching, designing or building anything with a screen (concepts, wireframes, a design system, colours and fonts, the front end), or when deciding whether to ask the owner or act.
 ---
 
 # Workflow playbook
@@ -72,6 +72,7 @@ Why: one supervisor that checks every phase against the same method catches drif
 | to-questionnaire (owner starts it) | A gap only someone else can fill, such as a colleague, a vendor or real users: turn it into a short questionnaire for that person, including the real-user try-out (rule 1.6) |
 | teach (owner starts it) | The owner asks to learn a new skill or concept |
 | composio-cli | The work needs an outside app the owner has connected, such as email, a calendar or a tracker |
+| motion-designer | A video plan or review that needs motion decisions: timing, easing, staging and follow-through, used beside the video tool (video.md, stage 5) |
 | diagnosing-bugs | A bug or a slowdown whose cause is unknown: find and prove the cause before the fix (the bug path below) |
 | stow | Before compacting or a long break: save what the session learned into the files where it belongs (rule 9.3) |
 
@@ -451,3 +452,10 @@ Why: a video has its own stages and risks, so one companion file keeps them out 
 - When the work is a presentation, read `slides.md` in this skill's folder. It maps the stages of a deck onto these phases and gates.
 
 Why: a deck has risks of its own, such as the back row, the show app and a stage that is not under the owner's control.
+
+## 13. Building anything with a screen
+
+- When the work has a screen, a page, a deck or a document layout, read `building.md` in this skill's folder, in every phase from research to ship. It holds the design and interface method: vision from key moments, wireframes, design systems, colours and fonts, interface rules, the live demo, and feedback versions.
+- When the person asks for a sector style by name, such as "use the government build style", load that skill too. It adds its taste on top of `building.md` for the current project only. Never load a sector style without that ask.
+
+Why: screen work has its own method, and keeping it in one companion file keeps it out of the general rules while every phase can still reach it.

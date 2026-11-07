@@ -68,6 +68,7 @@ Pick by the kind of work, never by a guess of how long it takes. A video that mi
    - Name the tools for the cut, the motion, the voice and each kind of generation, each checked live that day.
    - A tool the owner has not bought or approved stays a card, never a step in the plan.
    - When the owner changes the tool set, drop the old tool from every plan and brief at once.
+   - When a video tool such as HyperFrames builds the motion, use the motion-designer skill beside it to plan and review the timing, easing, staging and follow-through. It comes from [dylantarre/animation-principles](https://github.com/dylantarre/animation-principles) under the MIT licence.
 
    Why: a plan built around an unapproved tool is rewritten when the owner says no, and a tool left in an old brief comes back.
 5. **Set the data rule.**
