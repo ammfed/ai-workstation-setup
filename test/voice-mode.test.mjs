@@ -2203,6 +2203,7 @@ test('url: a said web address opens as https, anything else is refused', async (
   assert.equal(webAddress('Google dot com.'), 'https://google.com');
   assert.equal(webAddress('www.bbc.co.uk/news'), 'https://www.bbc.co.uk/news');
   assert.equal(webAddress('http://example.org'), 'https://example.org');
+  assert.equal(webAddress('google.com in the browser'), 'https://google.com');
   for (const t of ['google', 'file explorer', 'javascript:alert(1)', 'a b.com', '']) assert.equal(webAddress(t), '', t);
   const ran = [];
   await perform({ kind: 'url' }, { platform: 'linux', slot: 'google.com', run: async (argv) => ran.push(argv) });
@@ -2300,6 +2301,20 @@ test('session: desktop_action waits for an action still running instead of sayin
   assert.deepEqual(r.opened, ['opened Firefox (Web Browser)']);
   assert.deepEqual(performed, ['Firefox (Web Browser)']);
   session.close();
+});
+
+test('chooser: a web address picked mid-sentence takes the said address at the end, with no second call', async () => {
+  const calls = [];
+  const c = config();
+  const done = [];
+  const ch = new Chooser(c, quickCatalog(c), { execute: async (k, info) => done.push([k, info.slot]), fetchImpl: fakeDecisions([[/google\.com/i, 'url:web', 0.95]], calls) });
+  ch.key = 'test';
+  await ch.ask('open google.com', false);
+  assert.equal(ch.textAction?.key, 'url:web');
+  ch.hear('open google.com in the browser', true);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(done, [['url:web', 'google.com']]);
+  assert.equal(calls.length, 1);
 });
 
 test('chooser: the end-of-sentence call gets finalTimeoutMs, and one that timed out is not tried again', async () => {

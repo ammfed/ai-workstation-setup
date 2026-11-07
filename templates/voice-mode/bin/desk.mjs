@@ -200,7 +200,9 @@ export function typingPick(answer, catalog) {
 
 /** A web address as said ("google.com", "google dot com", "www.bbc.co.uk/news"), as an https link, or '' for anything else. */
 export function webAddress(said) {
-  const t = String(said || '').trim().toLowerCase().replace(/\s+dot\s+/g, '.').replace(/[.!?,]+$/, '').replace(/^https?:\/\//, '');
+  const t = String(said || '').trim().toLowerCase().replace(/\s+dot\s+/g, '.').replace(/[.!?,]+$/, '')
+    .replace(/\s+(?:in|on|with)\s+(?:the |my |a )?(?:browser|web browser|firefox|chrome|google chrome|new tab)$/, '')
+    .replace(/^https?:\/\//, '');
   return /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s]*)?$/.test(t) ? `https://${t}` : '';
 }
 
@@ -457,6 +459,17 @@ export class Chooser {
     const { key, p } = ta;
     ta.filling = true;
     const kind = this.catalog.get(key).kind;
+    // A plain command needs no second pick: its words are known already.
+    const q = quickPick(text, this.catalog);
+    if (q?.key === key && q.slot) {
+      this.log({ event: 'chooser', words: text.split(/\s+/).length, final: true, choice: `${key} (${q.slot.split(/\s+/).length} words)`, p: 1, ms: 0, quick: 'heard', text: q.slot });
+      try {
+        await this.run(key, { text, p, final: true, slot: q.slot });
+      } finally {
+        ta.done = true;
+      }
+      return;
+    }
     // Words for a field can end before "in the search box": any run of words.
     const options = kind === 'field' ? runs(text) : spans(text);
     const started = performance.now();
