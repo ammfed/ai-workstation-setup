@@ -46,10 +46,15 @@ export const DEFAULTS = {
       keyName: 'OPENROUTER_API_KEY',
       keyFile: '',
       threshold: 0.9,
-      finalThreshold: 0.7,
+      // Once the sentence has ended: the action must outweigh everything else together.
+      finalThreshold: 0.5,
       // A browser button that sends or changes something is only asked about when picked.
       askThreshold: 0.5,
+      // Closing an app, once the sentence has ended.
+      closeThreshold: 0.8,
       timeoutMs: 3000,
+      // The call once the sentence has ended: on a slow day it can take 3 to 5 seconds.
+      finalTimeoutMs: 6000,
     },
     // One line per decision in logs/decisions.log (what was chosen, how sure, how fast;
     // the words heard only with logTranscripts).
