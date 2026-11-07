@@ -50,11 +50,14 @@ import { readTasks } from './tasks.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 
-// Node gives each address of a host only 250 ms to connect before it tries the next one. A
-// busy Wi-Fi link can take longer, and with no IPv6 route every address of a host then fails
-// at once ("fetch failed", cause ETIMEDOUT), which is what dropped decision calls whenever a
-// new connection was needed. One second per address.
-net.setDefaultAutoSelectFamilyAttemptTimeout?.(1000);
+// Node gives each address of a host only 250 ms to connect before it gives up on it and tries
+// the next one, and only the last address has no limit. When the IPv6 route is gone, the IPv6
+// addresses fail at once and one of them is last, so the IPv4 addresses get only this window:
+// a slower connect then fails the whole call ("fetch failed", cause ETIMEDOUT ETIMEDOUT
+// ENETUNREACH ETIMEDOUT ENETUNREACH). A connect whose first packet is lost is answered just
+// after one second (the system resends it then), so one second per address still failed;
+// two and a half seconds lets that connect, and a short Wi-Fi stall, finish.
+net.setDefaultAutoSelectFamilyAttemptTimeout?.(2500);
 const RUNTIME = process.env.XDG_RUNTIME_DIR || CONFIG_DIR;
 const SOCKET = process.platform === 'win32' ? '\\\\.\\pipe\\voice-mode' : path.join(RUNTIME, 'voice-mode.sock');
 const LOCK = path.join(RUNTIME, 'voice-mode.lock');

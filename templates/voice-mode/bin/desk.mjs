@@ -384,7 +384,7 @@ export class Chooser {
                   instructions:
                     'A person is speaking to their desktop voice assistant and may not have finished the sentence. ' +
                     'From what they have said so far, which one thing do they explicitly want done on their computer right now? ' +
-                    'Opening an app starts it; switching to an app brings its open window to the front. ' +
+                    'Opening an app starts it; switching to an app brings its open window to the front. Opening files means opening the file manager. ' +
                     'Clicking, pressing, typing into a field, scrolling, going back and tabs mean the web page open in their browser. ' +
                     'A question about something is not a request to do it.',
                   criteria: this.criteria,

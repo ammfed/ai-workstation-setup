@@ -201,6 +201,26 @@ test('chooser: acts once, mid-sentence, only above the threshold; a question ope
   assert.deepEqual(done, []);
 });
 
+test('chooser: once the sentence ends, a pick that outweighs everything else acts; a split one does not', async () => {
+  const c = config();
+  const cat = buildCatalog(c, new Records(c));
+  const done = [];
+  // 0.62 is what the laptop logged for the file manager, which then did not open; 0.45 is split.
+  const fetchImpl = fakeDecisions([[/files/i, 'folder:documents', 0.62], [/email/i, 'site:mail', 0.45]]);
+  const ch = new Chooser(c, cat, { execute: async (k) => done.push(k), fetchImpl });
+  ch.key = 'test';
+  for (const [words, want] of [['open my files', ['folder:documents']], ['open my email in the browser', []]]) {
+    done.length = 0;
+    ch.reset(0);
+    ch.hear(words);
+    await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(done, [], 'never mid-sentence below the threshold');
+    ch.hear(words, true);
+    await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(done, want, words);
+  }
+});
+
 test('chooser: without a key it is off and never calls out', () => {
   const c = config();
   const ch = new Chooser(c, buildCatalog(c, new Records(c)), { fetchImpl: () => assert.fail('called') });
@@ -652,9 +672,66 @@ test('chooser: one call per new word, and a failed call logs its cause', async (
   assert.equal(logs[0].cause, 'ETIMEDOUT ETIMEDOUT ENETUNREACH');
 });
 
-test('connections: each address of a host gets a full second to connect', () => {
-  // The default (250 ms) failed every address whenever a connect was slow and there was no IPv6 route.
-  if (net.getDefaultAutoSelectFamilyAttemptTimeout) assert.equal(net.getDefaultAutoSelectFamilyAttemptTimeout(), 1000);
+test('connections: each address of a host gets long enough for a connect whose first packet was lost', () => {
+  // A lost first packet is sent again after one second, so a one-second window cut such
+  // connects off just before they finished.
+  if (net.getDefaultAutoSelectFamilyAttemptTimeout) assert.equal(net.getDefaultAutoSelectFamilyAttemptTimeout(), 2500);
+});
+
+// The laptop's failure, rebuilt: no IPv6 route (yet IPv6 addresses for the host) and an IPv4
+// connect that takes over one second. Runs in a throwaway network namespace with a delayed
+// loopback, so it needs Linux, unprivileged user namespaces and netem; otherwise it is skipped.
+test('connections: a slow IPv4 connect with no IPv6 route still reaches the chooser; one second per address did not', { skip: process.platform !== 'linux' }, async (t) => {
+  const dir = fs.mkdtempSync(path.join(tmp, 'netns-'));
+  fs.writeFileSync(path.join(dir, 'hosts'), '127.0.0.1 chooser.test\n127.0.0.2 chooser.test\n2001:db8::1 chooser.test\n2001:db8::2 chooser.test\n');
+  // One chooser call to a stand-in decisions server in the same namespace; prints what happened.
+  fs.writeFileSync(
+    path.join(dir, 'pick.mjs'),
+    `import http from 'node:http';
+import net from 'node:net';
+await import(${JSON.stringify(path.join(bin, 'voice-mode.mjs'))});
+const { merge, DEFAULTS } = await import(${JSON.stringify(path.join(bin, 'config.mjs'))});
+const { Chooser } = await import(${JSON.stringify(path.join(bin, 'desk.mjs'))});
+if (process.argv[2]) net.setDefaultAutoSelectFamilyAttemptTimeout(Number(process.argv[2]));
+const answer = JSON.stringify({ answers: { target: { choice: 'app:files', probabilities: { 'app:files': 0.99 } } } });
+const server = http.createServer((q, s) => q.resume().on('end', () => s.end(answer))).listen(8080, '0.0.0.0');
+await new Promise((r) => server.once('listening', r));
+const c = merge(DEFAULTS, { actions: { chooser: { url: 'http://chooser.test:8080/decide', timeoutMs: 6000 } } });
+const out = { picked: null, errors: [] };
+const ch = new Chooser(c, new Map([['app:files', { kind: 'app', name: 'Files' }]]), { execute: async (k) => (out.picked = k), log: (r) => r.event === 'chooser-error' && out.errors.push(r.cause) });
+ch.key = 'test';
+await ch.ask('open files', true);
+console.log(JSON.stringify(out));
+server.close();
+`,
+  );
+  const script = [
+    'ip link set lo up && ip addr add 127.0.0.2/8 dev lo && ip -6 addr add 2001:db8:ff::14/128 dev lo nodad || exit 77',
+    // About 1.1 s per connect: over the old one-second window, under the new one.
+    'tc qdisc add dev lo root netem delay 550ms && mount --bind "$1/hosts" /etc/hosts || exit 77',
+    `"${process.execPath}" "$1/pick.mjs" && "${process.execPath}" "$1/pick.mjs" 1000`,
+  ].join('\n');
+  const r = await new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn('unshare', ['-rnm', 'sh', '-c', script, 'sh', dir], { stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch {
+      return resolve({ code: 77 });
+    }
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => (stdout += d));
+    child.stderr.on('data', (d) => (stderr += d));
+    child.on('error', () => resolve({ code: 77 }));
+    child.on('close', (code) => resolve({ code, stdout, stderr }));
+  });
+  // Only a namespace that cannot be made skips; a failing chooser call fails the test.
+  if (r.code === 77 || /^unshare:/m.test(r.stderr)) return t.skip('needs unshare -rnm and netem');
+  assert.equal(r.code, 0, r.stderr);
+  const [now, before] = r.stdout.trim().split('\n').map((l) => JSON.parse(l));
+  assert.deepEqual(now, { picked: 'app:files', errors: [] });
+  // The control: the old window fails both tries with the cause the laptop logged.
+  assert.deepEqual(before, { picked: null, errors: ['ETIMEDOUT ETIMEDOUT ENETUNREACH ETIMEDOUT ENETUNREACH', 'ETIMEDOUT ETIMEDOUT ENETUNREACH ETIMEDOUT ENETUNREACH'] });
 });
 
 test('decisions log: one readable line per decision; the words heard only with transcripts on', () => {
