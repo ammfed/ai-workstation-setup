@@ -15,7 +15,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const bin = path.join(repoRoot, 'templates', 'voice-mode', 'bin');
 const { merge, parseEnvFile, readKey, expandGlob, loadConfig, DEFAULTS } = await import(path.join(bin, 'config.mjs'));
 const { Records, runTool } = await import(path.join(bin, 'records.mjs'));
-const { Chooser, buildCatalog, criteria, perform, controlActions, spans, focusScript, describe, typeable, SYSTEM } = await import(path.join(bin, 'desk.mjs'));
+const { Chooser, buildCatalog, criteria, perform, launch, controlActions, spans, focusScript, describe, typeable, SYSTEM } = await import(path.join(bin, 'desk.mjs'));
 const { OpenAIRealtime, GeminiLive, FakeProvider } = await import(path.join(bin, 'providers.mjs'));
 const { Session, Live, PROMISE, instructionsFor, streamClip, speechBounds, acquireLock, claimLock, releaseLock, lockHolder, decisionLine, doRequest, sayText, makeLogger } = await import(path.join(bin, 'voice-mode.mjs'));
 const net = await import('node:net');
@@ -149,7 +149,7 @@ test('perform: opens only catalog items, only inside the allowed folders, never 
   await perform({ kind: 'folder', path: path.join(docs, 'Projects') }, { roots, platform: 'linux', run });
   await perform({ kind: 'record', path: path.join(data, 'backlog.md') }, { roots, platform: 'darwin', run });
   assert.deepEqual(runs, [
-    ['kstart', '--application', 'firefox.desktop'],
+    ['kstart', '--application', 'firefox'],
     ['gtk-launch', 'firefox.desktop'],
     ['open', '-a', 'Safari'],
     ['xdg-open', 'https://mail.example.com'],
@@ -165,6 +165,31 @@ test('perform: opens only catalog items, only inside the allowed folders, never 
   await refuse({ kind: 'file', path: path.join(docs, 'app.desktop') }, /a program/);
   await refuse({ kind: 'folder', path: path.join(docs, 'notes.md') }, /not a folder/);
   assert.equal(runs.length, 6);
+});
+
+test('perform: an app opens through kstart by its bare name, waiting for kstart; when kstart fails, gtk-launch is tried', async () => {
+  // On the laptop, `kstart --application x.desktop` printed `No such service ""` and waited
+  // forever: nothing opened, yet the action was logged as opened.
+  const runs = [];
+  const run = async (argv, env, opts) => {
+    runs.push([argv, opts]);
+    if (argv[0] === 'kstart') throw new Error('kstart did not start it within 8 s');
+  };
+  await perform({ kind: 'app', name: 'Files', desktop: 'org.kde.dolphin.desktop' }, { platform: 'linux', run, has: () => true });
+  assert.deepEqual(runs, [
+    [['kstart', '--application', 'org.kde.dolphin'], { waitMs: 8000 }],
+    [['gtk-launch', 'org.kde.dolphin.desktop'], undefined],
+  ]);
+  await assert.rejects(perform({ kind: 'app', name: 'Files', desktop: 'org.kde.dolphin.desktop' }, { platform: 'linux', run, has: (b) => b === 'kstart' }), /did not start/);
+});
+
+test('launch: with waitMs, a launcher counts only when it exits 0 in time; a hanging one is stopped and fails', async () => {
+  const node = (code) => [process.execPath, '-e', code];
+  await launch(node('process.exit(0)'), undefined, { waitMs: 5000 });
+  await assert.rejects(launch(node('process.exit(3)'), undefined, { waitMs: 5000 }), /could not start it \(exit 3\)/);
+  const t0 = Date.now();
+  await assert.rejects(launch(node('setTimeout(() => {}, 60000)'), undefined, { waitMs: 300 }), /did not start it within 0.3 s/);
+  assert.ok(Date.now() - t0 < 5000);
 });
 
 test('chooser: acts once, mid-sentence, only above the threshold; a question opens nothing', async () => {

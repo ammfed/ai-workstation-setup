@@ -403,13 +403,30 @@ export class Chooser {
 
 // ------------------------------------------------------------------ executor
 
-function launch(argv, env) {
+/**
+ * Start a program and leave it running. With waitMs, the program is a launcher that exits
+ * once the app has started: success is its exit status 0 within that time, and a launcher
+ * still running then is stopped and counts as a failure.
+ */
+export function launch(argv, env, { waitMs = 0 } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(argv[0], argv.slice(1), { detached: true, stdio: 'ignore', env: env ? { ...process.env, ...env } : undefined });
     child.once('error', reject);
-    child.once('spawn', () => {
-      child.unref();
-      resolve();
+    if (!waitMs) {
+      child.once('spawn', () => {
+        child.unref();
+        resolve();
+      });
+      return;
+    }
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`${path.basename(argv[0])} did not start it within ${waitMs / 1000} s`));
+    }, waitMs);
+    child.once('exit', (code) => {
+      clearTimeout(timer);
+      if (code === 0) resolve();
+      else reject(new Error(`${path.basename(argv[0])} could not start it (exit ${code})`));
     });
   });
 }
@@ -510,7 +527,18 @@ export async function perform(item, { roots = [], exclude = [], platform = proce
     case 'app':
       if (item.command) return run(item.command);
       if (platform === 'darwin') return run(['open', '-a', item.mac || item.name.replace(/ \(.*\)$/, '')]);
-      if (platform === 'linux' && item.desktop) return run(has('kstart') ? ['kstart', '--application', item.desktop] : ['gtk-launch', item.desktop]);
+      if (platform === 'linux' && item.desktop) {
+        // kstart takes the desktop file's name without ".desktop": given "x.desktop" it prints
+        // `No such service ""` and waits forever, and nothing opens. It exits once the app has
+        // started, so its exit is waited for; when it fails, gtk-launch is tried.
+        if (!has('kstart')) return run(['gtk-launch', item.desktop]);
+        try {
+          return await run(['kstart', '--application', item.desktop.replace(/\.desktop$/, '')], undefined, { waitMs: 8000 });
+        } catch (err) {
+          if (!has('gtk-launch')) throw err;
+          return run(['gtk-launch', item.desktop]);
+        }
+      }
       throw new Error(`no way to start ${item.name} here`);
     case 'site':
       if (!/^https?:\/\//.test(item.url)) throw new Error('only http and https links are opened');
