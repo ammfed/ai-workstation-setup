@@ -743,7 +743,7 @@ test('the vision skill comes from its own upstream repository', () => {
 test('the default skill set is every skill on offer, so a fresh clone gets the full set', () => {
   const q = skills.questions.find((x) => x.key === 'SKILLS');
   assert.deepEqual([...q.default].sort(), q.choices.map((c) => c.value).sort());
-  const full = ['kun', 'vision', 'grilling', 'teach', 'tdd', 'codebase-design', 'to-spec', 'to-tickets', 'to-questionnaire', 'wayfinder', 'find-docs', 'no-mistakes', 'workflow-playbook', 'composio-cli'];
+  const full = ['kun', 'vision', 'grilling', 'teach', 'tdd', 'codebase-design', 'to-spec', 'to-tickets', 'to-questionnaire', 'wayfinder', 'find-docs', 'no-mistakes', 'workflow-playbook', 'motion-designer', 'composio-cli'];
   for (const name of full) assert.ok(q.default.includes(name), name);
   assert.deepEqual(q.choices.find((c) => c.value === 'wayfinder').helpers, ['domain-modeling', 'research', 'prototype']);
 });
@@ -806,11 +806,18 @@ test('a skill whose tool this run installs is not skipped', () => {
   assert.match(out, /would run: npx -y skills add kunchenguid\/no-mistakes --skill no-mistakes/);
 });
 
+test('motion-designer is installed from its upstream, not copied into this repo', () => {
+  const { code, out } = skillsDryRun();
+  assert.equal(code, 0, out);
+  assert.match(out, /would run: npx -y skills add dylantarre\/animation-principles --skill motion-designer -g -a claude-code -y/);
+  assert.match(fs.readFileSync(path.join(repoRoot, 'templates/skills/workflow-playbook/video.md'), 'utf8'), /motion-designer[^\n]*dylantarre\/animation-principles[^\n]*MIT/);
+});
+
 test('the end of the install lists the skills installed and skipped, then says to restart Claude Code', () => {
   const { code, out } = skillsDryRun();
   assert.equal(code, 0, out);
   const tail = out.slice(out.indexOf('\nSummary'));
-  assert.match(tail, /would install: kun, vision, grilling, teach, tdd, codebase-design, to-spec, to-tickets, to-questionnaire, diagnosing-bugs, wayfinder, domain-modeling \(for wayfinder\), research \(for wayfinder\), prototype \(for wayfinder\), find-docs, stow, workflow-playbook\n/);
+  assert.match(tail, /would install: kun, vision, grilling, teach, tdd, codebase-design, to-spec, to-tickets, to-questionnaire, diagnosing-bugs, wayfinder, domain-modeling \(for wayfinder\), research \(for wayfinder\), prototype \(for wayfinder\), find-docs, stow, workflow-playbook, motion-designer\n/);
   assert.match(tail, /skipped: no-mistakes: the no-mistakes CLI is not installed/);
   assert.match(tail, /skipped: composio-cli: the composio CLI is not installed/);
   assert.doesNotMatch(tail, /failed:/);

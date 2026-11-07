@@ -72,6 +72,7 @@ Why: one supervisor that checks every phase against the same method catches drif
 | to-questionnaire (owner starts it) | A gap only someone else can fill, such as a colleague, a vendor or real users: turn it into a short questionnaire for that person, including the real-user try-out (rule 1.6) |
 | teach (owner starts it) | The owner asks to learn a new skill or concept |
 | composio-cli | The work needs an outside app the owner has connected, such as email, a calendar or a tracker |
+| motion-designer | A video plan or review that needs motion decisions: timing, easing, staging and follow-through, used beside the video tool (video.md, stage 5) |
 | diagnosing-bugs | A bug or a slowdown whose cause is unknown: find and prove the cause before the fix (the bug path below) |
 | stow | Before compacting or a long break: save what the session learned into the files where it belongs (rule 9.3) |
 
