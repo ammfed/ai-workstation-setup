@@ -45,7 +45,15 @@ mic ──► realtime voice provider (OpenAI Realtime or Gemini Live) ──►
   Decisions API), which returns one choice from a fixed catalog with a probability per option.
   Plain code carries out the chosen item only when that probability clears a threshold, so the
   app can open before you finish the sentence. The model never produces a command, a path or
-  a URL: every item and its target come from the catalog.
+  a URL: every item comes from the catalog, and the only target taken from your words is a web
+  address you said (always opened as https).
+- **Plain commands skip the decision model.** When the whole sentence is one plain command
+  ("open Firefox", "open my file explorer", "open google.com", "search the web for food",
+  "close the file manager", "type hello"), and its target names exactly one item in the
+  catalog or is a web address, it is done the moment the sentence ends, with no network call.
+  A negation ("don't close Firefox"), a question about it ("how do I open Firefox?") or any
+  doubt leaves it to the decision model. Such a command is never handed off to your
+  assistant's session: asked through `hand_off` or `desktop_action`, it is done here.
 - **The voice model is told what was opened** (a one-line note on OpenAI, a `desktop_action`
   tool on either provider), so it confirms instead of claiming it cannot open apps.
 
@@ -69,7 +77,7 @@ points at another one). Everything not in the file takes the defaults in `bin/co
 | `queue` | `{ "command": [...], "env": {} }`: how a hand-off reaches your assistant; the note is added as the last argument. Never run through a shell. Without it there is no hand-off. |
 | `handoff` | `replyCommand` (default `voice-mode reply`: the command written into each note; give the full path if your assistant's shell does not have it on PATH), `dir` (the reply queue; default `handoff/` next to the config), `waitMin` (15: how long a conversation stays open for an answer that is still coming), `stillComingSec` (20: when it says, once, that the answer is still coming; 0 never). |
 | `briefing` | `enabled`, `refreshMin` (3), `maxChars` (120000 in all; see What a big briefing costs), `parts` (see Briefing and hand-off). |
-| `actions` | `enabled`, `chooser` (`model`, `keyName`, `keyFile`, `threshold` 0.9 mid-sentence, `finalThreshold` 0.5 once you stop, `askThreshold` 0.5 for a browser button that is only asked about, `closeThreshold` 0.8 to close an app), `apps` (extra `{ id, name, desktop \| mac \| command }`), `discoverApps` (installed desktop apps on Linux), `sites` (`{ id, name, url }`, http and https only), `documents` (its folders can be opened), `files`, `decisionLog` (default on: one line per decision in `logs/decisions.log`), `control` (default on: the PC control below), `notes.folder`, `searchUrl` (`{q}` is replaced by the words), `dryRun`. |
+| `actions` | `enabled`, `chooser` (`model`, `keyName`, `keyFile`, `threshold` 0.9 mid-sentence, `finalThreshold` 0.5 once you stop, `askThreshold` 0.5 for a browser button that is only asked about, `closeThreshold` 0.8 to close an app, `timeoutMs` 3000 per call mid-sentence, `finalTimeoutMs` 6000 for the call once you stop), `apps` (extra `{ id, name, desktop \| mac \| command }`), `discoverApps` (installed desktop apps on Linux), `sites` (`{ id, name, url }`, http and https only), `documents` (its folders can be opened), `files`, `decisionLog` (default on: one line per decision in `logs/decisions.log`), `control` (default on: the PC control below), `notes.folder`, `searchUrl` (`{q}` is replaced by the words), `dryRun`. |
 | `browser` | `enabled` (off by default), `endpoint` (`http://127.0.0.1:9222`: the DevTools address of a Chrome started for the assistant; loopback only), `ignore` (URL prefixes of tabs it never reads, switches to or closes), `maxItems` (60 links, buttons and fields per page), `confirmSec` (30: how long a held button waits for a yes). See Browser control. |
 | `audio` | `duplex`: `full` (default: talk over a reply to cut in) or `half` (the mic is muted while a reply plays), `echoCancel` (default on; it wraps the `input` and `output` devices, or the default ones), `input` and `output` device names, `earcons` (a short tone when a conversation starts and ends). |
 | `listen.exitAfterMin` | End the conversation after this many minutes without speech (default 10). |
@@ -98,6 +106,7 @@ Everything the decision model can pick, and how plain code does it:
 | "lock my screen" | Locks the screen, only once the sentence has ended | the lock shortcut (Plasma), else `loginctl lock-session` |
 | "make a note: buy milk tomorrow" | Writes a new note with those words and opens it | a new `.md` file in `actions.notes.folder` (default: a `Notes` folder in your documents), opened with the default app |
 | "search the web for cheap flights to Rome" | Opens a web search for those words | `actions.searchUrl` in the default browser |
+| "open google.com in the browser" | Opens that web address | as https, in the default browser |
 | "type hello from voice mode" | Types those words into the window in front, once the sentence has ended | `ydotool` (needs `ydotoold` running); characters follow your keyboard layout. `VOICE_TYPING` (on by default on Linux) installs ydotool and starts its `ydotool.service` user unit; when your user cannot write `/dev/uinput`, the summary gives the one-time udev rule and `input` group commands |
 
 On KDE Plasma every window, media, volume, brightness, screenshot and lock action is one of

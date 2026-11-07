@@ -36,7 +36,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CONFIG_DIR, loadConfig, merge, readKey } from './config.mjs';
 import { Records, TOOLS, runTool } from './records.mjs';
-import { Chooser, TEXT_KINDS, buildCatalog, describe, documentFolders, perform } from './desk.mjs';
+import { Chooser, TEXT_KINDS, buildCatalog, describe, documentFolders, perform, quickPick } from './desk.mjs';
 import { Browser, asksAbout, isYes, pageCatalog, performPage } from './browser.mjs';
 import { Mic, Speaker, audioTools, has, play, resample, rms, startEchoCancel, tone, wavToPcm } from './audio.mjs';
 import { PROVIDERS, createProvider, synthesize } from './providers.mjs';
@@ -130,9 +130,9 @@ const RULES = `How you work:
 - The briefing below (when there is one) is your own memory: your recent conversation with the user, the work under way and who is doing it, your notes and what you have learned. Speak from it as yourself; never call it a briefing.
 - When the briefing answers a question, answer at once without tools, unless the user asks you to read, look up or check notes, files or records: then always read them with the tools, since they are newer than your memory.
 - For anything else about notes, files, documents, memories, records, people, projects, plans, decisions or work, look it up yourself first, in the same reply: search_records with a few keywords (and the source, when the user names one), list_records for what is newest in a source, read_record to read one in full. Then answer from what they return, the newest record first when they disagree. Never make up a status.
-- Only when those do not answer (after you looked), or the user asks for real work (changing, renaming, moving or deleting files, code, tasks or messages, running or checking anything now, research, anything that takes effort), or for something outside your records (mail, messages, the web, other people's replies), say one short line such as "Let me check; I'll tell you here as soon as it's back" and call hand_off in that same reply, with the request in the user's words. Saying you will check without calling a tool leaves the user waiting for nothing. It goes to your own working session, which can do it; never say the work is done until an answer says so. Every new request needs its own hand_off, even one asked before.
+- Only when those do not answer (after you looked), or the user asks for real work (changing, renaming, moving or deleting files, code, tasks or messages, running or checking anything now, research, anything that takes effort), or for something outside your records (mail, messages, other people's replies), say one short line such as "Let me check; I'll tell you here as soon as it's back" and call hand_off in that same reply, with the request in the user's words. Saying you will check without calling a tool leaves the user waiting for nothing. It goes to your own working session, which can do it; never say the work is done until an answer says so. Every new request needs its own hand_off, even one asked before. Never hand off what the desktop helper below does (opening an app, a website or a web address, a web search, typing, closing an app): those are done here, at once.
 - When an answer to a hand-off arrives (a line starting "Answer arrived"), tell the user at once, briefly, as your own answer. You are one assistant: never say that someone else, another session or another assistant answered.
-- A separate desktop helper acts on the computer while the user is still talking: it opens apps, websites, folders and records, switches to an open app, closes an open app the way its close button does (so the app still asks about unsaved work), minimizes, maximizes or moves the window in front, shows the desktop or the overview, turns the volume up or down or mutes it, plays, pauses or skips media, changes screen brightness, takes a screenshot, locks the screen, writes a note, searches the web, and types dictated text. What it did may already be in the conversation as a line starting "Desktop helper:"; then confirm it in a few words. Otherwise, when the user asked for one of those, call desktop_action to learn what it did. If it did nothing, say you could not tell what to do.
+- A separate desktop helper acts on the computer while the user is still talking: it opens apps, websites, folders and records, switches to an open app, closes an open app the way its close button does (so the app still asks about unsaved work), minimizes, maximizes or moves the window in front, shows the desktop or the overview, turns the volume up or down or mutes it, plays, pauses or skips media, changes screen brightness, takes a screenshot, locks the screen, writes a note, searches the web, and types dictated text. What it did may already be in the conversation as a line starting "Desktop helper:"; then confirm it in a few words. Otherwise, when the user asked for one of those, call desktop_action with the request in the user's words, which also does it when the helper missed it. If it still did nothing, say in a few words that you did not catch what to do and ask the user to say it again.
 - The helper itself never deletes or moves files, sends messages or email, buys anything, changes settings, runs commands, or closes all windows at once. That limits only the helper: such requests are real work, so hand them off.
 - You are heard, not read: short spoken sentences, no lists, no markdown, no links read aloud. Keep an answer under about twenty seconds unless asked for more.
 - Talk about the work the way a colleague would, by its project and what it is about. Never read task ids, slugs, codes, file names or links aloud; say a name only when two items would otherwise be confused, and then naturally ("the one called banner fix").`;
@@ -199,8 +199,8 @@ const NOTES_TOOL = {
 
 const DESKTOP_TOOL = {
   name: 'desktop_action',
-  description: 'Call when the user asked the computer or the browser page to do something (open, switch, volume, media, a note, a search, typing, click, scroll, read the page...): returns what the desktop and browser helpers did this turn, if anything.',
-  parameters: { type: 'object', properties: {} },
+  description: 'Call when the user asked the computer or the browser page to do something (open an app, a website or a web address, switch, close, volume, media, a note, a web search, typing, click, scroll, read the page...): returns what the desktop and browser helpers did this turn, and does a plain command the helpers missed.',
+  parameters: { type: 'object', properties: { request: { type: 'string', description: "the request in the user's words, such as \"open google.com\" or \"search the web for food\"" } } },
 };
 
 const median = (xs) => {
@@ -219,6 +219,7 @@ export function decisionLine(rec, { withText = false } = {}) {
   if (rec.event === 'action-failed') return `${time}  -> could not do ${rec.target}: ${rec.error}`;
   if (rec.event === 'action-held') return `${time}  -> held ${rec.target} for a spoken yes (it ${rec.why})`;
   if (rec.event === 'confirm') return `${time}  -> not pressed: ${rec.why}`;
+  if (rec.quick) return `${time}  ${rec.choice} (a plain command, done without the decision model${rec.quick === 'voice' ? ', from the voice\'s words' : ''}; ${turn})${heard}`;
   return `${time}  ${rec.choice === 'none' ? 'nothing to open' : rec.choice} (p ${Number(rec.p).toFixed(2)}, ${rec.ms} ms, ${turn})${heard}`;
 }
 
@@ -591,7 +592,7 @@ export class Session {
     const started = performance.now();
     let result;
     try {
-      if (call.name === 'desktop_action') result = await this.desktopResult();
+      if (call.name === 'desktop_action') result = await this.desktopResult(call.args);
       else if (call.name === 'hand_off') result = await this.handOff(call.args);
       else if (call.name === 'ask_notes') result = await this.askNotes(call.args);
       else result = await runTool(this.records, call.name, call.args);
@@ -608,6 +609,13 @@ export class Session {
   async handOff({ request, kind } = {}) {
     const text = String(request || '').trim();
     if (!text) return { handed_off: false, error: 'nothing to hand off' };
+    // A plain desktop command ("open google.com", "search the web for food") never waits on the
+    // working session: it is done here, at once.
+    if (quickPick(text, this.chooser.catalog)) {
+      const r = await this.desktopResult({ request: text });
+      this.log({ event: 'handoff-local', did: !!r.opened });
+      return { handed_off: false, ...r, ...(r.opened ? { note: 'A desktop command: done here, not handed off. Confirm in a few words what was done.' } : {}) };
+    }
     const id = newId();
     const k = kind === 'task' ? 'task' : 'question';
     // The question ended at the user's last loud frame; the round trip is timed from there.
@@ -683,11 +691,16 @@ export class Session {
   }
 
   /** What the chooser did this turn, waiting briefly for a decision still in flight. */
-  async desktopResult() {
-    const until = performance.now() + this.config.actions.chooser.timeoutMs + 500;
+  async desktopResult({ request } = {}) {
+    // A plain command the transcript missed (misheard words, or the call came first) is done
+    // from the voice's own words at once.
+    if (request && !this.turn?.actions.length) await this.chooser.quick(String(request), { from: 'voice' });
+    const until = performance.now() + this.chooser.finalTimeout + 500;
     // The call can come before the words do (Gemini sends both at the end of speech): wait for them too.
     const heard = performance.now() + 1500;
-    const busy = () => this.chooser.inflight > 0 || this.chooser.pending || (this.chooser.textAction && !this.chooser.textAction.done) || (!this.turn?.heardFinal && !this.turn?.actions.length && performance.now() < heard);
+    // Once something was picked, calls still in flight for this turn no longer count.
+    const c = this.chooser;
+    const busy = () => c.acting > 0 || (c.textAction && !c.textAction.done) || (!c.done && (c.inflight > 0 || c.pending)) || (!this.turn?.heardFinal && !this.turn?.actions.length && performance.now() < heard);
     while (busy() && performance.now() < until) await new Promise((r) => setTimeout(r, 50));
     const acts = this.turn?.actions || [];
     if (!acts.length) return { opened: null, note: 'Nothing was done: the request did not clearly match something the helper can do.' };
@@ -707,7 +720,7 @@ export class Session {
     }
     // Said it would check but called no tool at all: ask the notes (a promise about the notes)
     // or hand off the user's own words.
-    if (t.text && !(t.tools || []).length && PROMISE.test(t.reply || '')) {
+    if (t.text && !(t.tools || []).length && !t.actions.length && !quickPick(t.text, this.chooser.catalog) && PROMISE.test(t.reply || '')) {
       if (this.notes && /\bnotes?\b/i.test(t.reply || '')) {
         (t.tools ||= []).push('ask_notes (auto)');
         this.askNotes({ question: t.text }).catch(() => {});

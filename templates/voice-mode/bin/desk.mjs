@@ -105,6 +105,7 @@ const TEXT = {
   note: { what: 'Write down a new note with text they dictate (take a note, note down, write down, remind me in a note)', slot: 'the text of the note' },
   search: { what: 'Search the web for something they say (search for, google, look up online)', slot: 'what to search the web for' },
   type: { what: 'Type text they dictate into the window in front (they say type, and name no field of the browser page)', slot: 'the text to type' },
+  url: { what: 'Open a web address they say that is not listed above (like example.com) in the browser', slot: 'the web address' },
   // A field on the browser page (browser.mjs); its catalog item names the field.
   field: { slot: 'the text to type into the field, without the words that say where (such as "in the search box")' },
 };
@@ -131,6 +132,7 @@ export function controlActions(config, { platform = process.platform, env = proc
   }
   out.push(['note:new', { kind: 'note', name: TEXT.note.what, folder: a.notes.folder || path.join(a.documents || os.homedir(), 'Notes') }]);
   if (a.searchUrl && /^https:\/\/[^\s]*\{q\}/.test(a.searchUrl)) out.push(['search:web', { kind: 'search', name: TEXT.search.what, url: a.searchUrl }]);
+  out.push(['url:web', { kind: 'url', name: TEXT.url.what }]);
   if (platform === 'linux' && has('ydotool')) out.push(['type:text', { kind: 'type', name: TEXT.type.what, final: true }]);
   return out;
 }
@@ -196,6 +198,86 @@ export function typingPick(answer, catalog) {
   return { choice: field && probs[field] >= 0.25 ? field : answer.choice, p: Math.min(1, total) };
 }
 
+/** A web address as said ("google.com", "google dot com", "www.bbc.co.uk/news"), as an https link, or '' for anything else. */
+export function webAddress(said) {
+  const t = String(said || '').trim().toLowerCase().replace(/\s+dot\s+/g, '.').replace(/[.!?,]+$/, '').replace(/^https?:\/\//, '');
+  return /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s]*)?$/.test(t) ? `https://${t}` : '';
+}
+
+// Other words for an app's kind of program, as people say them.
+const ALIASES = {
+  'file manager': ['file explorer', 'explorer', 'files', 'my files', 'file browser', 'folders'],
+  terminal: ['console', 'command line', 'command prompt'],
+  calculator: ['calc'],
+};
+// Words around a request that do not change it.
+const LEAD = /^(?:(?:hey|hi|hello|ok|okay|so|well|wait|now|um+|uh+|right|alright|yes|yeah|no|please|just|and|then|go ahead and|can you|could you|would you|will you|can u|i want you to|i'd like you to|i need you to)\b[\s,.!]*)+/;
+const TAIL = /(?:[\s,]+(?:please|for me|now|right now|thanks|thank you|again))+$/;
+const NOT = /\b(?:don'?t|do not|dont|never|not|stop|shouldn'?t|no need)\b/;
+const quickNames = new WeakMap();
+
+/** Spoken name → catalog keys, for the app, site and folder items of a catalog (cached per catalog). */
+function namesOf(catalog) {
+  if (quickNames.has(catalog)) return quickNames.get(catalog);
+  const names = new Map();
+  const add = (name, key) => {
+    const n = name.toLowerCase().replace(/[^\p{L}\p{N}\s.-]/gu, ' ').replace(/\s+/g, ' ').trim();
+    if (n) names.set(n, new Set([...(names.get(n) || []), key]));
+  };
+  for (const [key, it] of catalog) {
+    if (!['app', 'site', 'folder'].includes(it.kind)) continue;
+    const name = it.name || '';
+    const generic = (name.match(/\(([^)]+)\)\s*$/) || [])[1] || '';
+    for (const n of [name, name.replace(/\s*\(.*\)$/, ''), generic]) {
+      add(n, key);
+      for (const alt of ALIASES[n.toLowerCase()] || []) add(alt, key);
+    }
+  }
+  quickNames.set(catalog, names);
+  return names;
+}
+
+/**
+ * The plain commands that need no decision model: "open Firefox", "can you open my file
+ * explorer", "open google.com in the browser", "search the web for the term food", "close
+ * the calculator", "type hello world". The whole sentence must be one command whose target
+ * names exactly one catalog item (or is a web address); anything else, a negation or a
+ * question about it ("how do I open...", "don't close...") is left to the chooser.
+ * Returns { key, slot } or null.
+ */
+export function quickPick(text, catalog) {
+  let t = String(text || '').toLowerCase().replace(/[’`]/g, "'").replace(/[?!]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/[.,;:]+$/, '');
+  if (!t || NOT.test(t)) return null;
+  t = t.replace(/,? so (?:that )?(?:i|we) can .*$/, '').replace(LEAD, '').replace(TAIL, '').trim();
+  const has = (key) => catalog.has(key);
+  let m;
+  // A web search.
+  if (has('search:web') && (m = t.match(/^(?:search|look up|look for|find)(?: (?:on|in))? (?:the web|the internet|online|google|duckduckgo) for (.+)$|^(?:search|look up|look for|find) (.+?) (?:on the web|on the internet|online|on google)$|^(?:google|web search(?: for)?) (.+)$|^(?:search(?: for)?|look up) (?:the (?:term|word|phrase)|the meaning of) (.+)$/))) {
+    const q = (m[1] || m[2] || m[3] || m[4]).replace(/^(?:the (?:term|word|phrase) )/, '').trim();
+    return q ? { key: 'search:web', slot: q } : null;
+  }
+  // With a browser page's fields on offer, where the words go (and whether a field is a password
+  // field) is the chooser's call.
+  if (has('type:text') && ![...catalog.values()].some((it) => it.kind === 'field' || it.op === 'refuse') && (m = t.match(/^type(?: out| in)? (.+)$/))) return { key: 'type:text', slot: String(text).trim().replace(/^.*?\btype(?: out| in)?\s+/i, '').replace(/[\s,]+please[.!]?$/i, '').replace(/\.$/, '') };
+  m = t.match(/^(open|launch|start|try|bring up|pull up|show me|show|go to|visit|load|close|quit|exit|shut down|shut|switch to) (.+)$/);
+  if (!m) return null;
+  const verb = m[1];
+  let target = m[2]
+    .replace(/ (?:in|on|with) (?:the |my |a )?(?:browser|web browser|firefox|chrome|google chrome|new tab)$/, '')
+    .replace(/^(?:up |the |my |a |an )+/, '')
+    .replace(/ (?:app|application|program|window|website|web site|site|page|folder)$/, '')
+    .replace(/^(?:website|site|web page|page) /, '')
+    .trim();
+  const url = webAddress(target);
+  if (url && !['close', 'quit', 'exit', 'shut down', 'shut', 'switch to'].includes(verb)) return has('url:web') ? { key: 'url:web', slot: target } : null;
+  const keys = [...(namesOf(catalog).get(target.replace(/[^\p{L}\p{N}\s.-]/gu, ' ').replace(/\s+/g, ' ').trim()) || [])];
+  if (keys.length !== 1) return null;
+  const [kind, id] = [keys[0].split(':')[0], keys[0].slice(keys[0].indexOf(':') + 1)];
+  if (['close', 'quit', 'exit', 'shut down', 'shut'].includes(verb)) return kind === 'app' && has(`close:${id}`) ? { key: `close:${id}` } : null;
+  if (verb === 'switch to') return kind === 'app' && has(`focus:${id}`) ? { key: `focus:${id}` } : null;
+  return { key: keys[0] };
+}
+
 /** Candidate spans of the user's words for a text action: every tail, less up to two last words. */
 export function spans(text, max = 40) {
   const w = String(text).trim().split(/\s+/).filter(Boolean);
@@ -255,6 +337,33 @@ export class Chooser {
     this.lastText = '';
     this.calls = 0;
     this.textAction = null;
+    this.acting = 0;
+  }
+
+  /** Carry out a pick; `acting` counts the ones still running, so a caller can wait for them. */
+  async run(key, info) {
+    this.acting++;
+    try {
+      await this.execute(key, info);
+    } finally {
+      this.acting--;
+    }
+  }
+
+  /**
+   * A plain command (quickPick) is done at once, without the decision model: the pick
+   * that was in flight for the same words is then ignored. Returns true when it acted.
+   */
+  async quick(text, { from = 'heard' } = {}) {
+    if (this.done || this.textAction || !this.catalog.size) return false;
+    const q = quickPick(text, this.catalog);
+    if (!q) return false;
+    this.done = true;
+    this.pending = null;
+    this.picked?.(q.key);
+    this.log({ event: 'chooser', words: text.split(/\s+/).length, final: true, choice: q.slot ? `${q.key} (${q.slot.split(/\s+/).length} words)` : q.key, p: 1, ms: 0, quick: from, text: q.slot || text });
+    await this.run(q.key, { text, p: 1, final: true, slot: q.slot || '' });
+    return true;
   }
 
   /** Open the connection before the first words arrive, so that call skips the TLS handshake. */
@@ -268,6 +377,11 @@ export class Chooser {
     // A note, search or typing was picked: its words are picked once the sentence has ended.
     if (this.textAction && final && clean && !this.textAction.filling) {
       this.fill(clean);
+      return;
+    }
+    // A plain command at the end of the sentence needs no decision model.
+    if (final && clean && quickPick(clean, this.catalog)) {
+      this.quick(clean);
       return;
     }
     if (!this.ready || this.done || !clean) return;
@@ -291,11 +405,13 @@ export class Chooser {
     this.calls++;
     const started = performance.now();
     let answer = null;
-    // The final sentence is the last chance this turn, so a failed call on it is tried twice.
+    // The final sentence is the last chance this turn: its call may take longer, and one that
+    // failed at once (a dropped connection) is tried again. A slow one is not: that only doubles the wait.
     for (let tries = final ? 2 : 1; tries > 0 && !answer; tries--) {
       try {
-        answer = await this.decide(text);
+        answer = await this.decide(text, undefined, final ? this.finalTimeout : this.cfg.timeoutMs);
       } catch (err) {
+        if (err.name === 'AbortError') tries = 0;
         // fetch() says only "fetch failed"; the reason (a connect timeout, a reset) is its cause.
         const c = err.cause;
         const cause = c ? [c.code || c.name, ...(c.errors || []).map((e) => e.code)].filter(Boolean).join(' ') : undefined;
@@ -325,7 +441,7 @@ export class Chooser {
           if (final) await this.fill(text);
           return;
         }
-        await this.execute(choice, { text, p, final });
+        await this.run(choice, { text, p, final });
         return;
       }
     }
@@ -347,11 +463,16 @@ export class Chooser {
     let answer = null;
     for (let tries = 2; tries > 0 && !answer; tries--) {
       try {
-        answer = await this.decide(text, {
-          instructions: `The person gave a spoken command to their computer. Which quoted part of their words is ${TEXT[kind].slot}, exactly as they said it, without the command words around it or trailing politeness like please or thanks?`,
-          criteria: options,
-        });
+        answer = await this.decide(
+          text,
+          {
+            instructions: `The person gave a spoken command to their computer. Which quoted part of their words is ${TEXT[kind].slot}, exactly as they said it, without the command words around it or trailing politeness like please or thanks?`,
+            criteria: options,
+          },
+          this.finalTimeout,
+        );
       } catch (err) {
+        if (err.name === 'AbortError') tries = 0;
         this.log({ event: 'chooser-error', final: true, error: String(err.message || err).slice(0, 200), cause: err.cause?.code, ms: Math.round(performance.now() - started), text });
       }
     }
@@ -362,15 +483,20 @@ export class Chooser {
     const slot = answer.choice !== 'none' ? options[answer.choice]?.slice(1, -1) : '';
     this.log({ event: 'chooser', words: text.split(/\s+/).length, final: true, choice: slot ? `${key} (${slot.split(/\s+/).length} words)` : `${key}: no text`, p: answer.probabilities?.[answer.choice] ?? 0, ms: Math.round(performance.now() - started), text: slot || text });
     try {
-      if (slot) await this.execute(key, { text, p, final: true, slot });
+      if (slot) await this.run(key, { text, p, final: true, slot });
     } finally {
       ta.done = true;
     }
   }
 
-  async decide(text, question) {
+  /** How long a call at the end of the sentence may take. */
+  get finalTimeout() {
+    return this.cfg.finalTimeoutMs ?? this.cfg.timeoutMs;
+  }
+
+  async decide(text, question, timeoutMs = this.cfg.timeoutMs) {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), this.cfg.timeoutMs);
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const res = await this.fetch(this.cfg.url, {
         method: 'POST',
@@ -561,6 +687,11 @@ export async function perform(item, { roots = [], exclude = [], platform = proce
       // With a voice browser, pages opened for browsing open in its window.
       return browser ? browser.open(url) : run(opener(url, platform));
     }
+    case 'url': {
+      const url = webAddress(slot);
+      if (!url) throw new Error(`"${slot}" is not a web address`);
+      return browser ? browser.open(url) : run(opener(url, platform));
+    }
     case 'type': {
       const text = typeable(slot);
       if (!text) throw new Error('nothing to type');
@@ -622,6 +753,8 @@ export function describe(item, slot = '', { words = true } = {}) {
       return `searched the web for ${q}`;
     case 'type':
       return `typed ${q}`;
+    case 'url':
+      return `opened ${words ? webAddress(slot).replace(/^https:\/\//, '') || slot : 'a web address'}`;
     case 'field':
       return `typed ${q} into "${item.label}" on the page`;
     case 'page':

@@ -15,7 +15,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const bin = path.join(repoRoot, 'templates', 'voice-mode', 'bin');
 const { merge, parseEnvFile, readKey, expandGlob, loadConfig, DEFAULTS } = await import(path.join(bin, 'config.mjs'));
 const { Records, runTool } = await import(path.join(bin, 'records.mjs'));
-const { Chooser, buildCatalog, criteria, perform, launch, controlActions, spans, focusScript, closeScript, describe, typeable, SYSTEM } = await import(path.join(bin, 'desk.mjs'));
+const { Chooser, buildCatalog, criteria, perform, launch, controlActions, spans, focusScript, closeScript, describe, typeable, quickPick, webAddress, SYSTEM } = await import(path.join(bin, 'desk.mjs'));
 const { OpenAIRealtime, GeminiLive, FakeProvider } = await import(path.join(bin, 'providers.mjs'));
 const { Session, Live, PROMISE, instructionsFor, streamClip, speechBounds, acquireLock, claimLock, releaseLock, lockHolder, decisionLine, doRequest, sayText, makeLogger } = await import(path.join(bin, 'voice-mode.mjs'));
 const net = await import('node:net');
@@ -2158,6 +2158,179 @@ test('session: ask_notes only with notes on; the vault is never a records search
   assert.ok(!JSON.stringify(logged).includes('Saturday'), 'a notes answer is not logged');
   s.close();
   s2.close();
+});
+
+
+// ------------------------------------------------------------------ plain commands, done at once
+
+// A KDE desktop with a browser and a file manager, web search and typing.
+const QUICK_APPS = [
+  { id: 'firefox', name: 'Firefox (Web Browser)', desktop: 'firefox.desktop' },
+  { id: 'org.kde.dolphin', name: 'Dolphin (File Manager)', desktop: 'org.kde.dolphin.desktop' },
+  { id: 'org.kde.kcalc', name: 'KCalc (Scientific Calculator)', desktop: 'org.kde.kcalc.desktop' },
+];
+const quickCatalog = (c = config()) => buildCatalog(c, null, { apps: QUICK_APPS, platform: 'linux', env: { XDG_CURRENT_DESKTOP: 'KDE' }, has: () => true, components: new Set() });
+
+test('quick: the plain commands the decision model missed are picked at once; doubtful words are left to it', () => {
+  const cat = quickCatalog();
+  const pick = (t) => quickPick(t, cat);
+  // The three requests that went to the working session on 7 November, as said and as heard.
+  assert.deepEqual(pick('Open google.com in the browser'), { key: 'url:web', slot: 'google.com' });
+  assert.deepEqual(pick('No, no, just try google.com.'), { key: 'url:web', slot: 'google.com' });
+  for (const t of ['Open file explorer', 'Can you open my file explorer?', 'Open my File Explorer.', 'Just open my file explorer.', 'Open files.', 'Open Dolphin'])
+    assert.deepEqual(pick(t), { key: 'app:org-kde-dolphin' }, t);
+  assert.deepEqual(pick('Search the web for the term food'), { key: 'search:web', slot: 'food' });
+  assert.deepEqual(pick('Can you look up the term food?'), { key: 'search:web', slot: 'food' });
+  assert.deepEqual(pick('google best pizza near me'), { key: 'search:web', slot: 'best pizza near me' });
+  assert.deepEqual(pick('Wait wait wait wait. Can you open Firefox?'), { key: 'app:firefox' });
+  assert.deepEqual(pick('Hey, could you open Firefox for me so I can check something?'), { key: 'app:firefox' });
+  assert.deepEqual(pick('Close Firefox.'), { key: 'close:firefox' });
+  assert.deepEqual(pick('Close the file manager.'), { key: 'close:org-kde-dolphin' });
+  assert.deepEqual(pick('switch to Firefox'), { key: 'focus:firefox' });
+  assert.deepEqual(pick('Type hello world.'), { key: 'type:text', slot: 'hello world' });
+  // Negations, questions, half-heard words, two things at once and unknown names: the chooser's call.
+  for (const t of ["Don't close Firefox.", 'do not open firefox', 'How do I open Firefox?', 'Should I close Firefox?', 'Why is it taking that long?', 'ridegoogle.com', 'Can you open Google?', 'Open the browser', 'Search for the risk register', 'Look up my notes on the workshop', 'Open Firefox and search for cats', 'Close all windows', 'close google.com', 'open the thing'])
+    assert.equal(pick(t), null, t);
+  // With a browser page's fields on offer, the chooser decides where typed words go.
+  const page = new Map([...cat, ['page:field:2', { kind: 'field', name: 'Type into "Search"' }]]);
+  assert.equal(quickPick('type quarterly report', page), null);
+  // Only what the catalog offers: without web search, no search.
+  assert.equal(quickPick('search the web for food', new Map([...cat].filter(([k]) => k !== 'search:web'))), null);
+});
+
+test('url: a said web address opens as https, anything else is refused', async () => {
+  assert.equal(webAddress('google.com'), 'https://google.com');
+  assert.equal(webAddress('Google dot com.'), 'https://google.com');
+  assert.equal(webAddress('www.bbc.co.uk/news'), 'https://www.bbc.co.uk/news');
+  assert.equal(webAddress('http://example.org'), 'https://example.org');
+  for (const t of ['google', 'file explorer', 'javascript:alert(1)', 'a b.com', '']) assert.equal(webAddress(t), '', t);
+  const ran = [];
+  await perform({ kind: 'url' }, { platform: 'linux', slot: 'google.com', run: async (argv) => ran.push(argv) });
+  assert.deepEqual(ran, [['xdg-open', 'https://google.com']]);
+  await assert.rejects(perform({ kind: 'url' }, { platform: 'linux', slot: 'the thing', run: async () => assert.fail('opened') }), /not a web address/);
+  assert.equal(describe({ kind: 'url' }, 'google.com'), 'opened google.com');
+});
+
+// The decision model on a slow evening: every call runs until it is aborted.
+const neverAnswers = (calls = []) => (url, init) => {
+  calls.push(JSON.parse(init.body).state.heard_so_far);
+  return new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(Object.assign(new Error('This operation was aborted'), { name: 'AbortError' }))));
+};
+
+function quickSession({ fetchImpl = neverAnswers(), delayMs = 0, timeoutMs = 60 } = {}) {
+  const c = config({ actions: { chooser: { timeoutMs, finalTimeoutMs: timeoutMs * 2 } } });
+  const performed = [];
+  const notes = [];
+  const logs = [];
+  const session = new Session(c, {
+    script: [],
+    catalog: quickCatalog(c),
+    log: (r) => logs.push(r),
+    performImpl: async (item, { slot }) => {
+      if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
+      performed.push(slot ? `${item.kind} ${slot}` : item.name);
+    },
+  });
+  session.provider.note = (t) => notes.push(t);
+  session.chooser.key = 'test';
+  session.chooser.fetch = fetchImpl;
+  return { session, performed, notes, logs, c };
+}
+
+test('session: open a web address, open the file manager and search the web are done here at once, even when every decision call times out', async () => {
+  fs.rmSync(queued, { force: true });
+  // Calls mid-sentence hang for up to 2 s, as on 7 November; none of them is waited for.
+  const { session, performed, logs } = quickSession({ timeoutMs: 2000 });
+  for (const said of ['Open google.com in the browser', 'Open file explorer', 'Search the web for the term food']) {
+    session.onSpeechStart();
+    session.provider.emit('user-text', said.split(' ').slice(0, 2).join(' '), false);
+    const t0 = performance.now();
+    session.provider.emit('user-text', said, true);
+    const r = await session.desktopResult();
+    assert.ok(r.opened?.length === 1, `${said}: ${JSON.stringify(r)}`);
+    assert.ok(performance.now() - t0 < 300, `${said} waited ${Math.round(performance.now() - t0)} ms`);
+    session.finishTurn();
+  }
+  assert.deepEqual(performed, ['url google.com', 'Dolphin (File Manager)', 'search food']);
+  assert.ok(logs.filter((l) => l.event === 'chooser' && l.quick).length === 3);
+  assert.ok(!fs.existsSync(queued), 'nothing went to the working session');
+  session.close();
+});
+
+test('session: a plain command the voice hands off, or names after a misheard transcript, is done here and not queued', async () => {
+  fs.rmSync(queued, { force: true });
+  const { session, performed, logs } = quickSession();
+  session.onSpeechStart();
+  session.provider.emit('user-text', 'ridegoogle.com', true);
+  // The voice heard it better than the transcript: its desktop_action names the request.
+  const r = await session.desktopResult({ request: 'open google.com in the browser' });
+  assert.deepEqual(r.opened, ['opened google.com']);
+  session.finishTurn();
+  session.onSpeechStart();
+  session.provider.emit('user-text', 'Can you look up the term food?', true);
+  // Done once: the hand-off finds it already done this turn.
+  const h = await session.handOff({ request: 'look up the term food', kind: 'task' });
+  assert.equal(h.handed_off, false);
+  assert.deepEqual(h.opened, ['searched the web for "food"']);
+  session.finishTurn();
+  session.onSpeechStart();
+  const h2 = await session.handOff({ request: 'open my file explorer', kind: 'task' });
+  assert.equal(h2.handed_off, false);
+  assert.deepEqual(performed, ['url google.com', 'search food', 'Dolphin (File Manager)']);
+  assert.equal(logs.filter((l) => l.event === 'handoff-local').length, 2);
+  assert.ok(!fs.existsSync(queued), 'nothing went to the working session');
+  // Real work still goes.
+  const h3 = await session.handOff({ request: 'merge the login fix', kind: 'task' });
+  assert.equal(h3.handed_off, true, JSON.stringify(h3));
+  assert.match(fs.readFileSync(queued, 'utf8'), /merge the login fix/);
+  session.close();
+});
+
+test('session: desktop_action waits for an action still running instead of saying nothing was done', async () => {
+  // On 7 November "open Firefox" opened it, but the reply said "I could not tell what to do":
+  // the result was read while the launch was still running.
+  const { session, performed } = quickSession({ fetchImpl: fakeDecisions([[/firefox/i, 'app:firefox', 0.97]]), delayMs: 150 });
+  session.onSpeechStart();
+  session.provider.emit('user-text', 'hey can you open firefox', false);
+  await new Promise((r) => setTimeout(r, 20));
+  session.provider.emit('user-text', 'hey can you open firefox and then', true);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(session.chooser.acting, 1);
+  const r = await session.desktopResult();
+  assert.deepEqual(r.opened, ['opened Firefox (Web Browser)']);
+  assert.deepEqual(performed, ['Firefox (Web Browser)']);
+  session.close();
+});
+
+test('chooser: the end-of-sentence call gets finalTimeoutMs, and one that timed out is not tried again', async () => {
+  const calls = [];
+  const c = config({ actions: { chooser: { timeoutMs: 40, finalTimeoutMs: 150 } } });
+  const ch = new Chooser(c, quickCatalog(c), { execute: async () => {}, fetchImpl: neverAnswers(calls) });
+  ch.key = 'test';
+  const errors = [];
+  ch.log = (r) => r.event === 'chooser-error' && errors.push(r);
+  let t = performance.now();
+  await ch.ask('what is on my calendar', true);
+  const final = performance.now() - t;
+  assert.ok(final >= 140 && final < 280, `final ${Math.round(final)} ms`);
+  t = performance.now();
+  await ch.ask('what is on', false);
+  assert.ok(performance.now() - t < 120, 'mid-sentence keeps the short limit');
+  assert.equal(calls.length, 2, 'no second try after a timeout');
+  assert.equal(DEFAULTS.actions.chooser.finalTimeoutMs, 6000);
+  // A call that failed at once (a dropped connection) is still tried again.
+  let n = 0;
+  const ch2 = new Chooser(c, quickCatalog(c), { execute: async () => {}, fetchImpl: async (...a) => (n++ ? fakeDecisions([])(...a) : Promise.reject(new TypeError('fetch failed'))) });
+  ch2.key = 'test';
+  await ch2.ask('what is on my calendar', true);
+  assert.equal(n, 2);
+});
+
+test('rules: web searches and opening sites are the desktop helper\'s, never a hand-off', () => {
+  const text = instructionsFor(config(), new Records(config()), '');
+  assert.doesNotMatch(text, /outside your records \(mail, messages, the web/);
+  assert.match(text, /Never hand off what the desktop helper below does \(opening an app, a website or a web address, a web search, typing, closing an app\)/);
+  assert.match(text, /call desktop_action with the request in the user's words/);
 });
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
