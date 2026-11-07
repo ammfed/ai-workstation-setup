@@ -318,7 +318,7 @@ export function quickPick(text, catalog) {
 }
 
 // "type hello", "enter google.com into the browser and press search", "replace the text with google.com".
-const TYPE_VERB = /^(?:type|dictate|enter|input)(?: out| in)? (.+)$/i;
+const TYPE_VERB = /^(?:type|dictate|enter|input|write)(?: out| in)? (?!down\b|a note\b|me\b|an? (?:email|message|letter)\b)(.+)$/i;
 const REPLACE = /^(?:replace (?:it|that|this|the text|everything|all(?: the text)?|the (?:field|box|address|url)) with|clear (?:it|that|the (?:field|box|text|address bar))(?:,)? and (?:type|enter|write)|change (?:it|the text|the address) to) (.+)$/i;
 // "remove everything else, just keep google.com", "keep only google.com".
 const KEEP = /^(?:(?:remove|delete|clear|erase) (?:everything|all)(?: else)?(?: (?:but|except)| and)?[\s,.?!]*(?:(?:just|only) )?keep (?:only |just )?|keep only )(.+)$/i;
@@ -721,6 +721,19 @@ async function kwinClose(item, { exec = capture, journal = userJournal } = {}) {
   throw new Error(`asked to close ${name}, but could not confirm it`);
 }
 
+/** The window class of the window in front (such as "org.kde.dolphin"), through a KWin script and the user journal. */
+export async function activeApp({ exec = capture, journal = userJournal } = {}) {
+  const tag = `voice-mode-front-${process.pid}-${Date.now()} `;
+  const since = Math.floor(Date.now() / 1000) - 1;
+  await kwinRun(`const a = workspace.activeWindow;\nprint(${JSON.stringify(tag)} + (a ? String(a.resourceClass) : ''));\n`, { exec });
+  for (let i = 0; i < 15; i++) {
+    const line = String(await journal(since).catch(() => '')).split('\n').find((l) => l.includes(tag));
+    if (line) return line.slice(line.indexOf(tag) + tag.length).trim();
+    await new Promise((res) => setTimeout(res, 60));
+  }
+  return '';
+}
+
 let scripts = 0;
 /** Load a script into KWin (Plasma's window manager) over D-Bus, run it, then unload it. */
 async function kwinRun(js, { exec = capture } = {}) {
@@ -771,7 +784,8 @@ export async function perform(item, { roots = [], exclude = [], platform = proce
     case 'mouse':
     case 'window':
     case 'files':
-      return performControl(item, { run, kwin: (js) => kwinRun(js, { exec }), slot, plan, exclude, home, env, ...(fileOps ? { fileOps } : {}) });
+    case 'place':
+      return performControl(item, { run, kwin: (js) => kwinRun(js, { exec }), activeApp: () => activeApp({ exec, journal }), slot, plan, exclude, home, env, ...(fileOps ? { fileOps } : {}) });
     case 'system':
       return run(item.invoke ? kdeShortcut(item.invoke) : item.argv);
     case 'focus':
@@ -847,7 +861,7 @@ export async function perform(item, { roots = [], exclude = [], platform = proce
 }
 
 export function describe(item, slot = '', { words = true, plan } = {}) {
-  if (['keys', 'mouse', 'window', 'files'].includes(item.kind)) return describeControl(item, slot, { words, plan });
+  if (['keys', 'mouse', 'window', 'files', 'place'].includes(item.kind)) return describeControl(item, slot, { words, plan });
   // Without the words (logs, unless transcripts are on): how many there were.
   const short = !words ? `${slot.split(/\s+/).filter(Boolean).length} words` : slot.length > 40 ? `${slot.slice(0, 38)}...` : slot;
   const q = words ? `"${short}"` : `(${short})`;

@@ -2614,4 +2614,42 @@ test('round 2: typing into the address bar, replacing a field, clearing and dele
   assert.equal(describe(cat.get('type:replace'), 'google.com'), 'replaced the text with "google.com"');
 });
 
+test('round 3: folders in the file manager, pop-ups closed with Escape, and "write" types', async () => {
+  const cat = quickCatalog();
+  const pick = (t) => quickPick(t, cat);
+  // Going to a common folder never shows the desktop or waits on the model.
+  for (const [t, key] of [['take me to my home folder', 'place:home'], ['go to home', 'place:home'], ['navigate to downloads', 'place:downloads'], ['open the file manager and go to places home', 'place:home'], ['go to the desktop folder', 'place:desktop'], ['open my documents', 'folder:documents']])
+    assert.deepEqual(pick(t), { key }, t);
+  const kwin = buildCatalog(config(), null, { apps: QUICK_APPS, ...KDE });
+  assert.deepEqual(quickPick('go to desktop', kwin), { key: 'system:show-desktop' });
+  // Up and back through folders, as often as said.
+  assert.deepEqual(pick('go up one folder'), { key: 'nav:parent' });
+  assert.deepEqual(pick('go to the parent directory twice'), { key: 'nav:parent', slot: '2' });
+  assert.deepEqual(pick('go back in the folder three times'), { key: 'page:go-back', slot: '3' });
+  // A pop-up inside an app: Escape, never closing the app's window.
+  for (const t of ['dismiss the translation popup in the browser', 'close that little pop up', 'get rid of the cookie banner', 'close the menu']) assert.deepEqual(pick(t), { key: 'ui:dismiss' }, t);
+  assert.equal(pick('close it'), null, 'a bare "close it" is the voice\'s to make plain');
+  assert.deepEqual(pick('close the window in front'), { key: 'window:close' });
+  // "write" types, unless it is a note, an email or a message.
+  assert.deepEqual(pick('write example.org'), { key: 'type:text', slot: 'example.org' });
+  for (const t of ['write down buy bread', 'write an email to my boss', 'write me a poem']) assert.equal(pick(t)?.key?.startsWith('type:') ? pick(t).key : null, null, t);
+  // Carried out: the file manager in front goes to the folder itself; anything else opens it.
+  const home = filesHome();
+  const ran = [];
+  const run = async (argv) => ran.push(argv.join(' '));
+  await ctl.performControl(cat.get('place:downloads'), { run, home, env: {}, activeApp: async () => 'org.kde.dolphin' });
+  assert.deepEqual(ran.splice(0), ['ydotool key 29:1 38:1 38:0 29:0', `ydotool type --key-delay 8 -- ${path.join(home, 'Downloads')}`, 'ydotool key 28:1 28:0']);
+  await ctl.performControl(cat.get('place:downloads'), { run, home, env: {}, activeApp: async () => 'firefox' });
+  assert.deepEqual(ran.splice(0), [`xdg-open ${path.join(home, 'Downloads')}`]);
+  await assert.rejects(ctl.performControl(cat.get('place:music'), { run, home: path.join(tmp, 'no-such-home'), env: {}, activeApp: async () => '' }), /no Music folder/);
+  assert.equal(describe(cat.get('place:home')), 'went to your home folder');
+});
+
+test('round 3: the voice is told to close pop-ups with Escape, to claim only what was done, and never to read status boards', () => {
+  const text = instructionsFor(config(), new Records(config()), '');
+  assert.match(text, /closed with "close the pop-up" \(the Escape key\), never with "close the window in front"/);
+  assert.match(text, /Say that something was done only when a "Desktop helper:" line or the desktop_action result says so/);
+  assert.match(text, /never a status board, progress bars or percentages/);
+});
+
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));

@@ -133,6 +133,9 @@ const K = (id, keys, name, done, say) => ({ id, keys: parseKeys(keys), name, don
 export const SHORTCUTS = [
   K('key:enter', 'enter', 'Press the Enter key in the window in front', 'pressed Enter'),
   K('key:escape', 'escape', 'Press the Escape key in the window in front (cancel, close a menu or dialog)', 'pressed Escape'),
+  // A pop-up, banner or menu inside an app is not a window of its own: Escape closes it, and
+  // closing "the window in front" would close the whole app window.
+  K('ui:dismiss', 'escape', 'Close a pop-up, dialog, banner, menu or notification inside the app in front (Escape), without closing the app', 'pressed Escape to close the pop-up', /^(?:close|dismiss|hide|cancel|get rid of|shut|remove|ignore|exit|skip)(?: out of)? (?:the |this |that |a )?(?:[\w-]+ ){0,3}?(?:pop-? ?ups?|popup|dialog(?:ue)?(?: box)?|banner|notification|menu|prompt|message box|panel|overlay|tooltip|suggestion|offer|ad)(?: .*)?$/),
   K('key:tab', 'tab', 'Press Tab: go to the next field or button', 'pressed Tab', /^(?:go to )?(?:the )?next (?:field|box|button|item)$/),
   K('key:shift-tab', 'shift tab', 'Press Shift+Tab: go back to the previous field or button', 'pressed Shift+Tab', /^(?:go (?:back )?to )?(?:the )?previous (?:field|box|button|item)$/),
   K('key:backspace', 'backspace', 'Press Backspace: delete the character before the text cursor', 'pressed Backspace', /^(?:delete|erase|remove) (?:the )?(?:last|previous) (?:letter|character)$/),
@@ -168,7 +171,8 @@ export const SHORTCUTS = [
   K('tab:previous', 'ctrl shift tab', 'Go to the previous tab (Control+Shift+Tab)', 'went to the previous tab', /^(?:go (?:back )?to |switch (?:back )?to |move to )?(?:the )?previous tab$|^(?:prev tab|tab (?:left|back))$/),
   K('tab:reopen', 'ctrl shift t', 'Reopen the tab that was closed last (Control+Shift+T)', 'reopened the closed tab', /^(?:re-?open|bring back|restore|undo close|open again)(?: the)?(?: last)?(?: closed)? tab(?: again)?$|^(?:re-?open|bring back) (?:the )?(?:last )?closed tab$/),
   K('page:refresh', 'f5', 'Reload the page (F5)', 'reloaded the page', /^(?:refresh|reload)(?: (?:the |this )?(?:page|tab|window))?$/),
-  K('page:go-back', 'alt left', 'Go back a page (Alt+Left)', 'went back', /^go back(?: a page| one page| to the (?:previous|last) page)?$/),
+  K('page:go-back', 'alt left', 'Go back a page, or back to the previous folder in the file manager (Alt+Left)', 'went back', /^go back(?: a page| one page| to the (?:previous|last) (?:page|folder|directory)| (?:in|a|one) (?:the )?(?:directory|folder|history))?$|^(?:previous|last) folder$/),
+  K('nav:parent', 'alt up', 'Go up to the parent folder in the file manager (Alt+Up)', 'went up a folder', /^(?:go )?up(?: (?:a|one))? (?:folder|directory|level)$|^(?:go (?:up )?to |open )?(?:the )?parent (?:folder|directory)$|^go up$/),
   K('page:go-forward', 'alt right', 'Go forward a page (Alt+Right)', 'went forward', /^go forward(?: a page| one page)?$/),
   K('view:zoom-in', 'ctrl equals', 'Zoom in (Control+Plus)', 'zoomed in', /^zoom in$|^make (?:it|the text|this) bigger$/),
   K('view:zoom-out', 'ctrl minus', 'Zoom out (Control+Minus)', 'zoomed out', /^zoom out$|^make (?:it|the text|this) smaller$/),
@@ -195,7 +199,7 @@ export const MOUSE = [
 // Windows, through KWin (Plasma's window manager). Minimize, maximize and show the desktop are
 // the desktop's own shortcuts (desk.mjs SYSTEM); these need a script.
 export const WINDOWS = [
-  { id: 'window:close', name: 'Close the window in front, the way its close button does (it still asks about unsaved work)', done: 'closed the window in front', final: true, say: /^close (?:the |this |current |that )?(?:current )?(?:window|app|application|program)(?: in front)?$|^close (?:it|this|that)$/ },
+  { id: 'window:close', name: 'Close the window in front, the way its close button does (it still asks about unsaved work)', done: 'closed the window in front', final: true, say: /^close (?:the |this |current |that )?(?:current )?(?:window|app|application|program)(?: in front)?$/ },
   { id: 'window:next', name: 'Switch to the next window (like Alt+Tab)', done: 'switched to the next window', say: /^(?:switch|change|go|move|flip)(?: (?:to|over to))? (?:the )?(?:next|other|previous|last) (?:window|app|application)$|^(?:next|other|previous) window$|^switch (?:windows|apps|applications)$|^alt tab$/ },
   { id: 'window:restore', name: 'Restore a window: bring back the last minimized window, or un-maximize the one in front', done: 'restored the window', say: /^(?:restore|un-?minimi[sz]e|un-?maximi[sz]e)(?: (?:the |this |that |my |last )?(?:window|app))?$|^bring (?:the |that |my )?window back$|^make (?:the )?window smaller$/ },
 ];
@@ -226,6 +230,7 @@ export function handsFreeItems({ keys = true, kwin = true, files = true, trash =
   if (files) {
     out.push(['files:move', { kind: 'files', op: 'move', name: 'Move a file or folder they name to another folder', local: true, final: true, ask: true }]);
     out.push(['files:copy', { kind: 'files', op: 'copy', name: 'Copy a file or folder they name to another folder', local: true, final: true }]);
+    for (const p of PLACE_KEYS) out.push([`place:${p}`, { kind: 'place', place: p, name: `Go to ${placeName(p)} folder in the file manager`, done: `went to ${placeName(p)}`, final: true, handsFree: true }]);
     if (trash) out.push(['files:trash', { kind: 'files', op: 'trash', name: 'Move a file or folder they name to the trash', local: true, final: true, ask: true }]);
   }
   return out;
@@ -243,6 +248,8 @@ export function repeats(t) {
   return n >= 1 ? { rest: m[1].trim(), times: Math.min(n, 50) } : { rest: t, times: 1 };
 }
 
+const PLACE_KEYS = ['home', 'downloads', 'documents', 'desktop', 'pictures', 'music', 'videos'];
+const PLACE_SAY = /(?:^|\b(?:and |then )?)(?:go to|open|show(?: me)?|take me to|navigate to|switch to|jump to)(?: the| my)?(?: places)? (home folder|home|downloads?|documents?|docs|desktop|pictures?|photos|music|videos?)( folder| directory)?$/;
 const PLACE_WORDS = { home: 'home', 'home folder': 'home', downloads: 'downloads', download: 'downloads', documents: 'documents', document: 'documents', docs: 'documents', desktop: 'desktop', pictures: 'pictures', picture: 'pictures', photos: 'pictures', music: 'music', videos: 'videos', video: 'videos' };
 const PLACE_RE = `(?:the |my )?(home folder|home|downloads?|documents?|docs|desktop|pictures?|photos|music|videos?)(?: folder| directory)?`;
 
@@ -275,6 +282,14 @@ export function controlPick(t, has) {
   for (const [key, re] of SYSTEM_SAY) if (re.test(rest) && has(key)) return { key };
   for (const m of MOUSE) if (m.say && m.say.test(rest) && has(m.id)) return { key: m.id };
   let m;
+  // "go to home", "take me to my downloads folder", "open dolphin and go to places home".
+  if ((m = rest.match(PLACE_SAY))) {
+    const p = PLACE_WORDS[m[1]];
+    // "go to desktop" on its own is showing the desktop; the Desktop folder is said as a folder.
+    // The configured documents folder (desk.mjs "folder:documents") stays the one "open my documents" opens.
+    if (p && has(`folder:${p}`)) return { key: `folder:${p}` };
+    if (p && !(p === 'desktop' && !m[2]) && has(`place:${p}`)) return { key: `place:${p}` };
+  }
   // "delete the last 3 words", "delete five letters", "backspace 10 times".
   if ((m = rest.match(/^(?:delete|erase|remove) (?:the )?(?:last )?(\w+) (words?|letters?|characters?)$/))) {
     const n = /^\d+$/.test(m[1]) ? Number(m[1]) : NUM[m[1]];
@@ -462,7 +477,7 @@ if (a && a.normalWindow && a.closeable) a.closeWindow();
  * Carry out one hands-free item. `run` starts a program and waits for it, `kwin` runs a
  * KWin script, `fileOps` moves, copies or trashes (FILE_OPS, or a dry run's stand-ins).
  */
-export async function performControl(item, { run, kwin, slot = '', plan, fileOps = FILE_OPS, home, env, exclude = [] } = {}) {
+export async function performControl(item, { run, kwin, activeApp, slot = '', plan, fileOps = FILE_OPS, home, env, exclude = [] } = {}) {
   const wait = { waitMs: 15000 };
   switch (item.kind) {
     case 'keys': {
@@ -485,6 +500,18 @@ export async function performControl(item, { run, kwin, slot = '', plan, fileOps
     }
     case 'window':
       return kwin(item.op === 'next' ? nextWindowScript() : item.op === 'restore' ? restoreScript() : closeFrontScript());
+    case 'place': {
+      const dir = places(home, env)[item.place];
+      if (!fs.existsSync(dir)) throw new Error(`there is no ${placeName(item.place)} folder`);
+      // The file manager in front goes there itself (Control+L, the path, Enter); otherwise the folder opens.
+      if (activeApp && /dolphin/i.test(await activeApp().catch(() => ''))) {
+        await run(['ydotool', 'key', '29:1', '38:1', '38:0', '29:0'], ydotoolEnv(), wait);
+        await new Promise((r) => setTimeout(r, 150));
+        await run(['ydotool', 'type', '--key-delay', '8', '--', dir], ydotoolEnv(), { waitMs: 20000 });
+        return run(['ydotool', 'key', '28:1', '28:0'], ydotoolEnv(), wait);
+      }
+      return run([process.platform === 'darwin' ? 'open' : 'xdg-open', dir]);
+    }
     case 'files': {
       const p = plan || planFiles(parseFileCommand(slot), { home, env, exclude });
       return fileOps[p.op](p, run);
