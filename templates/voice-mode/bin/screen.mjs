@@ -465,6 +465,10 @@ export class Screen {
     const y = Math.round(plan.front.y + (plan.box[1] + plan.box[3] / 2) / s);
     if (x < plan.front.x || y < plan.front.y || x > plan.front.x + plan.front.w || y > plan.front.y + plan.front.h) throw new Error(`"${plan.name}" is outside the window in front`);
     await this.pointTo(x, y);
+    // Someone else moving the mouse, or the window moving, between the move and the click: no click.
+    const at = await this.pointer();
+    const now = await this.front();
+    if (Math.abs(at.x - x) > 3 || Math.abs(at.y - y) > 3 || !now || now.pid !== plan.front.pid || Math.abs(now.x - plan.front.x) > 1 || Math.abs(now.y - plan.front.y) > 1) throw new Error(`the pointer or the window moved, so "${plan.name}" was not clicked`);
     await this.run(['ydotool', 'click', '0xC0'], YDOTOOL());
     return { how: 'pointer', x, y };
   }

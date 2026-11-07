@@ -2820,6 +2820,17 @@ test('round 4: without AT-SPI, a local screenshot is read by tesseract, deleted 
   assert.deepEqual([r.x, r.y], [352, 206]);
   assert.ok(Math.abs(state.pointer.x - 352) <= 2 && Math.abs(state.pointer.y - 206) <= 2, `pointer at ${JSON.stringify(state.pointer)}`);
   assert.deepEqual(calls.filter((c) => c[0] === 'ydotool').at(-1), ['ydotool', 'click']);
+  // The pointer pushed away (someone else at the mouse) before the click: nothing is clicked.
+  const pushed = fakeDesk({ atspi: { find: { window: 'Test window', matches: [] } }, tsv: TSV });
+  const p2 = await pushed.screen.locate({ name: 'accept' });
+  const pointer = pushed.screen.pointer.bind(pushed.screen);
+  let reads = 0;
+  pushed.screen.pointer = async () => {
+    const p = await pointer();
+    return ++reads > 3 ? { x: p.x + 40, y: p.y } : p;
+  };
+  await assert.rejects(pushed.screen.press(p2), /the pointer or the window moved, so "accept" was not clicked/);
+  assert.ok(!pushed.calls.some((c) => c[1] === 'click'));
   // Words tesseract was unsure of are not matched.
   assert.deepEqual(scr.ocrFind(scr.ocrWords(TSV).words, '~'), []);
   assert.deepEqual(scr.ocrFind(scr.ocrWords(TSV).words, 'test window').map((h) => h.box), [[40, 60, 160, 20]]);
