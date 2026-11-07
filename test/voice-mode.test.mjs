@@ -2559,4 +2559,59 @@ test('session: "press enter" is done at once, without the decision model, and pr
   session.close();
 });
 
+test('round 2: a big catalog stays within the Decisions API limit; the page, controls and text actions are kept, hands-free keys go first', () => {
+  const apps = Array.from({ length: 280 }, (_, i) => ({ id: `app${i}`, name: `App ${i}`, desktop: `app${i}.desktop` }));
+  const cat = buildCatalog(config(), null, { apps, ...KDE });
+  const page = new Map([...cat, ['page:click:1', { kind: 'page', op: 'click', name: 'Click "Compose" on the browser page', label: 'Compose' }], ['page:scroll-down', { kind: 'page', op: 'scroll', name: 'Scroll the browser page down' }]]);
+  const crit = criteria(page);
+  assert.ok(Object.keys(crit).length <= 255, `${Object.keys(crit).length} options`);
+  for (const k of ['none', 'page:click:1', 'page:scroll-down', 'system:volume-up', 'search:web', 'type:text', 'site:mail', 'app:app0']) assert.ok(crit[k], k);
+  assert.ok(!crit['key:enter'] && !crit['mouse:click'], 'hands-free items are left out first: plain code reads them');
+  // A small catalog keeps everything the model may pick.
+  assert.ok(criteria(quickCatalog())['key:enter']);
+});
+
+test('round 2: web pages open in the default browser when the assistant\'s own browser cannot be reached', async () => {
+  const ran = [];
+  const browser = { open: async () => { throw new Error('fetch failed'); } };
+  for (const [item, slot] of [[{ kind: 'url' }, 'google.com'], [{ kind: 'search', url: 'https://duckduckgo.com/?q={q}' }, 'food'], [{ kind: 'site', url: 'https://mail.example.com' }, '']])
+    await perform(item, { platform: 'linux', slot, browser, run: async (argv) => ran.push(argv) });
+  assert.deepEqual(ran, [['xdg-open', 'https://google.com'], ['xdg-open', 'https://duckduckgo.com/?q=food'], ['xdg-open', 'https://mail.example.com']]);
+  // A browser that answers is still used.
+  const opened = [];
+  await perform({ kind: 'url' }, { slot: 'google.com', browser: { open: async (u) => opened.push(u) }, run: async () => assert.fail('default browser') });
+  assert.deepEqual(opened, ['https://google.com']);
+});
+
+test('round 2: typing into the address bar, replacing a field, clearing and deleting words, said the way he said them', async () => {
+  const cat = quickCatalog();
+  const pick = (t) => quickPick(t, cat);
+  assert.deepEqual(pick('Enter google.com and press search.'), { key: 'type:enter', slot: 'google.com' });
+  assert.deepEqual(pick('Type google.com into the browser and press search'), { key: 'type:address-enter', slot: 'google.com' });
+  assert.deepEqual(pick('type BBC news in the address bar'), { key: 'type:address', slot: 'BBC news' });
+  assert.deepEqual(pick('Can you remove everything else? Just keep google.com.'), { key: 'type:replace', slot: 'google.com' });
+  assert.deepEqual(pick('replace the text with google.com and press enter'), { key: 'type:replace-enter', slot: 'google.com' });
+  assert.deepEqual(pick('clear the field and type hello'), { key: 'type:replace', slot: 'hello' });
+  assert.deepEqual(pick('enter'), { key: 'key:enter' });
+  for (const [t, key, slot] of [['clear the field', 'edit:clear'], ['delete everything', 'edit:clear'], ['delete the last word', 'edit:delete-word'], ['delete three words', 'edit:delete-word', '3'], ['delete 5 letters', 'key:backspace', '5'], ['press backspace 30 times', 'key:backspace', '30'], ['go to the address bar', 'nav:address-bar'], ['new line', 'key:new-line'], ['full screen', 'view:fullscreen']])
+    assert.deepEqual(pick(t), slot ? { key, slot } : { key }, t);
+  const kwin = buildCatalog(config(), null, { apps: QUICK_APPS, ...KDE });
+  assert.deepEqual(quickPick('snap the window to the left', kwin), { key: 'system:window-tile-left' });
+  // Never a file, never a guess: "keep going" and "keep pressing until..." are the voice's to rephrase.
+  for (const t of ['keep going', 'Just keep pressing until it is google.com.', 'Can you press backspace till there is only google.com?']) assert.equal(pick(t), null, t);
+  assert.equal(ctl.parseFileCommand('remove everything else just keep google.com'), null);
+  assert.equal(ctl.parseFileCommand('delete three words'), null);
+  // Exactly the keys, in order, each step waiting for the one before.
+  const ran = [];
+  const run = async (argv, env, o) => ran.push([argv.slice(1).join(' '), !!o?.waitMs]);
+  await perform(cat.get('type:address-enter'), { run, slot: 'google.com' });
+  assert.deepEqual(ran.splice(0), [['key 29:1 38:1 38:0 29:0', true], ['type --key-delay 8 -- google.com', true], ['key 28:1 28:0', true]]);
+  await perform(cat.get('type:replace'), { run, slot: 'google.com' });
+  assert.deepEqual(ran.splice(0), [['key 29:1 30:1 30:0 29:0', true], ['type --key-delay 8 -- google.com', true]]);
+  await perform(cat.get('edit:clear'), { run });
+  assert.deepEqual(ran.splice(0), [['key --key-delay 20 29:1 30:1 30:0 29:0 14:1 14:0', true]]);
+  assert.equal(describe(cat.get('type:address-enter'), 'google.com'), 'typed "google.com" in the address bar and pressed Enter');
+  assert.equal(describe(cat.get('type:replace'), 'google.com'), 'replaced the text with "google.com"');
+});
+
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));

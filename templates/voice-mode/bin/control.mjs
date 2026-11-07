@@ -146,6 +146,14 @@ export const SHORTCUTS = [
   K('key:page-down', 'page down', 'Press Page Down', 'pressed Page Down'),
   K('key:home', 'home', 'Press Home: go to the start of the line', 'pressed Home'),
   K('key:end', 'end', 'Press End: go to the end of the line', 'pressed End'),
+  K('edit:clear', 'ctrl a, backspace', 'Clear the field or text box: select all of it and delete it', 'cleared the field', /^(?:clear|empty|erase|wipe)(?: (?:out )?(?:the |this |that |all (?:the )?)?(?:field|box|text|line|input|address bar|url bar|search bar|search box|it|everything|all))?$|^(?:delete|erase|remove) (?:all|everything)(?: (?:the |of the )?text)?(?: in (?:the |this )?(?:field|box))?$|^select all and delete$/),
+  K('edit:delete-word', 'ctrl backspace', 'Delete the word before the text cursor (Control+Backspace)', 'deleted the last word', /^(?:delete|erase|remove) (?:the )?(?:last|previous) word$/),
+  K('edit:select-word', 'ctrl shift left', 'Select the word before the text cursor', 'selected the last word', /^select (?:the )?(?:last|previous) word$/),
+  K('edit:select-line', 'shift home', 'Select from the text cursor to the start of the line', 'selected to the start of the line', /^select (?:the |this )?line$|^select to the (?:start|beginning) of the line$/),
+  K('edit:select-to-end', 'shift end', 'Select from the text cursor to the end of the line', 'selected to the end of the line', /^select to the end(?: of the line)?$/),
+  K('nav:address-bar', 'ctrl l', 'Go to the browser address bar (Control+L)', 'went to the address bar', /^(?:go to|focus|select|click(?: on)?|open|jump to) (?:the )?(?:address|url|location) bar$/),
+  K('key:new-line', 'shift enter', 'Start a new line without sending (Shift+Enter)', 'started a new line', /^(?:new line|next line|line break|add a new line)$/),
+  K('view:fullscreen', 'f11', 'Full screen on or off (F11)', 'pressed F11 for full screen', /^(?:go |make (?:it |this )?)?full ?screen$|^(?:exit|leave|toggle) full ?screen$/),
   K('edit:copy', 'ctrl c', 'Copy the selected text or item (Control+C)', 'copied', /^copy(?: (?:that|it|this|(?:the )?(?:selection|selected (?:text|item|file)s?|text)))?$/),
   K('edit:cut', 'ctrl x', 'Cut the selected text or item (Control+X)', 'cut the selection', /^cut(?: (?:that|it|this|(?:the )?(?:selection|selected (?:text|item|file)s?|text)))?$/),
   K('edit:paste', 'ctrl v', 'Paste (Control+V)', 'pasted', /^paste(?: (?:that|it|this|here|(?:the )?(?:text|clipboard|copied text)))?(?: here)?$/),
@@ -197,6 +205,8 @@ const SYSTEM_SAY = [
   ['system:window-minimize', /^minimi[sz]e(?: (?:the |this |that |current )?(?:window|app|it|this|that)(?: in front)?)?$|^hide (?:this|the) window$/],
   ['system:window-maximize', /^maximi[sz]e(?: (?:the |this |that |current )?(?:window|app|it|this|that)(?: in front)?)?$|^make (?:the |this )?window (?:full screen|bigger)$/],
   ['system:show-desktop', /^(?:show|go to) (?:the |my )?desktop$/],
+  ['system:window-tile-left', /^(?:snap|tile|move|put) (?:the |this )?(?:window|it|this)(?: to the)? left(?: half| side)?$|^(?:snap|tile) left$/],
+  ['system:window-tile-right', /^(?:snap|tile|move|put) (?:the |this )?(?:window|it|this)(?: to the)? right(?: half| side)?$|^(?:snap|tile) right$/],
 ];
 
 /**
@@ -207,12 +217,12 @@ const SYSTEM_SAY = [
 export function handsFreeItems({ keys = true, kwin = true, files = true, trash = true } = {}) {
   const out = [];
   if (keys) {
-    for (const s of SHORTCUTS) out.push([s.id, { kind: 'keys', name: s.name, done: s.done, keys: s.keys, final: true }]);
+    for (const s of SHORTCUTS) out.push([s.id, { kind: 'keys', name: s.name, done: s.done, keys: s.keys, final: true, handsFree: true }]);
     out.push(['keys:combo', { kind: 'keys', combo: true, name: 'Press the keys or keyboard shortcut they name', local: true, final: true }]);
     out.push(['tab:go', { kind: 'keys', tabNumber: true, name: 'Go to the tab with the number they say', local: true, final: true }]);
-    for (const m of MOUSE) out.push([m.id, { kind: 'mouse', name: m.name, done: m.done, click: m.click, wheel: m.wheel, move: m.move, final: true }]);
+    for (const m of MOUSE) out.push([m.id, { kind: 'mouse', name: m.name, done: m.done, click: m.click, wheel: m.wheel, move: m.move, final: true, handsFree: true }]);
   }
-  if (kwin) for (const w of WINDOWS) out.push([w.id, { kind: 'window', name: w.name, done: w.done, op: w.id.slice(7), final: true }]);
+  if (kwin) for (const w of WINDOWS) out.push([w.id, { kind: 'window', name: w.name, done: w.done, op: w.id.slice(7), final: true, handsFree: true }]);
   if (files) {
     out.push(['files:move', { kind: 'files', op: 'move', name: 'Move a file or folder they name to another folder', local: true, final: true, ask: true }]);
     out.push(['files:copy', { kind: 'files', op: 'copy', name: 'Copy a file or folder they name to another folder', local: true, final: true }]);
@@ -225,12 +235,12 @@ export function handsFreeItems({ keys = true, kwin = true, files = true, trash =
 
 const WORDNUM = { once: 1, twice: 2, thrice: 3, ...NUM, few: 3, couple: 2 };
 
-/** "press down three times" → { rest: 'press down', times: 3 }; at most 20. */
+/** "press down three times" → { rest: 'press down', times: 3 }; at most 50. */
 export function repeats(t) {
   const m = t.match(/^(.*?)(?:,)?\s+(?:(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|a few|a couple of) times|(twice|thrice))$/);
   if (!m) return { rest: t, times: 1 };
   const n = m[3] ? WORDNUM[m[3]] : /^\d+$/.test(m[2]) ? Number(m[2]) : WORDNUM[m[2].replace(/^a (?:few|couple of)$/, (x) => (x.includes('few') ? 'few' : 'couple'))];
-  return n >= 1 ? { rest: m[1].trim(), times: Math.min(n, 20) } : { rest: t, times: 1 };
+  return n >= 1 ? { rest: m[1].trim(), times: Math.min(n, 50) } : { rest: t, times: 1 };
 }
 
 const PLACE_WORDS = { home: 'home', 'home folder': 'home', downloads: 'downloads', download: 'downloads', documents: 'documents', document: 'documents', docs: 'documents', desktop: 'desktop', pictures: 'pictures', picture: 'pictures', photos: 'pictures', music: 'music', videos: 'videos', video: 'videos' };
@@ -242,7 +252,7 @@ export function parseFileCommand(t) {
   let m = s.match(new RegExp(`^(move|copy|put) (?:the )?(?:(?:file|folder|document|picture|photo) )?(?:called |named )?(.+?)(?: (?:from|in|out of) ${PLACE_RE})? (?:in)?to ${PLACE_RE}$`));
   if (m) return { op: m[1] === 'copy' ? 'copy' : 'move', name: m[2].trim(), from: m[3] ? PLACE_WORDS[m[3]] : '', to: PLACE_WORDS[m[4]] };
   m = s.match(new RegExp(`^(?:delete|trash|remove|throw away|bin) (?:the )?(?:(?:file|folder|document|picture|photo) )?(?:called |named )?(.+?)(?: (?:from|in) ${PLACE_RE})?(?: to the (?:trash|bin))?$`));
-  if (m && !/^(?:it|that|this|everything|all|trash|bin|(?:the )?(?:last|previous|next) (?:letter|character|word|line)s?|(?:the )?(?:letter|character|word|line|text|selection))$/.test(m[1].trim())) return { op: 'trash', name: m[1].trim(), from: m[2] ? PLACE_WORDS[m[2]] : '', to: '' };
+  if (m && !/\b(?:everything|else|except|keep|only)\b/.test(m[1]) && !/^(?:it|that|this|everything|all|trash|bin|(?:the )?(?:last|previous|next) (?:letter|character|word|line)s?|(?:the )?(?:letter|character|word|line|text|selection)|(?:the )?(?:last )?\w+ (?:words?|letters?|characters?|lines?))$/.test(m[1].trim())) return { op: 'trash', name: m[1].trim(), from: m[2] ? PLACE_WORDS[m[2]] : '', to: '' };
   return null;
 }
 
@@ -265,6 +275,12 @@ export function controlPick(t, has) {
   for (const [key, re] of SYSTEM_SAY) if (re.test(rest) && has(key)) return { key };
   for (const m of MOUSE) if (m.say && m.say.test(rest) && has(m.id)) return { key: m.id };
   let m;
+  // "delete the last 3 words", "delete five letters", "backspace 10 times".
+  if ((m = rest.match(/^(?:delete|erase|remove) (?:the )?(?:last )?(\w+) (words?|letters?|characters?)$/))) {
+    const n = /^\d+$/.test(m[1]) ? Number(m[1]) : NUM[m[1]];
+    const key = /^word/.test(m[2]) ? 'edit:delete-word' : 'key:backspace';
+    if (n >= 1 && has(key)) return { key, ...(n > 1 ? { slot: String(Math.min(n, 50)) } : {}) };
+  }
   // "go to tab 3", "switch to the second tab", "last tab".
   if ((m = rest.match(/^(?:go to|switch to|open|show|jump to)? ?(?:the )?(?:tab (?:number )?(\w+)|(\w+) tab)$/))) {
     const w = m[1] || m[2];
@@ -403,7 +419,7 @@ const ydotoolEnv = () => {
 
 /** The keys an item presses with its words: the item's own, a tab number, or the spoken combination. */
 export function keysOf(item, slot = '') {
-  if (item.keys) return { chords: item.keys, times: Math.max(1, Math.min(Number(slot) || 1, 20)) };
+  if (item.keys) return { chords: item.keys, times: Math.max(1, Math.min(Number(slot) || 1, 50)) };
   if (item.tabNumber) {
     const n = Number(slot);
     if (!(n >= 1 && n <= 9)) throw new Error('say a tab number from 1 to 9');

@@ -128,11 +128,15 @@ next tab...) but never a key combination, tab number or file name.
 
 | Say something like | What happens | How |
 | --- | --- | --- |
-| "press enter", "escape", "press tab three times", "press down twice" | Presses that key in the window in front, as often as you said (up to 20) | `ydotool key` |
+| "press enter", "escape", "press tab three times", "press down twice" | Presses that key in the window in front, as often as you said (up to 50) | `ydotool key` |
 | "press control shift t", "alt f4", "press tab then enter" | Presses any shortcut or keys you name; "then" makes a sequence | `ydotool key` |
 | "copy", "cut", "paste", "select all", "undo", "redo", "save" | The usual editing shortcuts | `ydotool key` |
 | "new tab", "close tab", "next tab", "previous tab", "go to tab 3", "reopen the closed tab", "reload", "go back" | Browser and app tabs (Control+T, Control+W, Control+Tab...) | `ydotool key` |
-| "type hello and press enter", "dictate see you soon" | Types your words, then (if you said so) presses Enter | `ydotool type`, then `ydotool key` |
+| "type hello and press enter", "dictate see you soon", "enter google.com and press search" | Types your words, then (if you said so) presses Enter. Typing finishes before the next command starts | `ydotool type`, then `ydotool key` |
+| "type google.com into the browser and press enter", "go to the address bar" | Goes to the browser's address bar (Control+L) first | `ydotool key`, then `ydotool type` |
+| "replace the text with google.com", "clear the field and type hello", "remove everything else, just keep google.com" | Replaces what is in the field (Control+A, then your words) | `ydotool key`, then `ydotool type` |
+| "clear the field", "delete the last word", "delete three words", "delete 5 letters", "select the last word", "new line" | Text editing: clear the field, Control+Backspace, Backspace, Shift+Enter | `ydotool key` |
+| "snap the window to the left", "full screen" | Tiles the window in front to half the screen; F11 | KWin's own shortcuts; `ydotool key` |
 | "click", "double click", "right click", "scroll down a lot", "move the mouse left a little" | The mouse where the pointer is; distances are rough (pointer acceleration applies) | `ydotool click` and `mousemove` |
 | "next window", "switch windows", "close the window", "restore the window" | Brings the window used before to the front; closes the window in front the way its close button does (unsaved work still asks); un-maximizes it, or brings back the last minimized window | short KWin scripts (KDE Plasma) |
 | "move trip plan from downloads to documents", "copy invoices to the desktop", "delete old draft from downloads" | One named file or folder between your home, Downloads, Documents, Desktop, Pictures, Music and Videos folders. A move or a delete is said back and waits for your spoken yes; a delete goes to the desktop trash. Nothing is ever written over: if the name is unclear, missing, or already in the destination, nothing is done and the voice says why | Node's own file functions; `gio trash` |
@@ -140,7 +144,13 @@ next tab...) but never a key combination, tab number or file name.
 Shift+Delete and Control+Alt+Delete are never pressed. Control+Enter, which usually sends a
 message, waits for a spoken yes. Enter itself is not held back, so "press enter" in a form
 submits it, as the key would. With browser control on, "scroll down" and "go back" stay with
-the browser page's own choices, as before.
+the browser page's own choices, as before. When the assistant's own browser cannot be reached,
+web addresses, searches and sites open in your default browser instead.
+
+The decision model takes at most 255 options per question. With many apps installed, the
+items plain code already reads (hands-free keys) are left out of the model's list first, then
+switching to and closing apps, then apps; the browser page, the desktop controls and the text
+actions always stay.
 
 It never deletes anything for good, sends messages or email, buys anything, changes settings,
 runs commands, force-quits an app, or closes all windows at once. Those are not in the catalog; asked for one, the
