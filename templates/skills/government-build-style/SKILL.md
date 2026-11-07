@@ -37,7 +37,7 @@ A taste layer for building systems for a government body or a public institution
 4. **Mirror the organisation's real method.** Copy the organisation's own forms, sheets, steps and group names exactly. Offer the international standard (for example ISO) as a setting. The organisation's way is the default.
 
    Why: staff trust a tool that matches the method they are audited on, and a standard they do not use yet feels foreign.
-5. **Fix an approved platform; do not refactor it.** Stay aligned with the organisation's official sheets and standards. Take outside reviewers' points only as minor refinements, and only the critical ones.
+5. **Fix an approved platform; do not refactor it.** Stay aligned with the organisation's official sheets and standards. Take outside reviewers' points only as minor refinements, and only the critical ones. Make a bigger change only when the owner agrees to a different, better one.
 
    Why: an approved platform is a promise to the people who approved it.
 6. **Configurable, not hard-coded.** Scales, role names, method options and similar rules are set in an admin panel. Keep roles few and aligned with the standard. The higher role approves; there is no approval for every step.
@@ -49,9 +49,9 @@ A taste layer for building systems for a government body or a public institution
 
 ## AI in a public service
 
-8. **People stay in charge of the AI.** Every AI action that can run alone offers three modes, Manual, Balanced and Autonomous, set by people. The AI drafts and the person decides. The AI's work is marked as a suggestion.
+8. **People stay in charge of the AI.** How far the AI may act alone depends on the process, because not every part is the same. For each AI action that can run alone, offer the modes that fit that process, from Manual, Balanced and Autonomous, set by people. The AI drafts and the person decides. The AI's work is marked as a suggestion.
 
-   Why: a public body must be able to say who decided, and staff adopt an assistant faster when they control how far it goes.
+   Why: a public body must be able to say who decided, and a process with real risk needs a tighter hand than a routine one.
 9. **Engaging, but serious.** Make the work feel supported and a little rewarding: progress bars, finished ticks, a short done moment and a clear next step. No points, rankings or streaks.
 
    Why: people return to a tool that shows their progress, and game mechanics look unserious in a government service.

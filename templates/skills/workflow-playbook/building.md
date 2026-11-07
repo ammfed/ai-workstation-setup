@@ -12,9 +12,9 @@ Each rule names the phase it belongs to. Rules the playbook or the checks alread
    - Take good practice from the standards of the field, not from screens.
 
    Why: reference screens show the average. A product copied from them has no vision, and more research cannot fix a gap that is really a choice.
-2. **Study outside products from public material only.** No sign-in, no paywall, no gated demo or contact form, and nothing submitted. Screenshots stay private and are never published.
+2. **Study outside products from every source you can reach.** Use their documentation, demos, videos, product pages and any access the owner provides. Keep screenshots and copies private and never publish them.
 
-   Why: the study must not create obligations or leak material that is not yours to share.
+   Why: the more of a product you see, the better you learn how it meets each requirement, but material that is not yours stays private.
 3. **Judge your own earlier work the way you judge a vendor's.** For each earlier concept or screen, say what works, what fails, and whether to keep, drop or improve it.
 
    Why: favouring your own past work carries its mistakes forward, and discarding it loses what already worked.
@@ -106,15 +106,15 @@ Each rule names the phase it belongs to. Rules the playbook or the checks alread
 26. **New elements replace the lowest-value element on that screen,** placed for the role that needs them. A screen does not just grow.
 
     Why: screens that only gain elements become cluttered, one reasonable addition at a time.
-27. **Motion is calm.** Motion is never fast, elements appear step by step, and motion turns off when the device asks for less.
+27. **Motion follows the need.** Set the speed and amount of motion for each moment from the research and its purpose. Motion turns off when the device asks for less.
 
-    Why: fast motion distracts and tires, and some people cannot use a screen that moves.
+    Why: the right motion depends on the job. Motion with no purpose distracts and tires, and some people cannot use a screen that moves.
 
 ## Build
 
-28. **Follow instructions exactly.** Do what was asked, no more and no less. A signed screen or document stays exactly as signed, with only the agreed fixes. Fix an approved build; do not refactor it unasked.
+28. **Follow instructions exactly, and say when one looks wrong.** Do what was asked, no more and no less. A signed screen or document stays exactly as signed, with only the agreed fixes. Fix an approved build; do not refactor it unasked. When an instruction looks wrong or does not make sense, say so with the reason before you act on it.
 
-    Why: an unasked improvement breaks something the owner already approved, and they then have to find it.
+    Why: an unasked improvement breaks something the owner already approved, and a silent doubt lets a mistake through.
 29. **One live version, always running.** Keep one live demo of the latest main line, rebuilt after every change, so the owner never waits for a merge to see the work. Run a separate preview only when the owner asks for one, and close it once merged.
 
     Why: several copies each showing a different mix of changes cost the owner's trust in what they see.
