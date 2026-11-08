@@ -159,7 +159,7 @@ export const PREFERENCE_SKILLS = {
   'review-pages': {
     title: 'Review pages',
     description:
-      "The user's rules for review pages (Lavish decision-card pages) and prototypes: when to use a page, the card template, layout, previews, screenshot checks, opening and sending the link, and collecting answers. Use whenever a decision, plan, report, prototype or look-and-feel change goes in front of the user.",
+      "The user's rules for review pages (Lavish decision-card pages) and prototypes: when to use a page, the card template, layout, previews, screenshot checks, opening and sending the link, collecting answers, and pages for invited colleagues as private Claude artifacts with comments. Use whenever a decision, plan, report, prototype or look-and-feel change goes in front of the user.",
     when: 'before building, checking or sending a review page, or showing the user a prototype',
   },
   'running-workers': {
@@ -178,7 +178,7 @@ export const PREFERENCE_SKILLS = {
 
 // Every rule, placed in its home: 'core' or one of PREFERENCE_SKILLS. Each home keeps its
 // sections in the order they are added; empty sections and empty homes are left out.
-function placeRules(get, { cardsPath, hideKitPath, decisionsPath } = {}) {
+function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPath } = {}) {
   const homes = {};
   const add = (home, title, lines) => {
     const kept = lines.filter(Boolean);
@@ -414,6 +414,16 @@ function placeRules(get, { cardsPath, hideKitPath, decisionsPath } = {}) {
     cards && get('PREFS_CHECK_ANSWERS_FIRST') && 'Never reopen a page the user ended unless they ask.',
     cards && get('PREFS_CHECK_ANSWERS_FIRST') &&
       'A page that says it ended, or a link that loads, does not mean answers were lost: read the session status and pending answers, and collect them with `lavish-axi poll <file>` first.',
+  ]);
+  add('review-pages', 'Pages for invited colleagues', [
+    cards && commentCardsPath &&
+      `Lavish stays the default for the user's own review pages. A page meant for colleagues starts from the comment-card template at \`${commentCardsPath}\`: the same card look, every card on one page, no Lavish send buttons, and a line on each card that asks for a comment. Keep each card's id stable between versions, so comment threads stay on their card.`,
+    cards && commentCardsPath &&
+      "Publish nothing and share nothing until the user has confirmed that their organisation allows pages to be hosted by Anthropic. After that, each share still needs the user's word for that page and those people.",
+    cards && commentCardsPath &&
+      'Publish the page as a private Claude artifact. Share it with "Only people invited", and add each colleague the user named as a Commenter. Never use "Anyone with the link".',
+    cards && commentCardsPath &&
+      "Read and answer the colleagues' comments with the ArtifactComments tool. Fold each answer back into the record the page serves, the same way as an answer from the user, and tell the user what came in.",
   ]);
 
   // running-workers

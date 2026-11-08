@@ -76,6 +76,11 @@ function cardsPath(ctx) {
   return path.join(ctx.home, '.config', 'ai-workstation-setup', 'decision-cards.html');
 }
 
+// The comment-card template for pages meant for invited colleagues, next to the card template.
+function commentCardsPath(ctx) {
+  return path.join(ctx.home, '.config', 'ai-workstation-setup', 'comment-cards.html');
+}
+
 // The hide tray script, written next to the card template for prototype, slide and doc pages.
 function hideKitPath(ctx) {
   return path.join(ctx.home, '.config', 'ai-workstation-setup', 'hide-kit.js');
@@ -358,13 +363,14 @@ export default {
     if (cards) {
       await ctx.step('decision-card template', () => ctx.writeFile(cards, ctx.template('preferences/decision-cards.html'), { onConflict: 'ask' }));
       await ctx.step('hide tray script', () => ctx.writeFile(hideKitPath(ctx), ctx.template('preferences/hide-kit.js'), { onConflict: 'ask' }));
+      await ctx.step('comment-card template', () => ctx.writeFile(commentCardsPath(ctx), ctx.template('preferences/comment-cards.html'), { onConflict: 'ask' }));
     }
 
     const log = ctx.get('PREFS_DECISIONS_LOG');
     const privateRules = readPrivateRules(ctx);
     const tastePreset = readTastePreset(ctx);
     const get = (key) => ctx.get(key);
-    const opts = { cardsPath: cards, hideKitPath: cards && hideKitPath(ctx), decisionsPath: log ? ctx.path(log) : null, privateRules, tastePreset };
+    const opts = { cardsPath: cards, hideKitPath: cards && hideKitPath(ctx), commentCardsPath: cards && commentCardsPath(ctx), decisionsPath: log ? ctx.path(log) : null, privateRules, tastePreset };
     for (const name of targets) {
       const target = TARGETS[name];
       await ctx.step(name, () => {
