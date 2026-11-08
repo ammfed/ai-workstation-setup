@@ -77,7 +77,7 @@ points at another one). Everything not in the file takes the defaults in `bin/co
 | `queue` | `{ "command": [...], "env": {} }`: how a hand-off reaches your assistant; the note is added as the last argument. Never run through a shell. Without it there is no hand-off. |
 | `handoff` | `replyCommand` (default `voice-mode reply`: the command written into each note; give the full path if your assistant's shell does not have it on PATH), `dir` (the reply queue; default `handoff/` next to the config), `waitMin` (15: how long a conversation stays open for an answer that is still coming), `stillComingSec` (20: when it says, once, that the answer is still coming; 0 never). |
 | `briefing` | `enabled`, `refreshMin` (3), `maxChars` (120000 in all; see What a big briefing costs), `parts` (see Briefing and hand-off). |
-| `actions` | `enabled`, `chooser` (`model`, `keyName`, `keyFile`, `threshold` 0.9 mid-sentence, `finalThreshold` 0.5 once you stop, `askThreshold` 0.5 for a browser button that is only asked about, `closeThreshold` 0.8 to close an app, `timeoutMs` 3000 per call mid-sentence, `finalTimeoutMs` 6000 for the call once you stop), `apps` (extra `{ id, name, desktop \| mac \| command }`), `discoverApps` (installed desktop apps on Linux), `sites` (`{ id, name, url }`, http and https only), `documents` (its folders can be opened), `files`, `decisionLog` (default on: one line per decision in `logs/decisions.log`), `control` (default on: the PC control below), `notes.folder`, `searchUrl` (`{q}` is replaced by the words), `dryRun`. |
+| `actions` | `enabled`, `chooser` (`model`, `keyName`, `keyFile`, `threshold` 0.9 mid-sentence, `finalThreshold` 0.5 once you stop, `askThreshold` 0.5 for a browser button that is only asked about, `closeThreshold` 0.8 to close an app, `timeoutMs` 3000 per call mid-sentence, `finalTimeoutMs` 6000 for the call once you stop), `apps` (extra `{ id, name, desktop \| mac \| command }`), `discoverApps` (installed desktop apps on Linux), `sites` (`{ id, name, url }`, http and https only), `documents` (its folders can be opened), `files`, `decisionLog` (default on: one line per decision in `logs/decisions.log`), `control` (default on: the PC control below), `handsFree` (default on: keys, the mouse, windows, tabs and files; see Hands-free control), `notes.folder`, `searchUrl` (`{q}` is replaced by the words), `dryRun`. |
 | `browser` | `enabled` (off by default), `endpoint` (`http://127.0.0.1:9222`: the DevTools address of a Chrome started for the assistant; loopback only), `ignore` (URL prefixes of tabs it never reads, switches to or closes), `maxItems` (60 links, buttons and fields per page), `confirmSec` (30: how long a held button waits for a yes). See Browser control. |
 | `audio` | `duplex`: `full` (default: talk over a reply to cut in) or `half` (the mic is muted while a reply plays), `echoCancel` (default on; it wraps the `input` and `output` devices, or the default ones), `input` and `output` device names, `earcons` (a short tone when a conversation starts and ends). |
 | `listen.exitAfterMin` | End the conversation after this many minutes without speech (default 10). |
@@ -118,11 +118,48 @@ For a note, a search or typing, the model first picks the action (often mid-sent
 once the sentence has ended, picks which span of your own words is the text: the Decisions
 API returns choices and scores, never free text, so the text is always words you said.
 
-It never deletes or moves files, sends messages or email, buys anything, changes settings,
+### Hands-free control
+
+For someone who cannot touch the keyboard or the mouse, voice mode is also a pair of hands
+(`actions.handsFree`, on by default with `actions.control`). These commands are read from your
+words by plain code, so they run the moment the sentence ends, with no model call; only
+unusual phrasing goes to the decision model, which sees the fixed items (press Enter, copy,
+next tab...) but never a key combination, tab number or file name.
+
+| Say something like | What happens | How |
+| --- | --- | --- |
+| "press enter", "escape", "press tab three times", "press down twice" | Presses that key in the window in front, as often as you said (up to 50) | `ydotool key` |
+| "press control shift t", "alt f4", "press tab then enter" | Presses any shortcut or keys you name; "then" makes a sequence | `ydotool key` |
+| "copy", "cut", "paste", "select all", "undo", "redo", "save" | The usual editing shortcuts | `ydotool key` |
+| "new tab", "close tab", "next tab", "previous tab", "go to tab 3", "reopen the closed tab", "reload", "go back" | Browser and app tabs (Control+T, Control+W, Control+Tab...) | `ydotool key` |
+| "type hello and press enter", "dictate see you soon", "enter google.com and press search" | Types your words, then (if you said so) presses Enter. Typing finishes before the next command starts | `ydotool type`, then `ydotool key` |
+| "type google.com into the browser and press enter", "go to the address bar" | Goes to the browser's address bar (Control+L) first | `ydotool key`, then `ydotool type` |
+| "replace the text with google.com", "clear the field and type hello", "remove everything else, just keep google.com" | Replaces what is in the field (Control+A, then your words) | `ydotool key`, then `ydotool type` |
+| "clear the field", "delete the last word", "delete three words", "delete 5 letters", "select the last word", "new line" | Text editing: clear the field, Control+Backspace, Backspace, Shift+Enter | `ydotool key` |
+| "go to home", "take me to my downloads folder", "go up a folder", "go back three times" | The file manager in front goes to that common folder itself (Control+L, the path, Enter); otherwise the folder opens. Up is Alt+Up, back is Alt+Left | KWin tells which window is in front; `ydotool` |
+| "close the pop-up", "dismiss the banner", "close the menu" | Escape, so a pop-up inside an app closes and the app stays open ("close the window" closes the whole window) | `ydotool key` |
+| "snap the window to the left", "full screen" | Tiles the window in front to half the screen; F11 | KWin's own shortcuts; `ydotool key` |
+| "click", "double click", "right click", "scroll down a lot", "move the mouse left a little" | The mouse where the pointer is; distances are rough (pointer acceleration applies) | `ydotool click` and `mousemove` |
+| "next window", "switch windows", "close the window", "restore the window" | Brings the window used before to the front; closes the window in front the way its close button does (unsaved work still asks); un-maximizes it, or brings back the last minimized window | short KWin scripts (KDE Plasma) |
+| "move trip plan from downloads to documents", "copy invoices to the desktop", "delete old draft from downloads" | One named file or folder between your home, Downloads, Documents, Desktop, Pictures, Music and Videos folders. A move or a delete is said back and waits for your spoken yes; a delete goes to the desktop trash. Nothing is ever written over: if the name is unclear, missing, or already in the destination, nothing is done and the voice says why | Node's own file functions; `gio trash` |
+
+Shift+Delete and Control+Alt+Delete are never pressed. Control+Enter, which usually sends a
+message, waits for a spoken yes. Enter itself is not held back, so "press enter" in a form
+submits it, as the key would. With browser control on, "scroll down" and "go back" stay with
+the browser page's own choices, as before. When the assistant's own browser cannot be reached,
+web addresses, searches and sites open in your default browser instead.
+
+The decision model takes at most 255 options per question. With many apps installed, the
+items plain code already reads (hands-free keys) are left out of the model's list first, then
+switching to and closing apps, then apps; the browser page, the desktop controls and the text
+actions always stay.
+
+It never deletes anything for good, sends messages or email, buys anything, changes settings,
 runs commands, force-quits an app, or closes all windows at once. Those are not in the catalog; asked for one, the
 decision model picks nothing and the voice says voice mode does not do that. Set
-`actions.control` to `false` to keep it to opening things, and `actions.dryRun` to `true` to
-log what each action would run instead of running it.
+`actions.handsFree` to `false` to leave out hands-free control, `actions.control` to `false`
+to keep it to opening things, and `actions.dryRun` to `true` to log what each action would
+run instead of running it.
 
 ## Browser control
 

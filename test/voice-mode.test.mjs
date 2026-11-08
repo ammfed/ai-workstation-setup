@@ -791,8 +791,11 @@ test('control: KDE shortcuts on Plasma, standard commands elsewhere, and no shor
   assert.deepEqual(other.get('system:volume-down').argv, ['wpctl', 'set-volume', '@DEFAULT_AUDIO_SINK@', '5%-']);
   assert.ok(!other.has('system:media-next') && !other.has('system:window-minimize') && !other.has('type:text'));
   assert.equal(controlActions(merge(c, { actions: { control: false } }), KDE).length, 0);
-  // The fixed list has no destructive kind at all.
-  for (const [key] of kde) assert.doesNotMatch(key, /delete|remove|move-file|send|mail|buy|settings|shell|close|quit|kill/);
+  // The desktop's own shortcuts have no destructive kind at all. Hands-free keys, windows and
+  // files (control.mjs) are tested on their own: closing goes through the close button, a
+  // move or a trash waits for a yes.
+  for (const [key] of kde) if (key.startsWith('system:')) assert.doesNotMatch(key, /delete|remove|move-file|send|mail|buy|settings|shell|close|quit|kill/);
+  assert.ok(!controlActions(merge(c, { actions: { handsFree: false } }), KDE).some(([k]) => /^(?:key|edit|tab|mouse|window|files|keys):/.test(k)));
   // Closing is a named app's own choice (close:), never a shortcut; the rest stays out of reach.
   assert.match(criteria(new Map()).none, /deleting or moving files, sending a message or email, buying something, changing settings, running a command\./);
 });
@@ -2344,8 +2347,309 @@ test('chooser: the end-of-sentence call gets finalTimeoutMs, and one that timed 
 test('rules: web searches and opening sites are the desktop helper\'s, never a hand-off', () => {
   const text = instructionsFor(config(), new Records(config()), '');
   assert.doesNotMatch(text, /outside your records \(mail, messages, the web/);
-  assert.match(text, /Never hand off what the desktop helper below does \(opening an app, a website or a web address, a web search, typing, closing an app\)/);
+  assert.match(text, /Never hand off what the desktop helper below does \(opening an app, a website or a web address, a web search, typing, pressing keys and shortcuts, the mouse, windows and tabs, closing an app, moving or copying one named file\)/);
   assert.match(text, /call desktop_action with the request in the user's words/);
+});
+
+// ------------------------------------------------------------------ hands-free control
+
+const ctl = await import(path.join(bin, 'control.mjs'));
+
+test('hands-free: keys, shortcuts, the mouse, windows and tabs are read from the words, with no model call', () => {
+  const cat = quickCatalog();
+  const pick = (t) => quickPick(t, cat);
+  // What was asked for on 7 November and could not be done.
+  assert.deepEqual(pick('Can you press enter?'), { key: 'key:enter' });
+  assert.deepEqual(pick('Enter.'), { key: 'key:enter' });
+  assert.deepEqual(pick('hit the escape key'), { key: 'key:escape' });
+  assert.deepEqual(pick('press tab three times'), { key: 'key:tab', slot: '3' });
+  assert.deepEqual(pick('Press down twice.'), { key: 'key:down', slot: '2' });
+  assert.deepEqual(pick('next field'), { key: 'key:tab' });
+  // Any shortcut, said naturally or as speech-to-text writes it.
+  assert.deepEqual(pick('press control shift t'), { key: 'tab:reopen' });
+  assert.deepEqual(pick('Ctrl+Shift+T'), { key: 'tab:reopen' });
+  assert.deepEqual(pick('press alt f4'), { key: 'keys:combo', slot: 'alt f4' });
+  assert.deepEqual(pick('press control shift escape'), { key: 'keys:combo', slot: 'control shift escape' });
+  assert.deepEqual(pick('press tab then enter'), { key: 'keys:combo', slot: 'tab then enter' });
+  assert.deepEqual(pick('press f 5'), { key: 'page:refresh' });
+  // Editing.
+  for (const [t, key] of [['copy', 'edit:copy'], ['Copy that.', 'edit:copy'], ['cut', 'edit:cut'], ['paste it here', 'edit:paste'], ['select all', 'edit:select-all'], ['Undo.', 'edit:undo'], ['redo', 'edit:redo'], ['control c', 'edit:copy'], ['save the file', 'edit:save']])
+    assert.deepEqual(pick(t), { key }, t);
+  // Tabs.
+  for (const [t, key, slot] of [['new tab', 'tab:new'], ['open a new tab', 'tab:new'], ['close this tab', 'tab:close'], ['next tab', 'tab:next'], ['go to the previous tab', 'tab:previous'], ['reopen the closed tab', 'tab:reopen'], ['go to tab 3', 'tab:go', '3'], ['switch to the second tab', 'tab:go', '2'], ['last tab', 'tab:go', '9'], ['reload the page', 'page:refresh'], ['go back', 'page:go-back']])
+    assert.deepEqual(pick(t), slot ? { key, slot } : { key }, t);
+  // The mouse at the pointer.
+  for (const [t, key, slot] of [['click', 'mouse:click'], ['click here', 'mouse:click'], ['double click', 'mouse:double-click'], ['right-click', 'mouse:right-click'], ['scroll down', 'mouse:scroll-down', '2'], ['scroll up a lot', 'mouse:scroll-up', '3'], ['move the mouse left', 'mouse:move-left', '150'], ['move the pointer up a little', 'mouse:move-up', '40']])
+    assert.deepEqual(pick(t), slot ? { key, slot } : { key }, t);
+  // Windows.
+  for (const [t, key] of [['close the window', 'window:close'], ['switch to the next window', 'window:next'], ['switch windows', 'window:next'], ['restore the window', 'window:restore']])
+    assert.deepEqual(pick(t), { key }, t);
+  const kwin = buildCatalog(config(), null, { apps: QUICK_APPS, ...KDE });
+  assert.deepEqual(quickPick('minimize', kwin), { key: 'system:window-minimize' });
+  assert.deepEqual(quickPick('Maximize this window.', kwin), { key: 'system:window-maximize' });
+  assert.deepEqual(quickPick('show the desktop', kwin), { key: 'system:show-desktop' });
+  // Typing, and typing then Enter.
+  assert.deepEqual(pick('type hello world and press enter'), { key: 'type:enter', slot: 'hello world' });
+  assert.deepEqual(pick('Dictate see you tomorrow.'), { key: 'type:text', slot: 'see you tomorrow' });
+  // Still the chooser's, or nothing: negations, questions, a lone letter or word, and Delete said on its own.
+  for (const t of ["don't press enter", 'how do I copy a file?', 'should I press enter', 'a', 'why', 'the end', 'delete', 'press purple', 'press control a b', 'close Firefox.'])
+    assert.notEqual(pick(t)?.key?.split(':')[0], 'keys', t);
+  for (const t of ["don't press enter", 'how do I copy a file?', 'a', 'why', 'the end', 'delete', 'press purple'])
+    assert.equal(pick(t), null, t);
+  assert.deepEqual(pick('close Firefox.'), { key: 'close:firefox' });
+  // With the browser page on offer, scrolling and going back stay the chooser's (the page's own choices).
+  const withPage = new Map([...cat, ['page:scroll-down', { kind: 'page', op: 'scroll' }]]);
+  for (const t of ['scroll down', 'go back', 'scroll to the top']) assert.equal(quickPick(t, withPage), null, t);
+  assert.deepEqual(quickPick('press enter', withPage), { key: 'key:enter' });
+  // Only what the catalog offers: with hands-free control off, none of it.
+  const off = quickCatalog(merge(config(), { actions: { handsFree: false } }));
+  assert.equal(quickPick('press enter', off), null);
+  // The model never sees an item that takes words only plain code reads.
+  const crit = criteria(cat);
+  assert.ok(crit['key:enter'] && crit['edit:paste'] && crit['window:next'] && crit['mouse:click']);
+  assert.ok(!crit['keys:combo'] && !crit['tab:go'] && !crit['files:move'] && !crit['type:enter']);
+});
+
+test('hands-free: each key, mouse and window action runs exactly its fixed command; Shift+Delete never', async () => {
+  const cat = quickCatalog();
+  const runs = [];
+  const run = async (argv) => runs.push(argv);
+  const go = async (key, slot = '') => {
+    await perform(cat.get(key), { run, slot });
+    return runs.splice(0).map((a) => a.join(' '));
+  };
+  assert.deepEqual(await go('key:enter'), ['ydotool key --key-delay 20 28:1 28:0']);
+  assert.deepEqual(await go('key:tab', '3'), ['ydotool key --key-delay 20 15:1 15:0 15:1 15:0 15:1 15:0']);
+  assert.deepEqual(await go('tab:reopen'), ['ydotool key --key-delay 20 29:1 42:1 20:1 20:0 42:0 29:0']);
+  assert.deepEqual(await go('keys:combo', 'alt f4'), ['ydotool key --key-delay 20 56:1 62:1 62:0 56:0']);
+  assert.deepEqual(await go('keys:combo', 'tab then enter'), ['ydotool key --key-delay 20 15:1 15:0 28:1 28:0']);
+  assert.deepEqual(await go('tab:go', '3'), ['ydotool key --key-delay 20 29:1 4:1 4:0 29:0']);
+  assert.deepEqual(await go('edit:paste'), ['ydotool key --key-delay 20 29:1 47:1 47:0 29:0']);
+  assert.deepEqual(await go('mouse:click'), ['ydotool click 0xC0']);
+  assert.deepEqual(await go('mouse:right-click'), ['ydotool click 0xC1']);
+  assert.deepEqual(await go('mouse:scroll-down', '2'), ['ydotool mousemove --wheel -- 0 -1', 'ydotool mousemove --wheel -- 0 -1']);
+  assert.deepEqual(await go('mouse:move-left', '150'), ['ydotool mousemove -- -150 0']);
+  await assert.rejects(perform(cat.get('keys:combo'), { run, slot: 'shift delete' }), /deletes for good/);
+  await assert.rejects(perform(cat.get('keys:combo'), { run, slot: 'control alt delete' }), /ends the session/);
+  await assert.rejects(perform(cat.get('tab:go'), { run, slot: '12' }), /1 to 9/);
+  assert.equal(runs.length, 0);
+  // Typing then Enter: Enter only once the typing has finished.
+  const order = [];
+  await perform(cat.get('type:enter'), { slot: 'hello', run: async (argv, env, o) => order.push([argv[1], o?.waitMs > 0]) });
+  assert.deepEqual(order, [['type', true], ['key', true]]);
+  // Windows: a KWin script, loaded and run.
+  const calls = [];
+  const exec = async (argv) => (calls.push(argv), argv.includes('org.kde.kwin.Scripting.loadScript') ? '(4,)' : '()');
+  await perform(cat.get('window:next'), { exec });
+  assert.ok(calls[0].includes('org.kde.kwin.Scripting.loadScript'));
+  assert.match(ctl.nextWindowScript(), /stackingOrder/);
+  assert.match(ctl.closeFrontScript(), /a\.normalWindow && a\.closeable\) a\.closeWindow\(\)/);
+  assert.match(ctl.restoreScript(), /setMaximize\(false, false\)/);
+  // Said back in a few words.
+  assert.equal(describe(cat.get('key:tab'), '3'), 'pressed Tab 3 times');
+  assert.equal(describe(cat.get('keys:combo'), 'control shift escape'), 'pressed Control+Shift+Escape');
+  assert.equal(describe(cat.get('type:enter'), 'hello'), 'typed "hello" and pressed Enter');
+  // Control+Enter usually sends: it waits for a yes.
+  assert.match(ctl.prepare(cat.get('keys:combo'), 'control enter').hold, /^press Control\+Enter \(usually sends the message\)$/);
+  assert.equal(ctl.prepare(cat.get('key:enter')).hold, '');
+});
+
+// A home with the common folders, for the file commands.
+function filesHome() {
+  const home = fs.mkdtempSync(path.join(tmp, 'home-'));
+  for (const d of ['Downloads', 'Documents', 'Desktop', 'Pictures', 'Music', 'Videos', '.config']) fs.mkdirSync(path.join(home, d));
+  fs.writeFileSync(path.join(home, 'Downloads', 'Quarterly Report.pdf'), 'q');
+  fs.writeFileSync(path.join(home, 'Downloads', 'notes-old.txt'), 'n');
+  fs.writeFileSync(path.join(home, 'Downloads', 'notes-new.txt'), 'n');
+  fs.mkdirSync(path.join(home, 'Downloads', 'invoices'));
+  fs.writeFileSync(path.join(home, 'Downloads', 'invoices', 'a.pdf'), 'a');
+  fs.writeFileSync(path.join(home, 'Desktop', 'budget.xlsx'), 'b');
+  fs.writeFileSync(path.join(home, 'Documents', 'budget.xlsx'), 'other');
+  return home;
+}
+
+test('hands-free files: one named file, from a named folder to another; unclear, missing or taken does nothing', () => {
+  const home = filesHome();
+  const env = {};
+  const plan = (t) => ctl.planFiles(ctl.parseFileCommand(t), { home, env });
+  assert.deepEqual(ctl.parseFileCommand('move the file quarterly report from my downloads to documents'), { op: 'move', name: 'quarterly report', from: 'downloads', to: 'documents' });
+  assert.deepEqual(ctl.parseFileCommand('copy invoices to the desktop'), { op: 'copy', name: 'invoices', from: '', to: 'desktop' });
+  assert.deepEqual(ctl.parseFileCommand('delete notes old from downloads'), { op: 'trash', name: 'notes old', from: 'downloads', to: '' });
+  for (const t of ['copy that', 'delete it', 'delete the last word', 'move on', 'move the window to the left']) assert.equal(ctl.parseFileCommand(t), null, t);
+  const p = plan('move quarterly report dot pdf from downloads to documents');
+  assert.equal(p.src, path.join(home, 'Downloads', 'Quarterly Report.pdf'));
+  assert.equal(p.dst, path.join(home, 'Documents', 'Quarterly Report.pdf'));
+  assert.equal(ctl.planText(p), 'move "Quarterly Report.pdf" from Downloads to Documents');
+  // Without a folder named, the one match across the common folders.
+  assert.equal(plan('copy the folder invoices to the desktop').src, path.join(home, 'Downloads', 'invoices'));
+  assert.throws(() => plan('move notes to documents'), /2 things in your common folders match "notes" \(notes-new\.txt, notes-old\.txt\)|2 things in your common folders match "notes" \(notes-old\.txt, notes-new\.txt\)/);
+  assert.throws(() => plan('move holiday photos to documents'), /no file or folder called "holiday photos"/);
+  assert.throws(() => plan('move budget from the desktop to documents'), /Documents already has something called "budget\.xlsx", so nothing was moved/);
+  assert.throws(() => plan('move quarterly report from downloads to downloads'), /already in Downloads/);
+  // A common folder itself is never moved.
+  assert.throws(() => plan('move documents to the desktop'), /no file or folder called "documents"/);
+  // An excluded name is never found.
+  assert.throws(() => ctl.planFiles(ctl.parseFileCommand('move quarterly report to documents'), { home, env, exclude: ['*report*'] }), /no file or folder/);
+  // user-dirs.dirs moves a folder elsewhere.
+  fs.mkdirSync(path.join(home, 'Unduhan'));
+  fs.writeFileSync(path.join(home, '.config', 'user-dirs.dirs'), 'XDG_DOWNLOAD_DIR="$HOME/Unduhan"\n');
+  assert.equal(ctl.places(home, env).downloads, path.join(home, 'Unduhan'));
+});
+
+test('session: a file move is said back and waits for a yes; a copy is done at once; the trash is the desktop trash', async () => {
+  const home = filesHome();
+  const saved = { HOME: process.env.HOME, XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME };
+  process.env.HOME = home;
+  delete process.env.XDG_CONFIG_HOME;
+  const ran = [];
+  const c = config({ actions: { chooser: { timeoutMs: 60, finalTimeoutMs: 120 } } });
+  const notes = [];
+  const logs = [];
+  const session = new Session(c, { script: [], catalog: quickCatalog(c), log: (r) => logs.push(r), performImpl: (item, o) => perform(item, { ...o, run: async (argv) => ran.push(argv) }) });
+  session.provider.note = (t) => notes.push(t);
+  session.chooser.key = 'test';
+  session.chooser.fetch = neverAnswers();
+  const src = path.join(home, 'Downloads', 'Quarterly Report.pdf');
+  const dst = path.join(home, 'Documents', 'Quarterly Report.pdf');
+  try {
+    await turn(session, 'Move quarterly report from downloads to documents.', { reply: 'Shall I move Quarterly Report from Downloads to Documents?' });
+    assert.ok(fs.existsSync(src) && !fs.existsSync(dst), 'nothing moved before the yes');
+    assert.match(notes.at(-1), /ready to move "Quarterly Report\.pdf" from Downloads to Documents, but not done yet\. Ask the user .* using the word "move"/);
+    assert.ok(logs.some((l) => l.event === 'action-held' && l.target === 'files:move'));
+    await turn(session, 'no');
+    assert.ok(fs.existsSync(src), 'a no moves nothing');
+    assert.match(notes.at(-1), /nothing was done \(it was to move "Quarterly Report\.pdf" from Downloads to Documents\): the user did not say yes/);
+    await turn(session, 'Move quarterly report from downloads to documents.', { reply: 'Do you want me to move Quarterly Report to Documents?' });
+    await turn(session, 'yes');
+    assert.ok(!fs.existsSync(src) && fs.readFileSync(dst, 'utf8') === 'q', 'moved after the yes');
+    assert.match(notes.at(-1), /moved "Quarterly Report\.pdf" from Downloads to Documents after the user said yes/);
+    // A copy is done at once, and never over something already there.
+    await turn(session, 'copy the folder invoices to the desktop');
+    assert.ok(fs.existsSync(path.join(home, 'Desktop', 'invoices', 'a.pdf')) && fs.existsSync(path.join(home, 'Downloads', 'invoices', 'a.pdf')));
+    assert.match(notes.at(-1), /copied the folder "invoices" from Downloads to the Desktop/);
+    await turn(session, 'copy budget from the desktop to documents');
+    assert.equal(fs.readFileSync(path.join(home, 'Documents', 'budget.xlsx'), 'utf8'), 'other');
+    assert.match(notes.at(-1), /nothing was done: Documents already has something called "budget\.xlsx"/);
+    // The trash: the desktop's own (gio trash), after a yes.
+    await turn(session, 'delete notes old from downloads', { reply: 'Should I trash notes-old.txt?' });
+    assert.equal(ran.length, 0);
+    await turn(session, 'yes please');
+    assert.deepEqual(ran, [['gio', 'trash', '--', path.join(home, 'Downloads', 'notes-old.txt')]]);
+    // Nothing went to the working session.
+    assert.ok(!logs.some((l) => l.event === 'handoff'));
+  } finally {
+    session.close();
+    for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+  }
+});
+
+test('session: "press enter" is done at once, without the decision model, and pressing twice is meant twice', async () => {
+  const { session, performed, logs } = quickSession({ timeoutMs: 2000 });
+  for (const said of ['Can you press enter?', 'Can you press enter?', 'paste', 'next tab']) {
+    session.onSpeechStart();
+    const t0 = performance.now();
+    session.provider.emit('user-text', said, true);
+    const r = await session.desktopResult();
+    assert.ok(r.opened?.length === 1, `${said}: ${JSON.stringify(r)}`);
+    assert.ok(performance.now() - t0 < 300, `${said} waited ${Math.round(performance.now() - t0)} ms`);
+    session.finishTurn();
+  }
+  assert.deepEqual(performed, ['Press the Enter key in the window in front', 'Press the Enter key in the window in front', 'Paste (Control+V)', 'Go to the next tab (Control+Tab)']);
+  assert.equal(logs.filter((l) => l.event === 'chooser' && l.quick).length, 4);
+  session.close();
+});
+
+test('round 2: a big catalog stays within the Decisions API limit; the page, controls and text actions are kept, hands-free keys go first', () => {
+  const apps = Array.from({ length: 280 }, (_, i) => ({ id: `app${i}`, name: `App ${i}`, desktop: `app${i}.desktop` }));
+  const cat = buildCatalog(config(), null, { apps, ...KDE });
+  const page = new Map([...cat, ['page:click:1', { kind: 'page', op: 'click', name: 'Click "Compose" on the browser page', label: 'Compose' }], ['page:scroll-down', { kind: 'page', op: 'scroll', name: 'Scroll the browser page down' }]]);
+  const crit = criteria(page);
+  assert.ok(Object.keys(crit).length <= 255, `${Object.keys(crit).length} options`);
+  for (const k of ['none', 'page:click:1', 'page:scroll-down', 'system:volume-up', 'search:web', 'type:text', 'site:mail', 'app:app0']) assert.ok(crit[k], k);
+  assert.ok(!crit['key:enter'] && !crit['mouse:click'], 'hands-free items are left out first: plain code reads them');
+  // A small catalog keeps everything the model may pick.
+  assert.ok(criteria(quickCatalog())['key:enter']);
+});
+
+test('round 2: web pages open in the default browser when the assistant\'s own browser cannot be reached', async () => {
+  const ran = [];
+  const browser = { open: async () => { throw new Error('fetch failed'); } };
+  for (const [item, slot] of [[{ kind: 'url' }, 'google.com'], [{ kind: 'search', url: 'https://duckduckgo.com/?q={q}' }, 'food'], [{ kind: 'site', url: 'https://mail.example.com' }, '']])
+    await perform(item, { platform: 'linux', slot, browser, run: async (argv) => ran.push(argv) });
+  assert.deepEqual(ran, [['xdg-open', 'https://google.com'], ['xdg-open', 'https://duckduckgo.com/?q=food'], ['xdg-open', 'https://mail.example.com']]);
+  // A browser that answers is still used.
+  const opened = [];
+  await perform({ kind: 'url' }, { slot: 'google.com', browser: { open: async (u) => opened.push(u) }, run: async () => assert.fail('default browser') });
+  assert.deepEqual(opened, ['https://google.com']);
+});
+
+test('round 2: typing into the address bar, replacing a field, clearing and deleting words, said the way he said them', async () => {
+  const cat = quickCatalog();
+  const pick = (t) => quickPick(t, cat);
+  assert.deepEqual(pick('Enter google.com and press search.'), { key: 'type:enter', slot: 'google.com' });
+  assert.deepEqual(pick('Type google.com into the browser and press search'), { key: 'type:address-enter', slot: 'google.com' });
+  assert.deepEqual(pick('type BBC news in the address bar'), { key: 'type:address', slot: 'BBC news' });
+  assert.deepEqual(pick('Can you remove everything else? Just keep google.com.'), { key: 'type:replace', slot: 'google.com' });
+  assert.deepEqual(pick('replace the text with google.com and press enter'), { key: 'type:replace-enter', slot: 'google.com' });
+  assert.deepEqual(pick('clear the field and type hello'), { key: 'type:replace', slot: 'hello' });
+  assert.deepEqual(pick('enter'), { key: 'key:enter' });
+  for (const [t, key, slot] of [['clear the field', 'edit:clear'], ['delete everything', 'edit:clear'], ['delete the last word', 'edit:delete-word'], ['delete three words', 'edit:delete-word', '3'], ['delete 5 letters', 'key:backspace', '5'], ['press backspace 30 times', 'key:backspace', '30'], ['go to the address bar', 'nav:address-bar'], ['new line', 'key:new-line'], ['full screen', 'view:fullscreen']])
+    assert.deepEqual(pick(t), slot ? { key, slot } : { key }, t);
+  const kwin = buildCatalog(config(), null, { apps: QUICK_APPS, ...KDE });
+  assert.deepEqual(quickPick('snap the window to the left', kwin), { key: 'system:window-tile-left' });
+  // Never a file, never a guess: "keep going" and "keep pressing until..." are the voice's to rephrase.
+  for (const t of ['keep going', 'Just keep pressing until it is google.com.', 'Can you press backspace till there is only google.com?']) assert.equal(pick(t), null, t);
+  assert.equal(ctl.parseFileCommand('remove everything else just keep google.com'), null);
+  assert.equal(ctl.parseFileCommand('delete three words'), null);
+  // Exactly the keys, in order, each step waiting for the one before.
+  const ran = [];
+  const run = async (argv, env, o) => ran.push([argv.slice(1).join(' '), !!o?.waitMs]);
+  await perform(cat.get('type:address-enter'), { run, slot: 'google.com' });
+  assert.deepEqual(ran.splice(0), [['key 29:1 38:1 38:0 29:0', true], ['type --key-delay 8 -- google.com', true], ['key 28:1 28:0', true]]);
+  await perform(cat.get('type:replace'), { run, slot: 'google.com' });
+  assert.deepEqual(ran.splice(0), [['key 29:1 30:1 30:0 29:0', true], ['type --key-delay 8 -- google.com', true]]);
+  await perform(cat.get('edit:clear'), { run });
+  assert.deepEqual(ran.splice(0), [['key --key-delay 20 29:1 30:1 30:0 29:0 14:1 14:0', true]]);
+  assert.equal(describe(cat.get('type:address-enter'), 'google.com'), 'typed "google.com" in the address bar and pressed Enter');
+  assert.equal(describe(cat.get('type:replace'), 'google.com'), 'replaced the text with "google.com"');
+});
+
+test('round 3: folders in the file manager, pop-ups closed with Escape, and "write" types', async () => {
+  const cat = quickCatalog();
+  const pick = (t) => quickPick(t, cat);
+  // Going to a common folder never shows the desktop or waits on the model.
+  for (const [t, key] of [['take me to my home folder', 'place:home'], ['go to home', 'place:home'], ['navigate to downloads', 'place:downloads'], ['open the file manager and go to places home', 'place:home'], ['go to the desktop folder', 'place:desktop'], ['open my documents', 'folder:documents']])
+    assert.deepEqual(pick(t), { key }, t);
+  const kwin = buildCatalog(config(), null, { apps: QUICK_APPS, ...KDE });
+  assert.deepEqual(quickPick('go to desktop', kwin), { key: 'system:show-desktop' });
+  // Up and back through folders, as often as said.
+  assert.deepEqual(pick('go up one folder'), { key: 'nav:parent' });
+  assert.deepEqual(pick('go to the parent directory twice'), { key: 'nav:parent', slot: '2' });
+  assert.deepEqual(pick('go back in the folder three times'), { key: 'page:go-back', slot: '3' });
+  // A pop-up inside an app: Escape, never closing the app's window.
+  for (const t of ['dismiss the translation popup in the browser', 'close that little pop up', 'get rid of the cookie banner', 'close the menu']) assert.deepEqual(pick(t), { key: 'ui:dismiss' }, t);
+  assert.equal(pick('close it'), null, 'a bare "close it" is the voice\'s to make plain');
+  assert.deepEqual(pick('close the window in front'), { key: 'window:close' });
+  // "write" types, unless it is a note, an email or a message.
+  assert.deepEqual(pick('write example.org'), { key: 'type:text', slot: 'example.org' });
+  for (const t of ['write down buy bread', 'write an email to my boss', 'write me a poem']) assert.equal(pick(t)?.key?.startsWith('type:') ? pick(t).key : null, null, t);
+  // Carried out: the file manager in front goes to the folder itself; anything else opens it.
+  const home = filesHome();
+  const ran = [];
+  const run = async (argv) => ran.push(argv.join(' '));
+  await ctl.performControl(cat.get('place:downloads'), { run, home, env: {}, activeApp: async () => 'org.kde.dolphin' });
+  assert.deepEqual(ran.splice(0), ['ydotool key 29:1 38:1 38:0 29:0', `ydotool type --key-delay 8 -- ${path.join(home, 'Downloads')}`, 'ydotool key 28:1 28:0']);
+  await ctl.performControl(cat.get('place:downloads'), { run, home, env: {}, activeApp: async () => 'firefox' });
+  assert.deepEqual(ran.splice(0), [`${process.platform === 'darwin' ? 'open' : 'xdg-open'} ${path.join(home, 'Downloads')}`]);
+  await assert.rejects(ctl.performControl(cat.get('place:music'), { run, home: path.join(tmp, 'no-such-home'), env: {}, activeApp: async () => '' }), /no Music folder/);
+  assert.equal(describe(cat.get('place:home')), 'went to your home folder');
+});
+
+test('round 3: the voice is told to close pop-ups with Escape, to claim only what was done, and never to read status boards', () => {
+  const text = instructionsFor(config(), new Records(config()), '');
+  assert.match(text, /closed with "close the pop-up" \(the Escape key\), never with "close the window in front"/);
+  assert.match(text, /Say that something was done only when a "Desktop helper:" line or the desktop_action result says so/);
+  assert.match(text, /never a status board, progress bars or percentages/);
 });
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
