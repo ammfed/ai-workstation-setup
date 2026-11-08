@@ -12,6 +12,7 @@ const BUNDLED_EXTRAS = {
     ['skills/workflow-playbook/checkpoints.md', 'checkpoints.md'],
     ['skills/workflow-playbook/video.md', 'video.md'],
     ['skills/workflow-playbook/slides.md', 'slides.md'],
+    ['skills/workflow-playbook/building.md', 'building.md'],
   ],
 };
 
@@ -69,11 +70,18 @@ const SKILLS = [
     label:
       'workflow-playbook - a working method for long projects run with AI agents. Covers ten phases from an idea to shipped and improved, stage gates, ' +
       'a map that always shows the next step, evidence and research at every stage, four review points with checks before every page, when to ask or act, wording, briefs, ' +
-      'memory and status, a standing improve step, and the steps from a weak prototype to a liked direction, an approved journey map and an aligned rules list. ' +
+      'memory and status, a standing improve step, and the steps from a weak prototype to a liked direction, an approved journey map and an aligned rules list, and a design and interface method for anything with a screen. ' +
+      'Also adds government-build-style, an opt-in style that loads only when you ask for it by name. ' +
       'Kun supervises every phase, so this also installs kun when it is not picked. Included with this setup.',
-    install: (ctx) => writeBundledSkill(ctx, 'workflow-playbook'),
+    // government-build-style is an opt-in sector style the playbook points to. It ships with the
+    // playbook but loads only when the person asks for it by name, so it needs no question of its own.
+    install: async (ctx) => {
+      await writeBundledSkill(ctx, 'workflow-playbook');
+      await writeBundledSkill(ctx, 'government-build-style');
+    },
     brings: ['kun'],
   },
+  { value: 'motion-designer', repo: 'dylantarre/animation-principles', label: 'motion-designer - plan and review the motion in any video: timing, easing, staging and follow-through' },
   {
     value: 'composio-cli',
     label: "composio-cli - Composio's own Claude Code plugin and skill, added by `composio setup` (agent-clis installs the tool; skipped without it)",
@@ -129,7 +137,7 @@ async function tallied(ctx, tally, label, fn) {
 export default {
   name: 'skills',
   title: 'Agent skills',
-  description: 'Claude Code skills, downloaded from their upstreams: kun, vision, grilling, teach, tdd, codebase-design, to-spec, to-tickets, to-questionnaire, diagnosing-bugs, wayfinder, find-docs, no-mistakes, stow, workflow-playbook, composio-cli',
+  description: 'Claude Code skills, downloaded from their upstreams: kun, vision, grilling, teach, tdd, codebase-design, to-spec, to-tickets, to-questionnaire, diagnosing-bugs, wayfinder, find-docs, no-mistakes, stow, workflow-playbook, motion-designer, composio-cli',
   order: 50,
   group: 'assistant',
   summary: 'skills for planning and test-first coding',
