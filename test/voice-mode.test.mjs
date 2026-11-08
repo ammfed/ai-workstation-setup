@@ -2192,7 +2192,7 @@ test('quick: the plain commands the decision model missed are picked at once; do
   assert.deepEqual(pick('switch to Firefox'), { key: 'focus:firefox' });
   assert.deepEqual(pick('Type hello world.'), { key: 'type:text', slot: 'hello world' });
   // Negations, questions, half-heard words, two things at once and unknown names: the chooser's call.
-  for (const t of ["Don't close Firefox.", 'do not open firefox', 'How do I open Firefox?', 'Should I close Firefox?', 'Why is it taking that long?', 'ridegoogle.com', 'Can you open Google?', 'Open the browser', 'Search for the risk register', 'Look up my notes on the workshop', 'Open Firefox and search for cats', 'Close all windows', 'close google.com', 'open the thing'])
+  for (const t of ["Don't close Firefox.", 'do not open firefox', 'How do I open Firefox?', 'Should I close Firefox?', 'Why is it taking that long?', 'ridegoogle.com', 'Can you open Google?', 'Open the browser', 'Search for the train times', 'Look up my notes on the trip', 'Open Firefox and search for cats', 'Close all windows', 'close google.com', 'open the thing'])
     assert.equal(pick(t), null, t);
   // With a browser page's fields on offer, the chooser decides where typed words go.
   const page = new Map([...cat, ['page:field:2', { kind: 'field', name: 'Type into "Search"' }]]);
