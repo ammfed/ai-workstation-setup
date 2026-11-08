@@ -141,10 +141,11 @@ test('the shipped check list and playbook pass the checker, and every check cite
   }
 });
 
-test('the shipped card template and ledger board pass the checker with --phone', () => {
+test('the shipped card templates and ledger board pass the checker with --phone', () => {
   const cards = path.join(repoRoot, 'templates', 'preferences', 'decision-cards.html');
   const board = path.join(repoRoot, 'templates', 'ledger', 'bin', 'board.html');
-  for (const file of [cards, board]) {
+  const commentCards = path.join(repoRoot, 'templates', 'preferences', 'comment-cards.html');
+  for (const file of [cards, board, commentCards]) {
     const r = run('--phone', file);
     assert.equal(r.status, 0, r.stdout);
     assert.doesNotMatch(r.stdout, /\b(L3|L10) fail/, path.relative(repoRoot, file));

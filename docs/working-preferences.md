@@ -17,7 +17,7 @@ fewer rules well as the count grows. So the rules are split by how often a sessi
   work comes up:
   - `writing-for-others`: anything other people will read, other languages, questionnaires.
   - `status-and-away`: status replies, the daily check, live state, queue order, away mode.
-  - `review-pages`: when to use a page, the card template, layout, checks, sending, answers.
+  - `review-pages`: when to use a page, the card template, layout, checks, sending, answers, pages for invited colleagues.
   - `running-workers`: worker briefs, landing pull requests, building something new, public
     repositories, deadlines.
   - `models-and-research`: model and effort choice, helpers, quota, research and sources.
@@ -297,6 +297,12 @@ section at the end of each file (never in a skill), so edit them in your private
   rules tell agents to paste it into every prototype, slide or doc page they open in Lavish. You
   pick parts of the page, they stay faint, and Send to agent asks the agent to remove them.
   [Review pages](review-pages.md#hiding-parts-of-a-page) says how to use it.
+- **Comment cards**: next to the card template the module writes
+  `~/.config/ai-workstation-setup/comment-cards.html`, for a page meant for invited colleagues.
+  It keeps the card look with every card on one page and a line on each card that asks for a
+  comment, and it needs no Lavish runtime. The agent shares it as a private Claude artifact with
+  named Commenters only after you confirm your organisation allows Anthropic hosting.
+  [Review pages](review-pages.md#pages-for-invited-colleagues) gives the rules.
 - **No surprise tabs**: agent-clis sets `LAVISH_AXI_NO_OPEN=1` (`LAVISH_NO_OPEN`), so review
   pages never open browser tabs on their own. The agent opens a checked page once, on
   purpose, when it hands it over, and shares the link in chat.

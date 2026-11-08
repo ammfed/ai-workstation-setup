@@ -100,3 +100,35 @@ body (Lavish serves only the page's own folder), then call `HideKit.attach(docum
 `HideKit.attach(root, { mode: 'vanish' })` takes hidden parts out of the page instead of
 leaving them faint. The tray cannot add a button to Lavish's own top bar, and an exported or
 shared copy of the page does not keep what was hidden.
+
+## Pages for invited colleagues
+
+Lavish pages run on your own machine, so only you can answer them. When a page is meant for a
+few colleagues, the agent uses a second template instead: `comment-cards.html`, which the
+`preferences` module writes next to `decision-cards.html`. Lavish stays the default for your
+own review pages.
+
+The comment-card page keeps the card look, but it is built for comments, not answers:
+
+- every card is on one page, so a colleague can read and comment in any order;
+- there are no answer buttons and no Lavish send controls, and each card ends with a line that
+  asks for a comment on that card (the card's `ask` field, or a default);
+- each card renders as `<section id="card-<id>">`, so a comment thread stays on its card when
+  the page is published again; keep card ids stable between versions;
+- it needs no Lavish runtime and loads nothing but Google Fonts, so it renders on its own.
+
+The card fields are the ones above, plus `ask`. `WAITING` and the hide tray are left out,
+because they are for you, not for colleagues.
+
+The agent shares such a page as a private
+[Claude artifact](https://code.claude.com/docs/en/artifacts), under these rules:
+
+1. **Nothing is published or shared until you confirm** that your organisation allows pages to
+   be hosted by Anthropic. After that, each share still needs your word for that page and those
+   people.
+2. **Invited people only.** The agent publishes the page, shares it with "Only people
+   invited", and adds each colleague you named as a Commenter. It never uses "Anyone with the
+   link". Invited people sign in to Claude with the invited email.
+3. **Comments come back.** The agent reads and answers the threads with the ArtifactComments
+   tool, folds each answer into the record the page serves, the same way as one of your answers,
+   and tells you what came in.

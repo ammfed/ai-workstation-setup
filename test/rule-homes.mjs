@@ -85,6 +85,12 @@ export const RULE_HOMES = [
     'Never reopen a page the user ended',
     'does not mean answers were lost',
   ]),
+  row('A page meant for colleagues starts from the comment-card template', PAGES, [
+    'A page meant for colleagues starts from the comment-card template',
+    'Publish nothing and share nothing until the user has confirmed',
+    'Publish the page as a private Claude artifact.',
+    'Read and answer the colleagues\' comments with the ArtifactComments tool.',
+  ]),
   row('When work finishes, ask whether to close', 'core'),
   row('For ordinary judgment calls', 'core'),
   row('Always ask first for a decision only the user can make', 'core'),

@@ -339,7 +339,7 @@ test('each skill file has a name, a plain description that names its triggers, a
 
 test('every rule lives in exactly one home, as test/rule-homes.mjs lists, so the split loses none', async () => {
   const yes = Object.fromEntries(preferences.questions.filter((q) => q.type === 'confirm').map((q) => [q.key, 'yes']));
-  const opts = { cardsPath: CARDS, hideKitPath: path.join(os.tmpdir(), 'hide-kit.js'), decisionsPath: path.join(os.tmpdir(), 'decisions.md'), vault: { path: path.join(os.tmpdir(), 'vault'), scripts: true, search: true } };
+  const opts = { cardsPath: CARDS, hideKitPath: path.join(os.tmpdir(), 'hide-kit.js'), commentCardsPath: path.join(os.tmpdir(), 'comment-cards.html'), decisionsPath: path.join(os.tmpdir(), 'decisions.md'), vault: { path: path.join(os.tmpdir(), 'vault'), scripts: true, search: true } };
   const bulletsOf = (text) => text.split('\n').filter((l) => l.startsWith('- ')).map((l) => l.slice(2));
   const homesFor = async (given) => {
     const homes = await renderHomes({ ...yes, ...ALL_ON, ...given }, opts);
@@ -952,6 +952,7 @@ test('a dry run plans the card template, the hide tray script and the five prefe
     const dir = path.join(home, '.config', 'ai-workstation-setup');
     assert.ok(r.stdout.includes(`would write ${path.join(dir, 'decision-cards.html')}`), r.stdout);
     assert.ok(r.stdout.includes(`would write ${path.join(dir, 'hide-kit.js')}`), r.stdout);
+    assert.ok(r.stdout.includes(`would write ${path.join(dir, 'comment-cards.html')}`), r.stdout);
     for (const name of Object.keys(PREFERENCE_SKILLS)) {
       assert.ok(r.stdout.includes(`would write ${path.join(home, '.claude', 'skills', name, 'SKILL.md')}`), `${name}: ${r.stdout}`);
     }
@@ -970,9 +971,67 @@ test('a real run writes the hide tray script next to the card template', { skip:
     const dir = path.join(home, '.config', 'ai-workstation-setup');
     assert.equal(fs.readFileSync(path.join(dir, 'hide-kit.js'), 'utf8'), fs.readFileSync(KIT, 'utf8'));
     assert.match(fs.readFileSync(path.join(dir, 'decision-cards.html'), 'utf8'), /HIDE-KIT START/);
+    assert.equal(fs.readFileSync(path.join(dir, 'comment-cards.html'), 'utf8'), fs.readFileSync(COMMENT_CARDS, 'utf8'));
+    assert.match(fs.readFileSync(path.join(home, '.claude', 'skills', 'review-pages', 'SKILL.md'), 'utf8'), new RegExp(`comment-card template at \`${path.join(dir, 'comment-cards.html').replace(/[.\\]/g, '\\$&')}\``));
     assert.match(fs.readFileSync(path.join(home, '.claude', 'skills', 'review-pages', 'SKILL.md'), 'utf8'), new RegExp(`Paste \`${path.join(dir, 'hide-kit.js').replace(/[.\\]/g, '\\$&')}\``));
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
     fs.rmSync(home, { recursive: true, force: true });
   }
+});
+
+// The comment-card template (templates/preferences/comment-cards.html): a page for invited
+// colleagues, published as a private Claude artifact, so it must work with no Lavish runtime.
+const COMMENT_CARDS = path.join(repoRoot, 'templates/preferences/comment-cards.html');
+
+test('the comment-card template has no Lavish send controls and loads nothing but Google Fonts', () => {
+  const html = fs.readFileSync(COMMENT_CARDS, 'utf8');
+  const code = html.replace(/<!--[\s\S]*?-->/g, '');
+  assert.doesNotMatch(code, /window\.lavish|queuePrompt|sendQueuedPrompts|HideKit|lavish-axi/, 'no Lavish runtime or send buttons');
+  assert.doesNotMatch(code, /<input[^>]*type="radio"|id="send"|id="next"/, 'no answer controls: colleagues answer by comment');
+  for (const m of code.matchAll(/(?:src|href)="(https?:[^"]+)"/g)) assert.match(m[1], /^https:\/\/fonts\.(googleapis|gstatic)\.com(\/|$)/, m[1]);
+  assert.doesNotMatch(code, /<script[^>]+src=/, 'every script is inline');
+  assert.doesNotMatch(code, /prefers-color-scheme\s*:\s*dark/, 'light by default');
+  for (const m of code.matchAll(/localStorage\.(?:getItem|setItem)/g)) {
+    assert.match(code.slice(Math.max(0, m.index - 80), m.index), /try\s*\{[^}]*$/, 'storage access is wrapped in try/catch');
+  }
+  assert.match(code, /@media \(max-width:719px\)/);
+});
+
+test('every comment card renders as a section with a stable id and a line that asks for a comment', () => {
+  const html = fs.readFileSync(COMMENT_CARDS, 'utf8');
+  const pageScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).find((x) => x.includes('function cardHtml'));
+  const elements = new Map();
+  const element = () => ({ innerHTML: '', textContent: '', hidden: false, dataset: {}, addEventListener() {}, setAttribute() {}, querySelectorAll: () => [] });
+  const document = { documentElement: { dataset: {} }, getElementById: (id) => elements.get(id) || elements.set(id, element()).get(id) };
+  const page = vm.createContext({ document, location: { pathname: '/c.html' }, localStorage: { getItem: () => null, setItem() {} } });
+  vm.runInContext(pageScript, page);
+  const render = (cards) => {
+    vm.runInContext('CARDS.length = 0; CARDS.push(...cards); render();', Object.assign(page, { cards }));
+    return document.getElementById('cards').innerHTML;
+  };
+  const out = render([
+    { id: 'layout', title: 'Layout', question: 'Which?', options: [['a', 'A'], ['b', 'B']], rec: 'a', previews: { a: '<svg></svg>' } },
+    { id: 'Plan & scope', title: 'Plan', body: '<p>Plan</p>', ask: 'Tell us what is missing.' },
+  ]);
+  const ids = [...out.matchAll(/<section class="item" id="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(ids, ['card-layout', 'card-plan-scope'], 'one section per card, id from the card id');
+  assert.equal(render([{ id: 'layout', title: 'Layout', question: 'Which?', options: [['a', 'A']] }]).match(/id="card-layout"/g).length, 1, 'the same id on every render');
+  assert.match(out, /<p class="ask" id="card-layout-ask">Comment on this card with your pick, or with what would change it\.<\/p>/);
+  assert.match(out, /<p class="ask" id="card-plan-scope-ask">Tell us what is missing\.<\/p>/);
+  assert.match(out, /<li class="is-rec"><span>A<\/span><span class="rec">Recommended<\/span><\/li>/);
+});
+
+test('the review-page rules send pages for colleagues through the comment-card template and private invited-only artifacts', () => {
+  const text = renderPreferenceSkills((key) => ({ PREFS_DECISIONS: 'both' })[key], { cardsPath: CARDS, commentCardsPath: '/x/comment-cards.html' })['review-pages'];
+  const section = sectionOf(text, 'Pages for invited colleagues');
+  assert.match(section, /Lavish stays the default for the user's own review pages/);
+  assert.match(section, /comment-card template at `\/x\/comment-cards\.html`/);
+  assert.match(section, /Publish nothing and share nothing until the user has confirmed that their organisation allows pages to be hosted by Anthropic/);
+  assert.match(section, /each share still needs the user's word/);
+  assert.match(section, /"Only people invited"[^\n]*as a Commenter\. Never use "Anyone with the link"/);
+  assert.match(section, /ArtifactComments tool\. Fold each answer back into the record/);
+  const get = (key) => ({ PREFS_DECISIONS: 'tool' })[key];
+  const none = [renderPreferences(get, { cardsPath: null, commentCardsPath: null }), ...Object.values(renderPreferenceSkills(get, { cardsPath: null, commentCardsPath: null }))].join('\n');
+  assert.doesNotMatch(none, /comment-card|ArtifactComments/);
 });
