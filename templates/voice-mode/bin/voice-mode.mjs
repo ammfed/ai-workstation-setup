@@ -36,8 +36,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CONFIG_DIR, loadConfig, merge, readKey } from './config.mjs';
 import { Records, TOOLS, runTool } from './records.mjs';
-import { Chooser, TEXT_KINDS, buildCatalog, describe, documentFolders, perform, quickPick } from './desk.mjs';
-import { prepare } from './control.mjs';
+import { Chooser, TEXT_KINDS, activeApp, buildCatalog, describe, documentFolders, isKde, perform, quickPick, screenHelper } from './desk.mjs';
+import { prepare, samePlan } from './control.mjs';
 import { Browser, asksAbout, isYes, pageCatalog, performPage } from './browser.mjs';
 import { Mic, Speaker, audioTools, has, play, resample, rms, startEchoCancel, tone, wavToPcm } from './audio.mjs';
 import { PROVIDERS, createProvider, synthesize } from './providers.mjs';
@@ -133,8 +133,8 @@ const RULES = `How you work:
 - For anything else about notes, files, documents, memories, records, people, projects, plans, decisions or work, look it up yourself first, in the same reply: search_records with a few keywords (and the source, when the user names one), list_records for what is newest in a source, read_record to read one in full. Then answer from what they return, the newest record first when they disagree. Never make up a status.
 - Only when those do not answer (after you looked), or the user asks for real work (changing, renaming, moving or deleting files, code, tasks or messages, running or checking anything now, research, anything that takes effort), or for something outside your records (mail, messages, other people's replies), say one short line such as "Let me check; I'll tell you here as soon as it's back" and call hand_off in that same reply, with the request in the user's words. Saying you will check without calling a tool leaves the user waiting for nothing. It goes to your own working session, which can do it; never say the work is done until an answer says so. Every new request needs its own hand_off, even one asked before. Never hand off what the desktop helper below does (opening an app, a website or a web address, a web search, typing, pressing keys and shortcuts, the mouse, windows and tabs, closing an app, moving or copying one named file): those are done here, at once.
 - When an answer to a hand-off arrives (a line starting "Answer arrived"), tell the user at once, briefly, as your own answer. You are one assistant: never say that someone else, another session or another assistant answered.
-- A separate desktop helper acts on the computer while the user is still talking: it opens apps, websites, folders and records, switches to an open app, closes an open app the way its close button does (so the app still asks about unsaved work), minimizes, maximizes or moves the window in front, shows the desktop or the overview, turns the volume up or down or mutes it, plays, pauses or skips media, changes screen brightness, takes a screenshot, locks the screen, writes a note, searches the web, and types dictated text. It is also the user's hands, for someone who cannot touch the keyboard or the mouse: it presses any key or keyboard shortcut they name (Enter, Escape, Tab, the arrows, "control shift t"), copies, cuts, pastes, selects all, undoes and redoes, clicks, double-clicks, right-clicks and scrolls where the mouse pointer is and moves the pointer, switches to the next window and closes or restores the window in front, opens, closes, switches to, numbers and reopens tabs, reloads and goes back, and moves, copies or sends to the trash a file they name between their home, Downloads, Documents and Desktop folders. What it did may already be in the conversation as a line starting "Desktop helper:"; then confirm it in a few words. Otherwise, when the user asked for one of those, call desktop_action with the request in the user's words, which also does it when the helper missed it. When they asked in a roundabout way, put it as one plain command instead: "keep only google.com" or "press backspace until only google.com is left" becomes "replace the text with google.com"; "enter google.com and search" becomes "type google.com into the browser and press enter"; "get rid of the text" becomes "clear the field"; "go up five times" becomes "press up 5 times". The helper cannot see the screen, so never promise to watch for something; one command at a time. A pop-up, banner, dialog or menu inside an app is closed with "close the pop-up" (the Escape key), never with "close the window in front", which closes the whole app window. In the file manager, "go to home" (or Downloads, Documents...) opens that folder, "go up a folder" goes to the parent, and "go back" goes to the folder before. Say that something was done only when a "Desktop helper:" line or the desktop_action result says so; when it says nothing was done, say so plainly. If it still did nothing, say in a few words that you did not catch what to do and ask the user to say it again.
-- The helper itself never deletes anything for good, sends messages or email, buys anything, changes settings, runs commands, or closes all windows at once. It moves a file or sends it to the trash, or presses a shortcut that sends, only after a yes: when a line says it is not done yet, ask the user one short question with the word it gives, and it is done only if they then say yes. Anything bigger is real work, so hand it off.
+- A separate desktop helper acts on the computer while the user is still talking: it opens apps, websites, folders and records, switches to an open app, closes an open app the way its close button does (so the app still asks about unsaved work), minimizes, maximizes or moves the window in front, shows the desktop or the overview, turns the volume up or down or mutes it, plays, pauses or skips media, changes screen brightness, takes a screenshot, locks the screen, writes a note, searches the web, and types dictated text. It is also the user's hands, for someone who cannot touch the keyboard or the mouse: it presses any key or keyboard shortcut they name (Enter, Escape, Tab, the arrows, "control shift t"), copies, cuts, pastes, selects all, undoes and redoes, clicks, double-clicks, right-clicks and scrolls where the mouse pointer is and moves the pointer, switches to the next window and closes or restores the window in front, opens, closes, switches to, numbers and reopens tabs, reloads and goes back, and moves, copies or sends to the trash a file they name between their home, Downloads, Documents and Desktop folders. What it did may already be in the conversation as a line starting "Desktop helper:"; then confirm it in a few words. Otherwise, when the user asked for one of those, call desktop_action with the request in the user's words, which also does it when the helper missed it. When they asked in a roundabout way, put it as one plain command instead: "keep only google.com" or "press backspace until only google.com is left" becomes "replace the text with google.com"; "enter google.com and search" becomes "type google.com into the browser and press enter"; "get rid of the text" becomes "clear the field"; "go up five times" becomes "press up 5 times". It also presses a button or link by its name in the window in front of any app ("click Accept", "press the OK button"; "click the second Reply" when several have that name), and reads the window in front when asked what it says ("what does this say", "read the screen"): when a line says what the window says, tell the user in a sentence or two, or sum up its main text, never all of it. It does several steps said in one sentence and joined by "and" or "then" ("open the file manager and go to home") in order, one after another, and stops at the first step that fails or waits for a yes: say which step stopped and that the rest was not done. It cannot watch the screen, so never promise to watch for something. A pop-up, banner, dialog or menu inside an app is closed with "close the pop-up" (the Escape key), never with "close the window in front", which closes the whole app window. In the file manager, "go to home" (or Downloads, Documents...) opens that folder, "go up a folder" goes to the parent, and "go back" goes to the folder before. Say that something was done only when a "Desktop helper:" line or the desktop_action result says so; when it says nothing was done, say so plainly. If it still did nothing, say in a few words that you did not catch what to do and ask the user to say it again.
+- The helper itself never deletes anything for good, sends messages or email, buys anything, changes settings, runs commands, or closes all windows at once. It moves a file or sends it to the trash, presses a shortcut that sends, or presses a named button that sends, deletes, buys, confirms or signs out, only after a yes: when a line says it is not done yet, ask the user one short question with the word it gives, and it is done only if they then say yes. Anything bigger is real work, so hand it off.
 - You are heard, not read: short spoken sentences, no lists, no markdown, no links read aloud, and never a status board, progress bars or percentages from your memory: say in one sentence what changed. Keep an answer under about twenty seconds unless asked for more.
 - Talk about the work the way a colleague would, by its project and what it is about. Never read task ids, slugs, codes, file names or links aloud; say a name only when two items would otherwise be confused, and then naturally ("the one called banner fix").`;
 
@@ -200,7 +200,7 @@ const NOTES_TOOL = {
 
 const DESKTOP_TOOL = {
   name: 'desktop_action',
-  description: 'Call when the user asked the computer or the browser page to do something (open an app, a website or a web address, switch, close, volume, media, a note, a web search, typing, press a key or shortcut, copy, paste, undo, click, scroll, move the pointer, next window, tabs, move or copy a file, read the page...): returns what the desktop and browser helpers did this turn, and does a plain command the helpers missed.',
+  description: 'Call when the user asked the computer or the browser page to do something (open an app, a website or a web address, switch, close, volume, media, a note, a web search, typing, press a key or shortcut, copy, paste, undo, click, scroll, move the pointer, next window, tabs, move or copy a file, read the page, click a named button in any window, read what the window in front says, several steps in one sentence...): returns what the desktop and browser helpers did this turn, and does a plain command the helpers missed.',
   parameters: { type: 'object', properties: { request: { type: 'string', description: "the request in the user's words, such as \"open google.com\" or \"search the web for food\"" } } },
 };
 
@@ -277,7 +277,7 @@ export function instructionsFor(config, records, briefing = '') {
  * same session runs from a clip (bench, tests) as from the laptop's audio devices.
  */
 export class Session {
-  constructor(config, { provider, records, catalog, chooser, speaker, log, performImpl = perform, script, briefing = '', browser = null } = {}) {
+  constructor(config, { provider, records, catalog, chooser, speaker, log, performImpl = perform, script, briefing = '', browser = null, screen, frontApp } = {}) {
     this.config = config;
     this.log = log || (() => {});
     this.records = records || new Records(config);
@@ -293,6 +293,9 @@ export class Session {
     if (chooser) chooser.execute = (key, info) => this.act(key, info);
     // The assistant's own browser window (browser.mjs); its current page joins the catalog each turn.
     this.browser = browser;
+    // Named buttons and the window in front (screen.mjs), made on first use; which app is in front, between the steps of a sentence.
+    this._screen = screen;
+    this.frontApp = frontApp !== undefined ? frontApp : isKde() ? () => activeApp() : null;
     this.confirm = null;
     this.handoff = (config.queue.command || []).length > 0;
     this.notes = !!config.notes?.enabled;
@@ -314,6 +317,10 @@ export class Session {
     this.lastLoud = 0;
     this.floor = 300;
     this.wire();
+  }
+
+  get screen() {
+    return (this._screen ||= screenHelper({ log: (r) => this.log(r) }));
   }
 
   wire() {
@@ -454,9 +461,17 @@ export class Session {
     this.speaker?.write(pcm);
   }
 
+  /**
+   * Carry out one pick, or each step of a sentence in turn (info.steps). Returns what became
+   * of it: 'done', 'held' (waits for a spoken yes), 'repeat' or 'failed'.
+   */
   async act(key, info) {
+    if (info.steps) return this.actChain(info.steps, info);
     const item = this.chooser.catalog.get(key) || this.catalog.get(key);
-    if (!item) return this.log({ event: 'action-failed', target: key, error: 'no longer offered' });
+    if (!item) {
+      this.log({ event: 'action-failed', target: key, error: 'no longer offered' });
+      return 'failed';
+    }
     if (item.kind === 'page' || item.kind === 'field') return this.actPage(key, item, info);
     const started = performance.now();
     const turn = this.turn;
@@ -465,12 +480,12 @@ export class Session {
     // shortcut that sends waits for a spoken yes.
     let prep;
     try {
-      prep = prepare(item, slot, { exclude: this.config.exclude });
+      prep = await prepare(item, slot, { exclude: this.config.exclude, screen: this.screen });
     } catch (err) {
       turn?.actions.push({ key, error: err.message });
       this.provider.note?.(`Desktop helper: nothing was done: ${err.message}. Tell the user.`);
-      this.log({ event: 'action-failed', target: key, error: this.config.logTranscripts ? err.message : 'not planned' });
-      return;
+      this.log({ event: 'action-failed', target: key, error: this.config.logTranscripts ? err.message : item.kind === 'screen' ? err.message.replace(/"[^"]*"/g, '"..."') : 'not planned' });
+      return 'failed';
     }
     const { plan } = prep;
     const done = describe(item, slot, { plan });
@@ -479,33 +494,103 @@ export class Session {
     const last = this.lastAction;
     if (['app', 'site', 'folder', 'file', 'record', 'focus', 'close', 'files'].includes(item.kind) && last && last.key === key && last.slot === slot && started - last.at < 8000) {
       turn?.actions.push({ key, done, ms: turn ? Math.round(started - turn.t0) : null, repeat: true });
-      return;
+      return 'repeat';
     }
     if (prep.hold) {
+      const after = info.after?.length ? ` The steps after it (${info.after.map((w) => `"${w}"`).join(', ')}) wait for that yes.` : '';
       this.confirm = { desk: true, key, item, slot, plan, label: prep.word, what: prep.hold, at: Date.now(), turn };
-      this.provider.note?.(`Desktop helper: ready to ${prep.hold}, but not done yet. Ask the user in one short question whether to ${prep.hold}, using the word "${prep.word}" and saying what it is (here a file's name is needed); it is done only if they then say yes.`);
+      this.provider.note?.(`Desktop helper: ready to ${prep.hold}, but not done yet. Ask the user in one short question whether to ${prep.hold}, using the word "${prep.word}" and saying what it is (here a file's or button's name is needed); it is done only if they then say yes.${after}`);
       turn?.actions.push({ key, done: `not done yet: ask the user whether to ${prep.hold}`, ms: turn ? Math.round(started - turn.t0) : null, at: performance.now() });
       this.log({ event: 'action-held', target: key, why: `needs a yes to ${this.config.logTranscripts ? prep.hold : prep.word}`, p: info.p, ms_from_speech_start: turn ? Math.round(started - turn.t0) : null });
-      return;
+      return 'held';
     }
     // Only what was really done counts as the last action: a held move asked again is asked again.
     this.lastAction = { key, slot, at: started };
     try {
-      await this.performImpl(item, { roots: this.roots, exclude: this.config.exclude, has, slot, plan, browser: this.browser, ...(this.config.actions.dryRun ? { ...this.dryRun(slot), browser: null } : {}) });
-      this.provider.note?.(`Desktop helper: ${done} for the user.`);
-      const rec = { event: 'action', target: key, done, words: info.text.split(/\s+/).length, final: info.final, p: info.p };
+      const r = await this.performImpl(item, { roots: this.roots, exclude: this.config.exclude, has, slot, plan, browser: this.browser, screen: this.screen, ...(this.config.actions.dryRun ? { ...this.dryRun(slot), browser: null } : {}) });
+      // What the window in front says goes only to the voice, never into a log.
+      const says = item.kind === 'screen' && item.op === 'read' && r?.says ? redact(r.says) : '';
+      this.provider.note?.(
+        says
+          ? `Desktop helper: the window in front says (tell the user in a sentence or two what it says, or sum up its main text; never read it all out): ${says}`
+          : `Desktop helper: ${done} for the user.`,
+      );
+      const rec = { event: 'action', target: key, done, words: info.text.split(/\s+/).length, final: info.final, p: info.p, ...(says ? { chars: says.length, via: r.via } : {}), ...(r?.how ? { via: r.how } : {}) };
       if (!this.config.logTranscripts) rec.done = describe(item, slot, { words: false, plan });
       rec.ms_from_speech_start = turn ? Math.round(performance.now() - turn.t0) : null;
       rec.launch_ms = Math.round(performance.now() - started);
-      turn?.actions.push({ key, done, ms: rec.ms_from_speech_start, at: performance.now() });
+      turn?.actions.push({ key, done, ms: rec.ms_from_speech_start, at: performance.now(), ...(says ? { says } : {}) });
       this.log(rec);
       this.onAction?.(done);
+      return 'done';
     } catch (err) {
       turn?.actions.push({ key, error: err.message });
       // Said aloud, so a failure (an app that would not start, or is not open to close) is not silent.
       this.provider.note?.(`Desktop helper: it did not work (${item.name.replace(/ \(.*\)$/, '')}): ${err.message}. Tell the user.`);
-      this.log({ event: 'action-failed', target: key, error: err.message });
+      this.log({ event: 'action-failed', target: key, error: item.kind === 'screen' && !this.config.logTranscripts ? err.message.replace(/"[^"]*"/g, '"..."') : err.message });
+      return 'failed';
     }
+  }
+
+  /**
+   * The steps of one sentence, in order, from step `from`. Each waits for the one before to
+   * be done (and, after opening or switching to an app, for its window to come to the front);
+   * the first that fails stops the rest, and one that waits for a yes holds the rest until then.
+   */
+  async actChain(steps, info, from = 0) {
+    const n = steps.length;
+    if (from === 0) this.log({ event: 'chain', steps: n });
+    for (let i = from; i < n; i++) {
+      const s = steps[i];
+      const item = this.chooser.catalog.get(s.key) || this.catalog.get(s.key);
+      const before = item && i < n - 1 ? await this.front() : '';
+      const r = await this.act(s.key, { ...info, steps: undefined, slot: s.slot || '', after: steps.slice(i + 1).map((x) => x.said) });
+      if (r === 'held') {
+        if (this.confirm) this.confirm.chain = { steps, next: i + 1, info };
+        return r;
+      }
+      let why = r === 'done' || r === 'repeat' ? '' : 'it did not work';
+      if (!why && i < n - 1) why = await this.settle(item, before);
+      if (why) {
+        const rest = steps.slice(i + 1).map((x) => `"${x.said}"`);
+        this.provider.note?.(`Desktop helper: stopped at step ${i + 1} of ${n} ("${s.said}"): ${why}. ${rest.length ? `The rest (${rest.join(', ')}) was not done.` : ''} Tell the user which step stopped.`);
+        this.log({ event: 'chain-stopped', step: i + 1, of: n, why: this.config.logTranscripts ? why : why.replace(/"[^"]*"/g, '"..."') });
+        return 'failed';
+      }
+    }
+    return 'done';
+  }
+
+  /** The window class in front, or '' when it cannot be known (no KWin, or a dry run). */
+  async front() {
+    if (!this.frontApp || this.config.actions.dryRun) return '';
+    return this.frontApp().catch(() => '');
+  }
+
+  /**
+   * After a step that opens or switches to a window, wait for that window to come to the
+   * front before the next step acts on "the window in front". Returns '' when ready, or why not.
+   */
+  async settle(item, before) {
+    const kind = item?.kind;
+    const opens = ['app', 'focus'].includes(kind);
+    const moves = ['close', 'window', 'site', 'url', 'search', 'folder', 'file', 'record', 'system'].includes(kind) || (kind === 'place' && !/dolphin/i.test(before));
+    if (!this.frontApp || this.config.actions.dryRun || !(opens || moves)) {
+      await new Promise((r) => setTimeout(r, this.config.actions.dryRun ? 0 : 200));
+      return '';
+    }
+    const stem = String(item.desktop || '').replace(/\.desktop$/, '').toLowerCase();
+    const isIt = (cls) => !!stem && !!cls && (cls.toLowerCase() === stem || stem.endsWith(`.${cls.toLowerCase()}`) || cls.toLowerCase().endsWith(stem.split('.').pop()));
+    const until = performance.now() + (opens ? 8000 : 3000);
+    while (performance.now() < until) {
+      const now = await this.front();
+      if (opens ? isIt(now) || (now && now !== before && !stem) : now !== before) break;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    await new Promise((r) => setTimeout(r, 300));
+    if (!opens) return '';
+    const now = await this.front();
+    return isIt(now) || (!stem && now !== before) ? '' : `its window did not come to the front`;
   }
 
   /**
@@ -521,12 +606,12 @@ export class Session {
       this.provider.note?.(`Browser helper: "${item.label}" ${item.risky}, so it is not pressed yet. Ask the user whether to press "${item.label}"; it is pressed only if they say yes.`);
       turn?.actions.push({ key, done: `not pressed yet: "${item.label}" ${item.risky}; ask the user whether to press "${item.label}"`, ms: since(), at: performance.now() });
       this.log({ event: 'action-held', target: key, why: item.risky, p: info.p, ms_from_speech_start: since() });
-      return;
+      return 'held';
     }
     if (this.config.actions.dryRun) {
       this.log({ event: 'dry-run', browser: item.op, target: key });
       turn?.actions.push({ key, done: `${describe(item, slot)} (dry run)`, ms: since(), at: performance.now() });
-      return;
+      return 'done';
     }
     const started = performance.now();
     try {
@@ -540,10 +625,12 @@ export class Session {
       turn?.actions.push({ key, done, ms: rec.ms_from_speech_start, at: performance.now(), ...(read ? { page: read } : {}) });
       this.log(rec);
       this.onAction?.(done);
+      return 'done';
     } catch (err) {
       turn?.actions.push({ key, error: err.message });
       this.provider.note?.(`Browser helper: did not ${item.name.replace(/ on the browser page$/, '').toLowerCase()}: ${err.message}.`);
       this.log({ event: 'action-failed', target: key, error: err.message });
+      return 'failed';
     }
   }
 
@@ -558,7 +645,8 @@ export class Session {
     const label = c.label ?? c.item.label;
     // A held desktop action (a move, a trash) or a held browser button.
     const who = c.desk ? 'Desktop helper' : 'Browser helper';
-    const not = c.desk ? `nothing was done (it was to ${c.what})` : `"${label}" was not pressed`;
+    const rest = c.chain ? c.chain.steps.slice(c.chain.next).map((x) => `"${x.said}"`) : [];
+    const not = `${c.desk ? `nothing was done (it was to ${c.what})` : `"${label}" was not pressed`}${rest.length ? `, and the steps after it (${rest.join(', ')}) were not done either` : ''}`;
     if (!c.asked) {
       this.confirm = null;
       this.log({ event: 'confirm', pressed: false, why: 'the voice did not ask about it' });
@@ -606,21 +694,29 @@ export class Session {
   /** A held desktop action, after a plain yes: planned again (the files may have changed), then done. */
   async actConfirmed(c, say) {
     let plan = c.plan;
+    const rest = c.chain ? c.chain.steps.slice(c.chain.next).map((x) => `"${x.said}"`) : [];
+    const restNot = rest.length ? ` The steps after it (${rest.join(', ')}) were not done either.` : '';
     try {
       if (plan) {
-        plan = prepare(c.item, c.slot, { exclude: this.config.exclude }).plan;
-        if (plan.src !== c.plan.src || plan.dst !== c.plan.dst) throw new Error('the files changed since the question');
+        plan = (await prepare(c.item, c.slot, { exclude: this.config.exclude, screen: this.screen })).plan;
+        if (!samePlan(plan, c.plan)) throw new Error(c.item.kind === 'files' ? 'the files changed since the question' : 'the window changed since the question');
       }
-      await this.performImpl(c.item, { roots: this.roots, exclude: this.config.exclude, has, slot: c.slot, plan, ...(this.config.actions.dryRun ? this.dryRun(c.slot) : {}) });
+      await this.performImpl(c.item, { roots: this.roots, exclude: this.config.exclude, has, slot: c.slot, plan, screen: this.screen, ...(this.config.actions.dryRun ? this.dryRun(c.slot) : {}) });
     } catch (err) {
       this.log({ event: 'action-failed', target: c.key, error: this.config.logTranscripts ? err.message : 'failed after a yes' });
-      return say(`nothing was done (it was to ${c.what}): ${err.message}.`);
+      return say(`nothing was done (it was to ${c.what}): ${err.message}.${restNot}`);
     }
     const done = describe(c.item, c.slot, { plan });
     this.log({ event: 'action', target: c.key, done: this.config.logTranscripts ? done : describe(c.item, c.slot, { words: false, plan }), confirmed: true, ms_from_speech_start: this.turn ? Math.round(performance.now() - this.turn.t0) : null });
     this.turn?.actions.push({ key: c.key, done });
-    say(`${done} after the user said yes.`);
+    say(`${done} after the user said yes.${rest.length ? ' The next steps follow.' : ''}`);
     this.onAction?.(done);
+    // The rest of the sentence the yes was holding back.
+    if (c.chain && c.chain.next < c.chain.steps.length) {
+      const why = await this.settle(c.item, '');
+      if (why) return say(`stopped after "${c.chain.steps[c.chain.next - 1].said}": ${why}.${restNot}`);
+      await this.actChain(c.chain.steps, c.chain.info, c.chain.next);
+    }
   }
 
   /** actions.dryRun: log what would run instead of running it (the dictated words only with logTranscripts). */
@@ -631,6 +727,8 @@ export class Session {
       exec: async (argv) => (this.log({ event: 'dry-run', argv: argv.slice(0, 9) }), '(0,)'),
       note: (folder) => path.join(folder, '(dry run).md'),
       fileOps: Object.fromEntries(['move', 'copy', 'trash'].map((op) => [op, async () => this.log({ event: 'dry-run', files: op })])),
+      // Finding a button only looks; pressing it and reading the window are recorded instead.
+      screen: { locate: (said) => this.screen.locate(said), press: async () => this.log({ event: 'dry-run', screen: 'press' }), read: async () => (this.log({ event: 'dry-run', screen: 'read' }), { says: '(dry run: the window was not read)', via: 'dry-run' }) },
     };
   }
 
@@ -751,7 +849,8 @@ export class Session {
     const acts = this.turn?.actions || [];
     if (!acts.length) return { opened: null, note: 'Nothing was done: the request did not clearly match something the helper can do.' };
     const page = acts.find((a) => a.page)?.page;
-    return { opened: acts.map((a) => a.done || `failed (${a.error})`), ...(page ? { page_says: page } : {}) };
+    const says = acts.find((a) => a.says)?.says;
+    return { opened: acts.map((a) => a.done || `failed (${a.error})`), ...(page ? { page_says: page } : {}), ...(says ? { window_says: says } : {}) };
   }
 
   finishTurn() {
@@ -1219,6 +1318,9 @@ function check(config) {
     const kinds = {};
     for (const it of catalog.values()) kinds[it.kind] = (kinds[it.kind] || 0) + 1;
     rows.push(`     ${catalog.size} actions: ${Object.entries(kinds).map(([k, n]) => `${n} ${k}`).join(', ')}`);
+    // Named buttons and reading the window in front (screen.mjs): said here why not, when they cannot work.
+    const screen = catalog.get('screen:click');
+    if (screen) add(!screen.unsupported, screen.unsupported ? `named buttons and reading the screen: ${screen.unsupported}` : `named buttons and reading the screen (AT-SPI${spawnSync('which', ['tesseract'], { stdio: 'ignore' }).status === 0 ? ', tesseract as the fallback' : '; no tesseract, so no OCR fallback'})`);
   }
   if (config.browser.enabled) {
     const up = spawnSync(process.execPath, ['-e', `fetch(${JSON.stringify(`${config.browser.endpoint.replace(/\/+$/, '')}/json/version`)}).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))`], { timeout: 4000 });
@@ -1277,7 +1379,7 @@ async function pick(config, text) {
  * checks, and it is carried out (or, with dryRun, only described). Nothing is done when no
  * action fits. Returns { key, name, done, ms } or { key: null, ... }.
  */
-export async function doRequest(config, text, { log = () => {}, performImpl = perform, records, catalog, chooser, dryRun = false, browser = openBrowser(config, log) } = {}) {
+export async function doRequest(config, text, { log = () => {}, performImpl = perform, records, catalog, chooser, dryRun = false, browser = openBrowser(config, log), screen } = {}) {
   records ||= new Records(config);
   catalog ||= buildCatalog(config, records);
   // The browser's current page joins the catalog; without a browser, or when it cannot be reached, it is left out.
@@ -1314,10 +1416,11 @@ export async function doRequest(config, text, { log = () => {}, performImpl = pe
       }
       return;
     }
-    // Nobody can say yes here: a move, a trash or a shortcut that sends is never done.
+    // Nobody can say yes here: a move, a trash, a shortcut that sends or a risky named button is never done.
+    screen ||= screenHelper({ log });
     let prep;
     try {
-      prep = prepare(item, slot, { exclude: config.exclude });
+      prep = await prepare(item, slot, { exclude: config.exclude, screen });
     } catch (err) {
       result = { key, name: item.name, error: err.message, ms: ms() };
       log({ event: 'action-failed', target: key, error: err.message });
@@ -1334,9 +1437,10 @@ export async function doRequest(config, text, { log = () => {}, performImpl = pe
     const argv = [];
     // A dry run goes through the same checks and only records what would have run.
     const stub = dryRun ? { run: async (a) => argv.push(a), exec: async (a) => (argv.push(a), '(0,)'), note: (folder) => path.join(folder, '(dry run).md'), fileOps: Object.fromEntries(['move', 'copy', 'trash'].map((op) => [op, async (p) => argv.push([op, p.src, p.dst || 'trash'])])) } : {};
+    if (dryRun && item.kind === 'screen') stub.screen = { press: async () => argv.push(['press', plan?.name]), read: async () => ({ says: '(dry run: the window was not read)' }) };
     try {
-      await performImpl(item, { roots, exclude: config.exclude, has, slot, plan, browser: dryRun ? null : browser, ...stub });
-      result = { key, name: item.name, done, ms: ms(), ...(dryRun ? { dry_run: true, would_run: argv[0] || null } : {}) };
+      const r = await performImpl(item, { roots, exclude: config.exclude, has, slot, plan, browser: dryRun ? null : browser, screen, ...stub });
+      result = { key, name: item.name, done, ms: ms(), ...(dryRun ? { dry_run: true, would_run: argv[0] || null } : {}), ...(r?.says ? { window_says: redact(r.says) } : {}), ...(r?.how ? { via: r.how } : {}) };
       log({ event: 'action', target: key, done: logged, p: info.p, ms_from_request: result.ms, ...(dryRun ? { dry_run: true } : {}) });
     } catch (err) {
       result = { key, name: item.name, error: err.message, ms: ms() };
@@ -1345,6 +1449,23 @@ export async function doRequest(config, text, { log = () => {}, performImpl = pe
   };
   // Nobody is mid-sentence here, so a slow first call (a cold connection) may take longer.
   chooser ||= new Chooser(merge(config, { actions: { chooser: { timeoutMs: Math.max(config.actions.chooser.timeoutMs, 10000) } } }), catalog, { execute, log });
+  // A plain command, or several in one sentence, needs no decision model: each step in turn, stopping at the first that is not done.
+  const q = quickPick(String(text).trim(), items);
+  if (q) {
+    const steps = q.steps || [q];
+    const done = [];
+    for (const [i, st] of steps.entries()) {
+      result = null;
+      await execute(st.key, { text, p: 1, final: true, slot: st.slot || '' });
+      done.push(result);
+      if (!result || result.error) break;
+      if (i < steps.length - 1) await new Promise((r) => setTimeout(r, dryRun ? 0 : 1200));
+    }
+    await browser?.close();
+    if (!q.steps) return done[0];
+    const stopped = done.findIndex((r) => !r || r.error);
+    return { steps: done, ...(stopped >= 0 ? { stopped_at: stopped + 1, not_done: steps.slice(stopped + 1).map((st) => st.said) } : {}), ms: ms() };
+  }
   chooser.execute = execute;
   chooser.setPage(page);
   if (!chooser.ready) return { key: null, error: `the chooser has no key (${config.actions.chooser.keyName}) or there are no actions` };

@@ -1642,7 +1642,8 @@ test('session: a risky button is named and held; only a later plain yes presses 
 test('session: plain browser picks act at once, a secret field is refused aloud, and reading gives the voice the page', async () => {
   const br = stubBrowser();
   const { session, notes } = browserSession(br);
-  await turn(session, 'click compose', { key: 'page:click:1' });
+  // A button on the page named in plain words is pressed with no model call.
+  await turn(session, 'click compose');
   await turn(session, 'type quarterly report in the search', { key: 'page:field:2', slot: 'quarterly report' });
   await turn(session, 'scroll down', { key: 'page:scroll-down' });
   assert.deepEqual(br.done, [['click', 'Compose', false], ['type', 'Search mail', 'quarterly report'], ['scroll', 1]]);
@@ -2172,7 +2173,7 @@ const QUICK_APPS = [
   { id: 'org.kde.dolphin', name: 'Dolphin (File Manager)', desktop: 'org.kde.dolphin.desktop' },
   { id: 'org.kde.kcalc', name: 'KCalc (Scientific Calculator)', desktop: 'org.kde.kcalc.desktop' },
 ];
-const quickCatalog = (c = config()) => buildCatalog(c, null, { apps: QUICK_APPS, platform: 'linux', env: { XDG_CURRENT_DESKTOP: 'KDE' }, has: () => true, components: new Set() });
+const quickCatalog = (c = config()) => buildCatalog(c, null, { apps: QUICK_APPS, platform: 'linux', env: { XDG_CURRENT_DESKTOP: 'KDE' }, has: () => true, components: new Set(), atspi: true });
 
 test('quick: the plain commands the decision model missed are picked at once; doubtful words are left to it', () => {
   const cat = quickCatalog();
@@ -2394,8 +2395,10 @@ test('hands-free: keys, shortcuts, the mouse, windows and tabs are read from the
   // Still the chooser's, or nothing: negations, questions, a lone letter or word, and Delete said on its own.
   for (const t of ["don't press enter", 'how do I copy a file?', 'should I press enter', 'a', 'why', 'the end', 'delete', 'press purple', 'press control a b', 'close Firefox.'])
     assert.notEqual(pick(t)?.key?.split(':')[0], 'keys', t);
-  for (const t of ["don't press enter", 'how do I copy a file?', 'a', 'why', 'the end', 'delete', 'press purple'])
+  for (const t of ["don't press enter", 'how do I copy a file?', 'a', 'why', 'the end', 'delete'])
     assert.equal(pick(t), null, t);
+  // A word that is not a key is a button's name in the window in front (screen.mjs).
+  assert.deepEqual(pick('press purple'), { key: 'screen:click', slot: 'press purple' });
   assert.deepEqual(pick('close Firefox.'), { key: 'close:firefox' });
   // With the browser page on offer, scrolling and going back stay the chooser's (the page's own choices).
   const withPage = new Map([...cat, ['page:scroll-down', { kind: 'page', op: 'scroll' }]]);
@@ -2618,7 +2621,7 @@ test('round 3: folders in the file manager, pop-ups closed with Escape, and "wri
   const cat = quickCatalog();
   const pick = (t) => quickPick(t, cat);
   // Going to a common folder never shows the desktop or waits on the model.
-  for (const [t, key] of [['take me to my home folder', 'place:home'], ['go to home', 'place:home'], ['navigate to downloads', 'place:downloads'], ['open the file manager and go to places home', 'place:home'], ['go to the desktop folder', 'place:desktop'], ['open my documents', 'folder:documents']])
+  for (const [t, key] of [['take me to my home folder', 'place:home'], ['go to home', 'place:home'], ['navigate to downloads', 'place:downloads'], ['go to places home', 'place:home'], ['go to the desktop folder', 'place:desktop'], ['open my documents', 'folder:documents']])
     assert.deepEqual(pick(t), { key }, t);
   const kwin = buildCatalog(config(), null, { apps: QUICK_APPS, ...KDE });
   assert.deepEqual(quickPick('go to desktop', kwin), { key: 'system:show-desktop' });
@@ -2650,6 +2653,302 @@ test('round 3: the voice is told to close pop-ups with Escape, to claim only wha
   assert.match(text, /closed with "close the pop-up" \(the Escape key\), never with "close the window in front"/);
   assert.match(text, /Say that something was done only when a "Desktop helper:" line or the desktop_action result says so/);
   assert.match(text, /never a status board, progress bars or percentages/);
+});
+
+// ------------------------------------------------------------------ round 4: several steps, named buttons, reading the screen
+
+const scr = await import(path.join(bin, 'screen.mjs'));
+
+test('round 4: several steps in one sentence are split only on clear joins, and only when every part is a plain command', () => {
+  const cat = quickCatalog();
+  const pick = (t) => quickPick(t, cat);
+  const steps = (t) => pick(t)?.steps?.map((s) => [s.key, s.slot || '', s.said]);
+  assert.deepEqual(steps('Open the file manager and go to home'), [['app:org-kde-dolphin', '', 'Open the file manager'], ['place:home', '', 'go to home']]);
+  assert.deepEqual(steps('open firefox, then click Accept'), [['app:firefox', '', 'open firefox'], ['screen:click', 'click accept', 'click Accept']]);
+  assert.deepEqual(steps('copy and then paste'), [['edit:copy', '', 'copy'], ['edit:paste', '', 'paste']]);
+  assert.deepEqual(steps('open google.com and click sign in'), [['url:web', 'google.com', 'open google.com'], ['screen:click', 'click sign in', 'click sign in']]);
+  // A step that types takes the rest of the sentence, "and" included.
+  assert.deepEqual(steps('open firefox and type salt and pepper'), [['app:firefox', '', 'open firefox'], ['type:text', 'salt and pepper', 'type salt and pepper']]);
+  // One command already: kept whole.
+  assert.deepEqual(pick('type salt and pepper'), { key: 'type:text', slot: 'salt and pepper' });
+  assert.deepEqual(pick('clear the field and type hello'), { key: 'type:replace', slot: 'hello' });
+  assert.deepEqual(pick('press tab then enter'), { key: 'keys:combo', slot: 'tab then enter' });
+  assert.deepEqual(pick('select all and delete'), { key: 'edit:clear' });
+  assert.deepEqual(pick('click Save and Close'), { key: 'screen:click', slot: 'click save and close' });
+  // Not split: a part that is not a plain command, a negation, a question, more than six steps.
+  for (const t of ['open firefox and tell me the weather', "open firefox and don't close it", 'how do I copy and paste', 'copy and paste and copy and paste and copy and paste and copy'])
+    assert.equal(pick(t)?.steps, undefined, t);
+});
+
+test('round 4: a named button, reading the window, and which names wait for a spoken yes', () => {
+  const { parseClick, isReadScreen, screenRisk } = scr;
+  assert.deepEqual(parseClick('click accept'), { name: 'accept', nth: 0 });
+  assert.deepEqual(parseClick('press the ok button'), { name: 'ok', nth: 0 });
+  assert.deepEqual(parseClick('click on the second reply link'), { name: 'reply', nth: 2 });
+  assert.deepEqual(parseClick('click the last one called next'), { name: 'next', nth: -1 });
+  assert.deepEqual(parseClick('select downloads in the window'), { name: 'downloads', nth: 0 });
+  for (const t of ['click it', 'click here', 'press the button', 'click', 'press backspace till there is only google.com', 'open firefox', 'click the very long name of a button that is not one'])
+    assert.equal(parseClick(t), null, t);
+  for (const t of ['what does this say', 'what does the dialog say', "what's on the screen", 'read the screen', 'read this to me', 'read me the message', 'read it out loud', 'what is the error'])
+    assert.ok(isReadScreen(t), t);
+  for (const t of ['read the page', 'what does the page say', 'read my notes', 'what does he say']) assert.ok(!isReadScreen(t), t);
+  for (const n of ['Delete', 'Remove account', 'Send', 'Submit', 'Pay now', 'Buy', 'Confirm', 'Uninstall', 'Sign out', 'Empty Trash', 'Shut Down']) assert.ok(screenRisk(n), n);
+  for (const n of ['Accept', 'OK', 'Cancel', 'Save', 'Next', 'Close', 'Downloads']) assert.equal(screenRisk(n), '', n);
+  // A link that "confirms" only opens a page; one that deletes still waits.
+  assert.equal(screenRisk('Confirm your email', 'link'), '');
+  assert.ok(screenRisk('Delete my account', 'link'));
+  // Through the words a command is read from (control.mjs), before the decision model.
+  const cat = quickCatalog();
+  assert.deepEqual(quickPick('Can you click Accept?', cat), { key: 'screen:click', slot: 'click accept' });
+  assert.deepEqual(quickPick('What does this say?', cat), { key: 'screen:read' });
+  assert.deepEqual(quickPick('press enter', cat), { key: 'key:enter' });
+  assert.deepEqual(quickPick('click', cat), { key: 'mouse:click' });
+  assert.equal(quickPick("don't click accept", cat), null);
+  // The browser page's own button keeps the browser helper's rules (browser.mjs).
+  const withPage = new Map([...cat, ['page:click:4', { kind: 'page', op: 'click', label: 'Accept', name: 'Click "Accept" on the browser page' }]]);
+  assert.deepEqual(quickPick('click accept', withPage), { key: 'page:click:4' });
+  // Never offered to the decision model as a free pick: a name is read by plain code only.
+  assert.equal(criteria(cat)['screen:click'], undefined);
+  assert.match(criteria(cat)['screen:read'], /Read aloud what the window in front says/);
+});
+
+test('round 4: where AT-SPI is missing, the commands say why and do nothing', async () => {
+  const mac = new Map(controlActions(config(), { platform: 'darwin', env: {}, has: () => true }));
+  await assert.throws(() => ctl.prepare(mac.get('screen:click'), 'click ok', {}), /not supported on this computer yet/);
+  await assert.rejects(ctl.performControl(mac.get('screen:read'), {}), /not supported on this computer yet/);
+  const bare = new Map(controlActions(config(), { platform: 'linux', env: {}, has: () => true, atspi: false }));
+  assert.throws(() => ctl.prepare(bare.get('screen:click'), 'click ok', {}), /python3-gi and gir1\.2-atspi-2\.0/);
+  // Neither is offered to the decision model when it cannot work.
+  assert.equal(criteria(mac)['screen:read'], undefined);
+});
+
+// A stand-in for the desktop: KWin answers, the AT-SPI helper's JSON, a screenshot and tesseract's TSV.
+function fakeDesk({ atspi = {}, tsv = '', front = { pid: 7, caption: 'Test window', cls: 'test', x: 100, y: 50, w: 400, h: 300 } } = {}) {
+  const calls = [];
+  const shots = [];
+  const state = { pointer: { x: 5, y: 5 }, front, a11y: true };
+  const ask = async (expr) => (expr.includes('cursorPos') ? `${state.pointer.x} ${state.pointer.y}` : state.front ? JSON.stringify(state.front) : '');
+  const exec = async (argv) => {
+    if (argv[0] === 'gdbus') {
+      calls.push(['gdbus', argv.at(-1)]);
+      return argv.includes('org.freedesktop.DBus.Properties.Get') ? `(<${state.a11y}>,)` : '()';
+    }
+    if (argv[0] === 'python3') {
+      calls.push(['atspi', argv[4], JSON.parse(argv[5])]);
+      const r = atspi[argv[4]];
+      return JSON.stringify(typeof r === 'function' ? r(JSON.parse(argv[5])) : r ?? { window: null });
+    }
+    calls.push([argv[0]]);
+    if (argv[0] === 'spectacle') {
+      fs.writeFileSync(argv.at(-1), 'png');
+      shots.push(argv.at(-1));
+      return '';
+    }
+    if (argv[0] === 'tesseract') return argv.includes('tsv') ? tsv : 'Backup finished.\n\nTwelve files were copied.\n';
+    throw new Error(`unexpected ${argv[0]}`);
+  };
+  // The desktop speeds the pointer up: it goes half as far again as asked.
+  const run = async (argv) => {
+    calls.push(argv.slice(0, 2));
+    if (argv[1] === 'mousemove') state.pointer = { x: state.pointer.x + Math.round(Number(argv[3]) * 1.5), y: state.pointer.y + Math.round(Number(argv[4]) * 1.5) };
+    if (argv[1] === 'click') calls.push(['clicked at', state.pointer.x, state.pointer.y]);
+  };
+  return { screen: new scr.Screen({ ask, exec, run, tmp }), calls, shots, state };
+}
+const TSV = [
+  'level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext',
+  '1\t1\t0\t0\t0\t0\t0\t0\t540\t405\t-1\t',
+  '5\t1\t1\t1\t1\t1\t40\t60\t60\t20\t96\tTest',
+  '5\t1\t1\t1\t1\t2\t110\t60\t90\t20\t96\twindow.',
+  '5\t1\t2\t1\t1\t1\t100\t200\t90\t20\t95\tDecline',
+  '5\t1\t2\t1\t1\t2\t300\t200\t80\t20\t95\tAccept',
+  '5\t1\t2\t1\t1\t3\t400\t200\t10\t20\t12\t~',
+].join('\n');
+const BTN = (name, x = 10, extra = {}) => ({ name, role: 'push button', box: [x, 80, 84, 34], enabled: true, actions: ['Press', 'SetFocus'], ...extra });
+
+test('round 4: a named button is found through AT-SPI and pressed there, the same one, in the same window', async () => {
+  const { screen, calls } = fakeDesk({ atspi: { find: { window: 'Test window', matches: [BTN('Accept')] }, click: { window: 'Test window', pressed: true, how: 'Press' } } });
+  const plan = await screen.locate({ name: 'accept' });
+  assert.equal(plan.via, 'atspi');
+  assert.equal(plan.name, 'Accept');
+  assert.deepEqual(await screen.press(plan), { how: 'accessibility' });
+  const click = calls.find((c) => c[0] === 'atspi' && c[1] === 'click');
+  assert.deepEqual(click[2], { pid: 7, caption: 'Test window', name: 'accept', expect: { name: 'Accept', role: 'push button', box: [10, 80, 84, 34] } });
+  assert.ok(!calls.some((c) => c[0] === 'spectacle' || c[0] === 'ydotool'), 'no screenshot and no pointer');
+  assert.equal(calls.filter((c) => c[0] === 'gdbus').length, 1, 'the accessibility switch is checked once');
+});
+
+test('round 4: with the accessibility switch off, it is turned on once before the buttons are looked for', async () => {
+  const logs = [];
+  const d = fakeDesk({ atspi: { find: { window: 'T', matches: [BTN('OK')] } } });
+  d.state.a11y = false;
+  d.screen.log = (r) => logs.push(r);
+  await d.screen.locate({ name: 'ok' });
+  await d.screen.locate({ name: 'ok' });
+  assert.deepEqual(d.calls.filter((c) => c[0] === 'gdbus'), [['gdbus', 'IsEnabled'], ['gdbus', '<true>']]);
+  assert.deepEqual(logs, [{ event: 'atspi-enabled' }]);
+});
+
+test('round 4: several buttons with the name ask which one; "the second" picks it; greyed out, none and a changed window say so', async () => {
+  const two = fakeDesk({ atspi: { find: { window: 'Mail', matches: [BTN('Reply', 10), BTN('Reply', 200)] } } });
+  await assert.rejects(two.screen.locate({ name: 'reply' }), /2 places in the window in front \("Mail"\) say "reply" \(button\); say which one, like "click the first reply"/);
+  assert.deepEqual((await two.screen.locate({ name: 'reply', nth: 2 })).box, [200, 80, 84, 34]);
+  assert.deepEqual((await two.screen.locate({ name: 'reply', nth: -1 })).box, [200, 80, 84, 34]);
+  await assert.rejects(two.screen.locate({ name: 'reply', nth: 3 }), /only 2 places/);
+  const grey = fakeDesk({ atspi: { find: { window: 'T', matches: [BTN('Next', 10, { enabled: false })] } } });
+  await assert.rejects(grey.screen.locate({ name: 'next' }), /"Next" is greyed out/);
+  const none = fakeDesk({ atspi: { find: { window: 'T', matches: [] } }, tsv: TSV });
+  await assert.rejects(none.screen.locate({ name: 'purple' }), /there is no button or link called "purple" in the window in front \("T"\)/);
+  const moved = fakeDesk({ atspi: { find: { window: 'Test window', matches: [BTN('OK')] } } });
+  const plan = await moved.screen.locate({ name: 'ok' });
+  moved.state.front = { ...moved.state.front, caption: 'Another window' };
+  await assert.rejects(moved.screen.press(plan), /the window in front changed, so nothing was pressed/);
+  const gone = fakeDesk({ atspi: { find: { window: 'Test window', matches: [BTN('OK')] }, click: { window: 'Test window', changed: true } } });
+  await assert.rejects(gone.screen.press(await gone.screen.locate({ name: 'ok' })), /no longer where it was/);
+});
+
+test('round 4: without AT-SPI, a local screenshot is read by tesseract, deleted at once, and the pointer clicks the words', async () => {
+  const { screen, calls, shots, state } = fakeDesk({ atspi: { find: { window: 'Test window', matches: [] } }, tsv: TSV });
+  const plan = await screen.locate({ name: 'accept' });
+  assert.equal(plan.via, 'ocr');
+  assert.equal(plan.scale, 540 / 400);
+  assert.equal(shots.length, 1);
+  assert.ok(!fs.existsSync(shots[0]) && !fs.existsSync(path.dirname(shots[0])), 'the screenshot and its folder are gone');
+  const r = await screen.press(plan);
+  // The middle of "Accept": 100 + (300 + 40) / 1.35, 50 + (200 + 10) / 1.35.
+  assert.equal(r.how, 'pointer');
+  assert.deepEqual([r.x, r.y], [352, 206]);
+  assert.ok(Math.abs(state.pointer.x - 352) <= 2 && Math.abs(state.pointer.y - 206) <= 2, `pointer at ${JSON.stringify(state.pointer)}`);
+  assert.deepEqual(calls.filter((c) => c[0] === 'ydotool').at(-1), ['ydotool', 'click']);
+  // The pointer pushed away (someone else at the mouse) before the click: nothing is clicked.
+  const pushed = fakeDesk({ atspi: { find: { window: 'Test window', matches: [] } }, tsv: TSV });
+  const p2 = await pushed.screen.locate({ name: 'accept' });
+  const pointer = pushed.screen.pointer.bind(pushed.screen);
+  let reads = 0;
+  pushed.screen.pointer = async () => {
+    const p = await pointer();
+    return ++reads > 3 ? { x: p.x + 40, y: p.y } : p;
+  };
+  await assert.rejects(pushed.screen.press(p2), /the pointer or the window moved, so "accept" was not clicked/);
+  assert.ok(!pushed.calls.some((c) => c[1] === 'click'));
+  // Words tesseract was unsure of are not matched.
+  assert.deepEqual(scr.ocrFind(scr.ocrWords(TSV).words, '~'), []);
+  assert.deepEqual(scr.ocrFind(scr.ocrWords(TSV).words, 'test window').map((h) => h.box), [[40, 60, 160, 20]]);
+});
+
+test('round 4: the window in front is read through AT-SPI, or by OCR when it shows nothing there, and kept short', async () => {
+  const a = fakeDesk({ atspi: { read: { window: 'Updates', text: ['Updates', 'Three updates are ready.', 'Restart to finish.'], buttons: ['Later', 'Restart now'] } } });
+  assert.deepEqual(await a.screen.read(), { says: 'Window "Updates": Three updates are ready. | Restart to finish. Buttons: Later, Restart now.', via: 'atspi', chars: 92 });
+  const o = fakeDesk({ atspi: { read: { window: 'Backup', text: [], buttons: [] } } });
+  const r = await o.screen.read();
+  assert.equal(r.via, 'ocr');
+  assert.equal(r.says, 'Window "Backup": Backup finished. | Twelve files were copied.');
+  assert.ok(!fs.existsSync(o.shots[0]));
+  const long = scr.sayable({ window: 'W', text: ['word '.repeat(600)] });
+  assert.ok(long.length <= 1205 && long.endsWith(' ...'), long.length);
+  const empty = fakeDesk({ atspi: { read: { window: 'X', text: [], buttons: [] } } });
+  empty.screen.canOcr = false;
+  await assert.rejects(empty.screen.read(), /no text could be read in the window in front/);
+});
+
+// A session whose desktop is stand-ins: what was done, in order; an optional step that fails.
+function chainSession({ fail = '', screen } = {}) {
+  const c = config({ actions: { chooser: { timeoutMs: 60, finalTimeoutMs: 120 } } });
+  const notes = [];
+  const logs = [];
+  const done = [];
+  const session = new Session(c, {
+    script: [],
+    catalog: quickCatalog(c),
+    log: (r) => logs.push(r),
+    frontApp: null,
+    screen,
+    performImpl: async (item, o) => {
+      done.push(item.kind === 'screen' ? `screen:${item.op}` : item.name);
+      if (fail && item.name.includes(fail)) throw new Error('it broke');
+      if (item.kind === 'screen') return perform(item, o);
+    },
+  });
+  session.provider.note = (t) => notes.push(t);
+  session.chooser.key = 'test';
+  session.chooser.fetch = neverAnswers();
+  return { session, notes, logs, done };
+}
+const idle = async (session) => {
+  for (let i = 0; i < 300 && session.chooser.acting > 0; i++) await new Promise((r) => setTimeout(r, 10));
+  // A yes is answered outside the chooser, and a step waits a little for the one before.
+  await new Promise((r) => setTimeout(r, 400));
+};
+const stubScreen = (name = 'Delete') => {
+  const pressed = [];
+  return {
+    pressed,
+    locate: async (said) => ({ via: 'atspi', said: said.name, name, role: 'push button', box: [1, 2, 3, 4], window: 'Test window', front: { pid: 1, caption: 'Test window' } }),
+    press: async (p) => (pressed.push(p.name), { how: 'accessibility' }),
+    read: async () => ({ says: 'Window "Test window": The build passed. Buttons: OK.', via: 'atspi', chars: 50 }),
+  };
+};
+
+test('round 4 session: the steps of one sentence run in order, and the first that fails stops the rest', async () => {
+  const ok = chainSession();
+  await turn(ok.session, 'Open Firefox and then press enter.');
+  await idle(ok.session);
+  assert.deepEqual(ok.done, ['Firefox (Web Browser)', 'Press the Enter key in the window in front']);
+  assert.match(ok.notes[0], /Desktop helper: opened Firefox/);
+  assert.match(ok.notes[1], /Desktop helper: pressed Enter for the user/);
+  assert.ok(ok.logs.some((l) => l.event === 'chain' && l.steps === 2));
+  const bad = chainSession({ fail: 'Firefox' });
+  await turn(bad.session, 'open firefox and press enter');
+  await idle(bad.session);
+  assert.deepEqual(bad.done, ['Firefox (Web Browser)'], 'nothing after the step that failed');
+  assert.match(bad.notes.at(-1), /stopped at step 1 of 2 \("open firefox"\): it did not work\. The rest \("press enter"\) was not done\. Tell the user which step stopped/);
+  assert.ok(bad.logs.some((l) => l.event === 'chain-stopped' && l.step === 1 && l.of === 2));
+});
+
+test('round 4 session: a risky button in a sentence waits for its own yes, then the rest follows; a no stops the rest', async () => {
+  const screen = stubScreen('Delete');
+  const yes = chainSession({ screen });
+  await turn(yes.session, 'click delete and press enter', { reply: 'Shall I press Delete?' });
+  await idle(yes.session);
+  assert.deepEqual(yes.done, [], 'nothing pressed before the yes');
+  assert.match(yes.notes.at(-1), /ready to press "Delete" \(it deletes or removes\), but not done yet\. Ask the user .* using the word "press".* The steps after it \("press enter"\) wait for that yes/);
+  await turn(yes.session, 'yes');
+  await idle(yes.session);
+  assert.deepEqual(screen.pressed, ['Delete']);
+  assert.deepEqual(yes.done, ['screen:click', 'Press the Enter key in the window in front']);
+  assert.match(yes.notes.join('\n'), /pressed "Delete" in "Test window" after the user said yes\. The next steps follow/);
+  const no = chainSession({ screen: stubScreen('Delete') });
+  await turn(no.session, 'click delete and press enter', { reply: 'Shall I press Delete?' });
+  await idle(no.session);
+  await turn(no.session, 'no');
+  await idle(no.session);
+  assert.deepEqual(no.done, []);
+  assert.match(no.notes.at(-1), /nothing was done \(it was to press "Delete" \(it deletes or removes\)\), and the steps after it \("press enter"\) were not done either: the user did not say yes/);
+  // A button that is not risky is pressed on the command alone.
+  const plain = chainSession({ screen: stubScreen('Accept') });
+  await turn(plain.session, 'click accept');
+  await idle(plain.session);
+  assert.deepEqual(plain.done, ['screen:click']);
+  assert.match(plain.notes.at(-1), /Desktop helper: pressed "Accept" in "Test window" for the user/);
+});
+
+test('round 4 session: what the window says goes to the voice only, never into a log', async () => {
+  const s = chainSession({ screen: stubScreen() });
+  await turn(s.session, 'what does this say');
+  await idle(s.session);
+  assert.match(s.notes.at(-1), /Desktop helper: the window in front says \(tell the user in a sentence or two .*\): Window "Test window": The build passed/);
+  assert.ok(!JSON.stringify(s.logs).includes('build passed'), 'the text is never logged');
+  assert.ok(s.logs.some((l) => l.event === 'action' && l.target === 'screen:read' && l.chars > 0));
+  const r = await s.session.desktopResult({});
+  assert.match(r.window_says, /The build passed/);
+});
+
+test('round 4: the voice is told about named buttons, reading the window, and steps that stop at the first failure', () => {
+  const text = instructionsFor(config(), new Records(config()), '');
+  assert.match(text, /presses a button or link by its name in the window in front of any app \("click Accept"/);
+  assert.match(text, /reads the window in front when asked what it says/);
+  assert.match(text, /stops at the first step that fails or waits for a yes: say which step stopped and that the rest was not done/);
+  assert.match(text, /presses a named button that sends, deletes, buys, confirms or signs out, only after a yes/);
 });
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));

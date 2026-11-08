@@ -10,7 +10,7 @@ import { keyFile as openrouterKeyFile } from '../openrouter/module.mjs';
 // templates/voice-mode/bin, with the system's own audio tools. See docs/voice-mode.md.
 
 const NAME = 'voice-mode';
-const SCRIPTS = ['voice-mode.mjs', 'config.mjs', 'providers.mjs', 'records.mjs', 'desk.mjs', 'control.mjs', 'audio.mjs', 'orb.mjs', 'orb.qml', 'briefing.mjs', 'handoff.mjs', 'browser.mjs', 'lookout.mjs', 'notes.mjs', 'pc.mjs', 'tasks.mjs'];
+const SCRIPTS = ['voice-mode.mjs', 'config.mjs', 'providers.mjs', 'records.mjs', 'desk.mjs', 'control.mjs', 'audio.mjs', 'orb.mjs', 'orb.qml', 'briefing.mjs', 'handoff.mjs', 'browser.mjs', 'lookout.mjs', 'notes.mjs', 'pc.mjs', 'tasks.mjs', 'screen.mjs'];
 // The orb runs on Qt 6's own `qml` tool with KDE's layer-shell module (overlay above every window).
 const ORB_PKGS = { apt: 'qml-qt6 qml6-module-qtquick-window qml6-module-qtquick-shapes qml6-module-org-kde-layershell', pacman: 'qt6-declarative layer-shell-qt' };
 const ORB_RUNNERS = ['/usr/lib/qt6/bin/qml', 'qml6', 'qml-qt6'];
@@ -21,6 +21,28 @@ const list = (s) => String(s || '').split(',').map((x) => x.trim()).filter(Boole
 // The "type" action runs `ydotool type`, which needs the ydotoold daemon and write access to
 // /dev/uinput. Debian, Ubuntu and Arch ship ydotoold as the systemd user unit ydotool.service.
 const UINPUT_RULE = 'KERNEL=="uinput", GROUP="input", MODE="0660", TAG+="uaccess"';
+// Pressing a named button and reading the window in front (screen.mjs) use the desktop's
+// accessibility interface (AT-SPI) through Python's GObject bindings, with tesseract as the
+// local OCR fallback for apps that show nothing there.
+const SCREEN_PKGS = {
+  apt: 'python3-gi gir1.2-atspi-2.0 tesseract-ocr',
+  dnf: 'python3-gobject at-spi2-core tesseract',
+  pacman: 'python-gobject at-spi2-core tesseract tesseract-data-eng',
+  zypper: 'python3-gobject typelib-1_0-Atspi-2_0 tesseract-ocr tesseract-ocr-traineddata-english',
+};
+function screenTools(ctx) {
+  const atspi = !ctx.platform.simulated && ctx.capture(`python3 -I -c "import gi; gi.require_version('Atspi', '2.0'); from gi.repository import Atspi"`) !== null;
+  if (atspi && ctx.has('tesseract')) ctx.ok('the accessibility interface (AT-SPI) and tesseract are there');
+  else ctx.pkgInstall(SCREEN_PKGS);
+  // Apps show their buttons to AT-SPI only with the desktop's accessibility switch on (what a
+  // screen reader turns on); voice mode also turns it on when it finds it off.
+  if (ctx.platform.simulated || ctx.has('gsettings')) {
+    if (ctx.capture('gsettings get org.gnome.desktop.interface toolkit-accessibility') === 'true') return ctx.ok('the desktop accessibility switch is on');
+    ctx.run('gsettings set org.gnome.desktop.interface toolkit-accessibility true');
+    ctx.info('turn it off again with: gsettings set org.gnome.desktop.interface toolkit-accessibility false (named buttons then work only in apps that always show them)');
+  }
+}
+
 async function typing(ctx) {
   await ctx.ensureTool({ name: 'ydotool', install: { linux: { pkg: { apt: 'ydotool', dnf: 'ydotool', pacman: 'ydotool', zypper: 'ydotool' } } } });
   if (ctx.platform.simulated) return ctx.info('would start the ydotool.service user unit (ydotoold) when `systemctl --user` works');
@@ -311,6 +333,7 @@ export default {
     }
 
     if (ctx.os === 'linux' && ctx.get('VOICE_TYPING')) await ctx.step('typing (ydotool)', () => typing(ctx));
+    if (ctx.os === 'linux' && ctx.get('VOICE_TYPING')) await ctx.step('named buttons and reading the screen (AT-SPI, tesseract)', () => screenTools(ctx));
 
     await ctx.step('hotkey', () => hotkey(ctx, node, script));
 
