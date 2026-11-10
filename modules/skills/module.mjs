@@ -66,6 +66,14 @@ const SKILLS = [
     label: 'stow - before compacting or a break, save what this session learned into the files where it belongs',
   },
   {
+    value: 'retro',
+    repo: 'mattpocock/skills',
+    label:
+      'retro - looks back at a coding session and suggests changes to the agent environment (signposts, automated checks, coding standards, instruction size). ' +
+      'Only you can start it, by typing /retro. Also installs its helper writing-for-agents, which retro reads first and which can start on its own when you write skills or agent files',
+    helpers: ['writing-for-agents'],
+  },
+  {
     value: 'workflow-playbook',
     label:
       'workflow-playbook - a working method for long projects run with AI agents. Covers ten phases from an idea to shipped and improved, stage gates, ' +
@@ -137,7 +145,7 @@ async function tallied(ctx, tally, label, fn) {
 export default {
   name: 'skills',
   title: 'Agent skills',
-  description: 'Claude Code skills, downloaded from their upstreams: kun, vision, grilling, teach, tdd, codebase-design, to-spec, to-tickets, to-questionnaire, diagnosing-bugs, wayfinder, find-docs, no-mistakes, stow, workflow-playbook, motion-designer, composio-cli',
+  description: 'Claude Code skills, downloaded from their upstreams: kun, vision, grilling, teach, tdd, codebase-design, to-spec, to-tickets, to-questionnaire, diagnosing-bugs, wayfinder, find-docs, no-mistakes, stow, retro, workflow-playbook, motion-designer, composio-cli',
   order: 50,
   group: 'assistant',
   summary: 'skills for planning and test-first coding',
