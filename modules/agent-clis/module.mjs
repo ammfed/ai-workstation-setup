@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { Skip, which } from '../../lib/context.mjs';
+import { Skip, which, withoutPath } from '../../lib/context.mjs';
 import { addSessionStartHook, claudeDir } from '../../lib/claude.mjs';
 import { PRIVATE_RULES_DEFAULT, parsePrivateRules } from '../preferences/private-rules.mjs';
 import { TOOLS, warnPathOrder } from './tools.mjs';
@@ -88,7 +88,7 @@ async function cswapAutoService(ctx) {
     'WantedBy=default.target',
     '',
   ].join('\n');
-  const wrote = await ctx.writeFile(path.join(ctx.home, '.config', 'systemd', 'user', `${CSWAP_UNIT}.service`), unit, { onConflict: 'ask' });
+  const wrote = await ctx.writeFile(path.join(ctx.home, '.config', 'systemd', 'user', `${CSWAP_UNIT}.service`), unit, { onConflict: 'ask', same: withoutPath });
   const active = ctx.capture(`systemctl --user is-active ${CSWAP_UNIT}.service`) === 'active';
   if (wrote || !active) ctx.run(`systemctl --user daemon-reload && systemctl --user enable ${CSWAP_UNIT}.service && systemctl --user restart ${CSWAP_UNIT}.service`);
   else ctx.ok(`${CSWAP_UNIT}.service is enabled and running`);

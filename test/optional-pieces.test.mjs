@@ -508,6 +508,19 @@ test('a service file that differs only in its PATH line is up to date', async ()
   assert.notEqual(withoutPath(unit('/a').replace('true', 'false')), withoutPath(unit('/b')), 'any other difference still counts');
 });
 
+test('a service file that differs only in quotes around a plain ExecStart path is up to date', async () => {
+  const home = tempHome();
+  const file = path.join(home, 'example.service');
+  const unit = (exec) => `[Service]\nExecStart=${exec}\nRestart=always\n`;
+  fs.writeFileSync(file, unit('/opt/bin/cswap auto'));
+  const ctx = context(home);
+  assert.equal(await ctx.writeFile(file, unit('"/opt/bin/cswap" auto'), { onConflict: 'ask', same: withoutPath }), false, 'bare on disk, quoted in the template');
+  fs.writeFileSync(file, unit('"/opt/bin/cswap" auto'));
+  assert.equal(await ctx.writeFile(file, unit('/opt/bin/cswap auto'), { onConflict: 'ask', same: withoutPath }), false, 'quoted on disk, bare in the template');
+  assert.notEqual(withoutPath(unit('"/opt/my bin/cswap" auto')), withoutPath(unit('/opt/my bin/cswap auto')), 'a path with a space needs its quotes');
+  assert.notEqual(withoutPath(unit('"/opt/bin/a" auto')), withoutPath(unit('"/opt/bin/b" auto')), 'a different path still counts');
+});
+
 test('the skill update question is asked only when a chosen skill is installed, and defaults to yes', async () => {
   const home = skillsHome();
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
