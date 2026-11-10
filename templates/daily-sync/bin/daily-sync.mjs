@@ -598,6 +598,23 @@ function expandEnv(env = {}) {
   return Object.fromEntries(Object.entries(env).map(([k, v]) => [k, /^~[\\/]/.test(String(v)) ? expandHome(v) : String(v)]));
 }
 
+// ---------------------------------------------------------------- review pages
+
+// Read-only. `lavish-axi` with no arguments lists the sessions as rows `file,status,url,pending,listener`.
+// A page nobody listens to (listener `none`) can hold an answer the list does not show, and only
+// `lavish-axi poll` reads it. A poll consumes the answer, so this step never polls.
+function reviewPages(spec) {
+  const r = sh(spec.run || 'lavish-axi', { timeoutSec: 30 });
+  if (r.code !== 0) throw new Error(`could not list the pages: ${exitText(r)}`);
+  const unheard = [];
+  for (const line of lines(r.out)) {
+    const m = /^(.+?),(open|feedback),"?https?:[^",]*"?,\d+,none$/.exec(line);
+    if (m) unheard.push(m[1]);
+  }
+  if (!unheard.length) return;
+  notes.push(`review pages: ${unheard.length} open with no listener, may hold an unseen answer (collect with "timeout 15 lavish-axi poll <file>"): ${sample(unheard)}`);
+}
+
 // ---------------------------------------------------------------- commands and versions
 
 // A command that prints nothing when all is well and one line per finding when not, such as
@@ -887,6 +904,7 @@ function run() {
     soft('stale sources', () => staleSources(config.vault));
     soft('vault use', () => vaultUse(config.vault));
   }
+  if (config.reviewPages) soft('review pages', () => reviewPages(config.reviewPages));
   for (const c of config.commands || []) check(c.name || 'command', () => command(c));
   for (const v of config.versions || []) check(v.name || 'version', () => version(v));
   if (config.clickup) check('clickup', () => clickup(config.clickup));

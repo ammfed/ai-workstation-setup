@@ -42,6 +42,13 @@ days that made a tool call naming the vault, such as
 (`~/.claude/projects`, or `vault.sessionLogs`), keeps only the two counts and copies nothing
 from a session. With no logs it says so instead of printing zero.
 
+The report also ends with one line when open Lavish review pages have no listener, such as
+`review pages: 2 open with no listener, may hold an unseen answer ...`. Lavish shows a page's
+answers in its list only while someone listens, so each of those pages needs
+`timeout 15 lavish-axi poll <file>`. The sync only reads the list. It never polls, because a
+poll consumes the answer. Set `reviewPages` to `null` in `config.json` to turn the line off, or
+`reviewPages.run` to use another list command.
+
 When something changed, something new needs you, or anything failed, the same report is
 piped to your `notify` command (for example Firstmate's inbox: `fm-inbox.sh note -`). Drift
 that was already reported is listed as `(still)` and sent again only every `remindDays`.

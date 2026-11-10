@@ -803,4 +803,30 @@ test('an unsynced system clock is one plain note', () => {
   const synced = job({ vault: vault(rawFolder()), clockCommand: node('print.cjs', 'yes') });
   synced.run();
   assert.doesNotMatch(synced.latest(), /clock:/);
+
+test('open review pages with no listener are listed in one line, and the listing never polls', () => {
+  const list = [
+    'sessions[4]{file,status,url,pending_prompts,listener}:',
+    '  /work/a/page.html,open,"http://127.0.0.1:4387/session/aa",0,none',
+    '  /work/b/page.html,open,"http://127.0.0.1:4387/session/bb",0,agent-listener',
+    '  /work/c/page.html,feedback,"http://127.0.0.1:4387/session/cc",0,none',
+    '  /work/d/page.html,ended,"http://127.0.0.1:4387/session/dd",0,none',
+  ];
+  const seen = path.join(tmp, 'lavish-args.txt');
+  fs.writeFileSync(path.join(helpers, 'lavish.cjs'), `require('fs').appendFileSync(${JSON.stringify(seen)}, process.argv.slice(2).join(' ') + '\\n'); console.log(${JSON.stringify(list.join('\n'))});`);
+  const j = job({ reviewPages: { run: node('lavish.cjs') } });
+  assert.equal(j.run().code, 0);
+  const report = j.latest();
+  assert.match(report, /\nreview pages: 2 open with no listener, may hold an unseen answer .*: \/work\/a\/page\.html, \/work\/c\/page\.html$/);
+  assert.doesNotMatch(report, /\/work\/[bd]\//);
+  assert.deepEqual(j.notified(), [], 'the line alone sends nothing');
+  assert.equal(fs.readFileSync(seen, 'utf8').trim(), '', 'only the plain listing is run, never a poll');
+  // Nothing without a listener, or a listing that fails: the report stays quiet.
+  fs.writeFileSync(path.join(helpers, 'lavish.cjs'), "console.log('sessions[0]{file,status,url,pending_prompts,listener}:');");
+  const none = job({ reviewPages: { run: node('lavish.cjs') } });
+  none.run();
+  assert.doesNotMatch(none.latest(), /review pages/);
+  const broken = job({ reviewPages: { run: 'exit 3' } });
+  assert.equal(broken.run().code, 0, 'a failed listing is never a failed run');
+  assert.doesNotMatch(broken.latest(), /FAILED/);
 });

@@ -407,6 +407,8 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
     get('PREFS_PAGE_PHONE') &&
       'Every review page also reads well on a phone (390 px wide): the card and its picture stack with no empty filler, body text is at least 14 px, and a wide diagram gets a phone version (for example a vertical list of steps) instead of shrinking to tiny labels.',
     get('PREFS_PAGE_PHONE') && 'Check a 390 by 844 screenshot before sending the link. The laptop layout stays as it is.',
+    get('PREFS_PAGE_CHECK_BEFORE_SEND') &&
+      'Check a set of options as one contact sheet (one image with every option side by side), not one screenshot per option. For a detailed check of many images, hand them to the `reader` subagent and take back a short verdict per image.',
     get('PREFS_PAGE_WIDE_HEADER') &&
       'Give review pages a generous header: a large title and intro text spread across the full page width, not squeezed into a narrow column.',
     get('PREFS_PROTOTYPE_CHECK') &&
@@ -431,7 +433,9 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
     cards && get('PREFS_CHECK_ANSWERS_FIRST') &&
       'Before calling a review page open, answered or unanswered, check whether the user already answered it. Never assume it is unanswered.',
     cards && get('PREFS_CHECK_ANSWERS_FIRST') &&
-      '`lavish-axi` lists every session with its status and pending answers. `lavish-axi poll <file>` collects answers: leave it running, because answers stay queued until collected.',
+      '`lavish-axi` lists every session with its status, pending answers and listener. The pending answers it shows are only complete for a page with a listener. For a page whose listener is `none`, run `timeout 15 lavish-axi poll <file>` before calling it open or unanswered.',
+    cards && get('PREFS_CHECK_ANSWERS_FIRST') &&
+      'A poll consumes the answer it returns, so act on it or pass it on in the same turn. Answers stay queued until collected, so a long poll for a page you are waiting on can stay running.',
     cards && get('PREFS_CHECK_ANSWERS_FIRST') && 'Never reopen a page the user ended unless they ask.',
     cards && get('PREFS_CHECK_ANSWERS_FIRST') &&
       'A page that says it ended, or a link that loads, does not mean answers were lost: read the session status and pending answers, and collect them with `lavish-axi poll <file>` first.',
