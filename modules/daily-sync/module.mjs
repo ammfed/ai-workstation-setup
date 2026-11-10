@@ -101,6 +101,8 @@ export function buildConfig(ctx, base) {
       lists: list(ctx.get('DAILY_SYNC_TICKTICK_LISTS')),
     };
   }
+  // Lists open review pages that nobody listens to. Read-only, silent when there are none.
+  config.reviewPages = { run: 'lavish-axi' };
   config.versions = [];
   return config;
 }
