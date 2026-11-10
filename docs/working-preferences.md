@@ -11,7 +11,7 @@ fewer rules well as the count grows. So the rules are split by how often a sessi
 
 - **The core file** holds the rules almost every session needs: how to reply, decisions, focus
   and priorities, safety, and what to check before you start. With the recommended answers it
-  is 38 short rules, about 70 lines. It ends with one line per skill below, saying when to load it.
+  is 39 short rules, about 70 lines. It ends with one line per skill below, saying when to load it.
 - **Five skills** hold the rules that only one kind of work needs. Claude Code shows the agent
   each skill's name and description at startup, and the agent loads the whole skill when that
   work comes up:
@@ -44,7 +44,7 @@ only when you choose for yourself; going ahead with the first screen takes its d
 answers file still sets any key it names either way.
 
 With the `firstmate` target, the module also writes Firstmate's `config/brief-include.md`, which
-Firstmate appends to every worker brief. It holds what applies: the house style with
+Firstmate appends to every worker brief. It holds what applies: the room-to-work lines from `PREFS_OWNERSHIP`, the house style with
 `PREFS_WRITING_STYLE=ste` (for what workers write to Firstmate, never the deliverable), the
 vault-first line (sessions get it from the second-brain rules file instead) when second-brain runs or its saved vault folder
 exists and agents have access, naming only the routes it installs, the helper-model rule from
@@ -139,6 +139,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | `PREFS_PROTOTYPE_CHECK` | no | Before you see a prototype, the agent opens it at your target screen size first, then at laptop width and, when `PREFS_PAGE_PHONE` is yes, at phone width (390 px), checks that font sizes and column positions stay the same on every tab, and fixes broken layout, unclear labels and dead ends. |
 | `PREFS_PRINCIPLE_CHECKS` | yes | With the `firstmate` target: every worker brief tells the worker to run the principle checker that `workflow-playbook` installs (`principles/bin/principle-check.mjs`, with `--phone` for work built for other people) before it reports done on anything with a screen, fix every `fail` line and list each `check` line for the reviewer. It also tells the worker to have a fresh reviewer that did not build a page check its screenshots before the page reaches you, briefed as "Reviewer brief" in `principles/checks.md` says. Written only when the playbook is chosen or already installed. |
 | `PREFS_MODEL_GUIDE` | yes | When a model is named for a task, the agent reads that vendor's official prompting guide first and briefs the model the way it says. Worker briefs also follow the main points of the current Claude guides: name the only stops wanted, name the actions that need a go-ahead and the safe steps that need none, say who owns the code, keep cautions few and current, lower effort instead of asking for less thinking, name the styles a new look must avoid, and ask for a report a reader who saw none of the work can follow. |
+| `PREFS_OWNERSHIP` | yes | Agents own the code they build and keep building. A brief for that work carries the ownership sentence from Anthropic's Claude Fable 5.2 prompting guide word for word ("This codebase is yours: what it's for and how it's built are your call, and you'll keep building on it."), names what the worker decides on its own, and names the routine steps that need no go-ahead: retrying a call that is safe to repeat, fixing a bug its change exposes, merging repeated code in code it owns, adding tests, updating docs its change made wrong. The sentence stays out where you or someone else owns what is changed (your hand-written files and memory, the notes vault, a client's or another team's repository, upstream tools, a fix you want kept small). Reports list every change, and a change to how an existing feature behaves gets its own line, because an owner makes changes nobody asked for and leaves small ones out of its summary. Review pages and helpers get room too: the page's build is the agent's call, and a helper chooses how it searches. Merging, the confirmation for risky actions and your decisions stay exactly as they are. |
 
 ### Ideas and priorities
 
@@ -176,7 +177,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | `PREFS_MERGE` | `explicit` | Pull requests merge only on your explicit word. `green` lets the agent merge its own green pull requests. |
 | `PREFS_VERIFY_CAUSE` | yes | No guessed causes: a failure's cause is named only when checked, otherwise "cause unknown". |
 | `PREFS_PAUSE_WORD` | `pause` | Saying this word stops every running agent until you say resume. Empty for none. |
-| `PREFS_STOP_DIGGING` | yes | A problem is confirmed from evidence before its cause is hunted; after about two checks that find nothing, the agent reports what is known. A command or check that fails the same way twice is not run a third time: the agent tries one other way, then reports. |
+| `PREFS_STOP_DIGGING` | yes | A problem is confirmed from evidence before its cause is hunted; after about two checks that find nothing, the agent reports what is known. A command or check that fails the same way twice is not run a third time unchanged: the agent tries one other way (waiting on a busy tool, fixing the request, another source), then reports the failure and carries on with the work that does not depend on it. |
 | `PREFS_BLOCKED_COMMANDS` | yes | A permission check that blocks an install, schedule, service change, push or pull request is never worked around; the agent records the exact one-line command for you and carries on. |
 | `PREFS_PRIVATE_STAYS_LOCAL` | yes | Private chats and anything captured from your own sessions never go to an outside model or service. |
 | `PREFS_PUBLIC_REPOS` | yes | In public repositories: a no-reply commit identity, no email trailers, pull request text that names nothing private, and a privacy scan before every push. |
@@ -227,6 +228,7 @@ Firstmate's `captain.md` holds every rule, wherever it lives here.
 | `PREFS_PROTOTYPE_CHECK` | You notice a broken layout before the content. | review-pages |
 | `PREFS_PRINCIPLE_CHECKS` | A script catches mechanical slips before a reviewer has to, and workers run the checks their brief names. | Worker briefs only |
 | `PREFS_MODEL_GUIDE` | Each model follows the briefing style its vendor documents. | running-workers |
+| `PREFS_OWNERSHIP` | Told nothing about ownership, a model adds to the structure it finds and reports nearby problems instead of fixing them; the vendor's sentence changes that, and named steps free routine work where a general "act freely" does not. It costs more tokens and some unasked changes, so it goes only where restructuring is wanted. | running-workers (the sentence and where it goes); the no-go-ahead steps in Core; review-pages; models-and-research; worker briefs |
 | `PREFS_CAPTURE_IDEAS` | An idea that is not written down is lost, and one started at once derails the current work. | Core |
 | `PREFS_RESEQUENCE` | Work ordered by what blocks what finishes sooner. | status-and-away |
 | `PREFS_ORIENT` | You always know what comes next without asking. | Core |

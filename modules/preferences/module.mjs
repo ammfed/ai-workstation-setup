@@ -260,6 +260,7 @@ export default {
       when: (ctx) => ctx.get('PREFS_TARGETS').includes('firstmate'),
     }),
     yes('PREFS_MODEL_GUIDE', 'Models: when a model is named for a task, read its vendor\'s prompting guide first?'),
+    yes('PREFS_OWNERSHIP', 'Building: give agents ownership of the code they build and keep building (the vendor\'s ownership sentence in those briefs, the routine steps that need no go-ahead named), while your own files and other people\'s code stay changed as little as possible?'),
 
     // Ideas and priorities
     yes('PREFS_CAPTURE_IDEAS', 'Ideas: capture every idea you share, fold it in or park it, and say in one line where it landed?'),

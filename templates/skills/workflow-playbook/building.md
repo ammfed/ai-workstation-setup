@@ -112,7 +112,7 @@ Each rule names the phase it belongs to. Rules the playbook or the checks alread
 
 ## Build
 
-28. **Follow instructions exactly, and say when one looks wrong.** Do what was asked, no more and no less. A signed screen or document stays exactly as signed, with only the agreed fixes. Fix an approved build; do not refactor it unasked. When an instruction looks wrong or does not make sense, say so with the reason before you act on it.
+28. **Follow instructions exactly for what the owner sees, and say when one looks wrong.** What the owner sees and approved (screens, words, flows, behaviour) changes as asked, no more and no less. A signed screen or document stays exactly as signed, with only the agreed fixes. Under it, in code the worker owns, merging repeated code and adding tests are the worker's call, as long as what the owner approved stays the same and the tests show it. When an instruction looks wrong or does not make sense, say so with the reason before you act on it.
 
     Why: an unasked improvement breaks something the owner already approved, and a silent doubt lets a mistake through.
 29. **One live version, always running.** Keep one live demo of the latest main line, rebuilt after every change, so the owner never waits for a merge to see the work. Run a separate preview only when the owner asks for one, and close it once merged.

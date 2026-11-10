@@ -7,7 +7,7 @@ description: A working method for long projects run by one owner with AI agents.
 
 These rules come from a long project that was restarted several times. Every restart had the same cause: work moved ahead of the owner's decisions, or research went into the product without a purpose. Each rule below fixes one of those failures, or a later one: the owner was left with a blank page and no clear next step.
 
-- The owner is the person who decides. Agents and workers do the rest.
+- The owner is the person who decides: the goal, taste, dates, money, people, and every merge. Agents and workers own the rest: how the work is built, the shape of the code they build and keep building, and the routine steps on the way (rule 7.4).
 - Each rule has a "Why" line. Keep the reason in mind when a case does not fit the words.
 
 ## Phases, from an idea to shipped and improved
@@ -59,7 +59,7 @@ Why: one supervisor that checks every phase against the same method catches drif
 | 4. Vision | The vision file meets what Kun's vision skill asks for: each principle cites real evidence from the project, and the file says what the work will not become |
 | 5. Prototype | When a prototype shows the choice better than words, it sits on the checkpoint page. The page keeps only what is decided now |
 | 6. Breakdown | A bug starts with a reproduction item in a clean setup, which becomes the regression test. A refactor starts with a guardrails item that adds the missing tests first |
-| 7. Build | The change is the simplest one that meets the requirements. Anything the brief did not ask for is cut |
+| 7. Build | The change is the simplest one that meets the requirements. Features and behaviour the brief did not ask for are cut. Structure work in code the worker owns (merged repeated code, tests, docs its change made wrong) stays, and the pull request lists it |
 | 8. Review | The preview page shows what validation caught and fixed, next to the outcome |
 | 9. Ship and hand over | No extra check: validation is the step Kun names. It runs through no-mistakes when the repository has it. Without it, offer to set it up, or use a fresh adversarial reviewer. The merge waits for the owner's word |
 | 10. Improve | Check Kun's tools list for one that turns repeated corrections into checks, such as backpass. Bring each proposal as a card |
@@ -86,6 +86,10 @@ Why: one supervisor that checks every phase against the same method catches drif
 | A bug | 1, find the cause with diagnosing-bugs, 7 with the reproduction as the regression test, 9 | Something that worked is broken |
 | A prototype the owner will show soon | 1 to 5 | Nothing is built for real before approval |
 | A report or research only | 1, 3, 8 | No pull request |
+
+A rework, a format change or "a few tweaks" to anything with a screen starts at the first stage the owner has not approved. Reusing the code means reusing its logic; the look stages still run.
+
+Why: a request to keep the code with a few tweaks was once read as a light edit, skipped the look stages, and the owner had to correct it.
 
 ## 1. Stage gates
 
@@ -336,9 +340,9 @@ Why: one supervisor that checks every phase against the same method catches drif
    Why: most questions are already answered, and each extra question costs the owner attention.
 2. **Keep work moving.**
    - Act on anything the owner is not blocking.
-   - Keep a pass to what the owner named, and ask before widening it.
+   - Keep a pass to what the owner named, and ask before widening it. Widening means a new feature, new behaviour or a new area the owner did not name. Fixing a bug the change exposes, merging repeated code in code the agent owns, and adding tests are part of the pass.
    - Merge follows the merge rule in working-preferences.md.
-   - Product code, sign-in, real data and anything risky wait for the owner's word.
+   - Starting product code before its gate, sign-in, real data and anything risky wait for the owner's word.
 
    Why: asking for approval on things the owner cannot judge wastes their time, and widening a pass changes things they did not choose.
 3. **A round reaches the owner one question at a time.**
@@ -392,6 +396,14 @@ Why: one supervisor that checks every phase against the same method catches drif
    - The pull request body opens with the smallest visual that shows the change (a screenshot, a short clip or a before and after), then the evidence that it works, then the merge danger: whether it can be undone easily, and what else it touches if it goes wrong.
 
    Why: a worker that builds from a description instead of the approved page drifts from it, items merged one by one into the main branch clash late, and a reviewer who cannot see the change or its risk either waves it through or holds it too long.
+4. **Give the worker the code and the room.**
+   - In a brief for code the agents build and keep building (this setup's repositories, a prototype, a tool or product the owner runs with agents), include the vendor's ownership sentence word for word: "This codebase is yours: what it's for and how it's built are your call, and you'll keep building on it."
+   - Leave it out, and say the change should stay small, where the owner or someone else owns what is changed: the owner's hand-written files and saved memory, the notes vault, a client's or another team's repository, upstream tools, and a small fix the owner wants changed as little as possible.
+   - Name what the worker decides on its own (the shape of the code, the order of the work, its tools and method) and the steps that need no go-ahead: retrying a call that is safe to repeat, fixing a bug its change exposes, merging repeated code in code it owns, adding tests, and updating docs its change made wrong.
+   - Name the stops you want (nothing can move without the owner, or a blocker someone put there on purpose). Ask the worker to work through ordinary errors, timeouts and failing tools.
+   - Ask its report to list every change, small ones too, with any change to how an existing feature behaves on its own line. Review the diff, not only the summary.
+
+   Why: a worker told nothing about ownership adds to the structure it finds, even repeating code, and reports nearby problems instead of fixing them. The sentence changes that, and a scope rule elsewhere does not cancel it, so leaving it out is the only off switch. A general "act freely" changes nothing, while named steps do. An owner also makes changes nobody asked for and leaves small ones out of its summary, so the list and the diff keep them visible.
 
 ## 8. Memory and status
 

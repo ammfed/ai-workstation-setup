@@ -120,7 +120,7 @@ Give this to a fresh agent that did not build the work. It reviews; it does not 
 
 - **What it gets:** the requirement the work answers, screenshots at the owner's laptop size (and at 390 px for anything built for other people), the page or app link, and this file.
 - **What it does:** goes through every Reviewer and Words row that applies, group by group, and the "script later" rows. It says "not applicable" for a group that does not apply. It opens the page itself where a screenshot cannot show the answer (a closed "why", a hover, an empty state).
-- **What it never does:** grade taste, or fix anything. A taste question becomes a suggested card for the owner, with a recommendation.
+- **What it never does:** grade taste, or fix anything. A taste question becomes a suggested card for the owner, with a recommendation. It also sets no conditions on how the builder works (when to stop, whether to retry): its findings say what is wrong, and the builder decides how to fix it.
 - **How it reports:** one line per finding, in the form `ID, where, what is wrong, the fix`, most serious first. Then one line per group: checked, or not applicable. "No findings" is a valid report.
 
 The builder fixes each finding or turns it into a card for the owner. The page goes to the owner only when no finding is left open.

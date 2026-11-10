@@ -33,6 +33,14 @@ function vaultRule(vault) {
   const search = `search it with \`rg\`${vault.search ? ' or `bin/search`' : ''}`;
   return `Before you start, check the notes vault at \`${vault.path}\` for past decisions, findings and rulings on the work: find a note by its folder and file name, or ${search}. Trust the newest dated line, and check an open item against the live tracker before you act on it.`;
 }
+// Ownership, after the vendor's "Prompting Claude Fable 5.2" guide ("Say who owns the code", "Keep
+// caution from piling up"). The sentence is the vendor's own, word for word: with it a model merges
+// repeated code and fixes nearby problems far more often, and a scope rule elsewhere does not cancel
+// it, so it goes only where restructuring is wanted. Naming the steps that need no go-ahead is the
+// lever the guide measured; a general "act more freely" changed nothing.
+export const OWNERSHIP_SENTENCE = "This codebase is yours: what it's for and how it's built are your call, and you'll keep building on it.";
+const NO_GO_AHEAD =
+  'retrying a call that is safe to repeat, fixing a bug your change exposes, merging repeated code in code you own, adding or fixing tests, and updating docs your change made wrong';
 const GLOSSARY_RULE =
   'Before building, read GLOSSARY.md and docs/adr/ if they exist. Add new terms and decision records in the same change that introduces them. Start these files in any project, but only when a term or a hard-to-reverse decision comes up.';
 
@@ -79,6 +87,16 @@ export function renderBriefInclude(get, { checkerPath, privateRules, tastePreset
       ].join('\n'),
     );
   }
+  parts.push(
+    bullets('Room to work', [
+      get('PREFS_OWNERSHIP') &&
+        'Your task brief says who owns the code. When it says the code is yours, reshape what serves the goal: merge repeated code, fix the problems you find nearby, add tests. When it does not, change what the task needs, fix the bugs your change exposes, and report other problems you find.',
+      get('PREFS_OWNERSHIP') &&
+        `These steps need no go-ahead: ${NO_GO_AHEAD}. The brief's own rules on merging, pushing, destructive actions and decisions still hold.`,
+      get('PREFS_OWNERSHIP') &&
+        'List every change in your report, small ones too, and put any change to how an existing feature behaves on its own line, so the reviewer can find it without reading the whole diff.',
+    ]),
+  );
   parts.push(bullets('Past decisions', [vaultRule(vault)]));
   parts.push(bullets('Helper models', [delegateRule(get)]));
   parts.push(bullets('Building', [get('PREFS_KUN') && KUN_RULE, get('PREFS_TEST_FIRST') && TEST_FIRST_RULE, get('PREFS_GLOSSARY_ADR') && GLOSSARY_RULE]));
@@ -241,6 +259,7 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
       'Always ask first for a decision only the user can make, a credential or access only they hold, or anything destructive, irreversible or security-sensitive.',
     act &&
       'For a process or tooling question the user cannot answer, read the primary source (the official docs or the upstream repository), decide, and say in one line what was chosen and why. Product and stakeholder decisions stay with the user.',
+    act && get('PREFS_OWNERSHIP') && `In work you were given, these steps need no go-ahead: ${NO_GO_AHEAD}.`,
     get('PREFS_AUTONOMY') === 'ask' && 'Ask before acting on judgment calls, including small implementation choices.',
     decisionsPath &&
       `Keep the user's decisions in \`${decisionsPath}\`: record each ruling the moment it is made, with its date. If it is not in the file, it is not decided, and the newest ruling wins.`,
@@ -281,7 +300,7 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
     get('PREFS_STOP_DIGGING') &&
       'A request to investigate is not proof that something is broken. Confirm the problem from real evidence first, or ask what the user saw. If about two checks turn up nothing, stop and report what is known.',
     get('PREFS_STOP_DIGGING') &&
-      'When the same command or check fails the same way twice, stop repeating it. Try one different approach, and if that also fails, stop and report the failure with its error.',
+      'When the same command or check fails the same way twice, stop repeating it unchanged, because a third identical run only spends tokens. Try one different approach (wait and retry a busy tool, fix the request, or use another tool or source). If that also fails, report the failure with its error and carry on with the work that does not depend on it.',
     get('PREFS_BLOCKED_COMMANDS') &&
       'When a permission check blocks an install, a schedule, a service change, a push or a pull request, do not look for a way around it. Record the exact one-line command for the user to run, say what it is for, and carry on with the rest.',
     get('PREFS_PRIVATE_STAYS_LOCAL') &&
@@ -379,6 +398,8 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
     cards && get('PREFS_PAGE_FLIP_PREVIEWS') &&
       'For any visual choice, give every option its own preview and let the user flip between all of them (buttons or a dropdown). The canvas follows the option they select.',
     cards && get('PREFS_PAGE_FLIP_PREVIEWS') && "Never show only the recommended option's visual.",
+    get('PREFS_OWNERSHIP') &&
+      'How the page is built is your call: inside the template, choose the layout, the order of the cards and the visuals, and fix whatever a check finds without asking. What the page asks the user to decide stays theirs.',
     get('PREFS_PAGE_MINIMAL_TEXT') &&
       'Keep page text to the minimum: a title, the question, short option labels. No fluff, no small helper text, no explaining the obvious.',
     get('PREFS_PAGE_MINIMAL_TEXT') &&
@@ -435,7 +456,18 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
     get('PREFS_FLEET_WORKFLOW') && 'Each worker lands its work by opening a pull request and watching its checks until they are green. Merging follows the merge rule in working-preferences.md.',
     get('PREFS_FLEET_WORKFLOW') && 'Decisions go to the user only at genuine forks. Act on work that nothing blocks.',
     get('PREFS_FLEET_WORKFLOW') &&
-      'A permission prompt, a refused tool call or a command that needs running by hand is never escalated as a decision: state the blocker once in one line and stop.',
+      'A permission prompt, a refused tool call or a command that needs running by hand is never escalated as a decision: state the blocker once in one line, then carry on with the work that does not depend on it.',
+  ]);
+  const own = get('PREFS_OWNERSHIP');
+  add('running-workers', 'Ownership in briefs', [
+    own &&
+      `In a brief for code the agents build and keep building (this setup's own repositories, a prototype, a tool or product the user runs with agents), include this sentence word for word: "${OWNERSHIP_SENTENCE}" Without it a worker adds to the existing structure, even repeating code, and reports nearby problems instead of fixing them.`,
+    own &&
+      "Leave the sentence out, and say the change should stay small, where the user or someone else owns what is changed: the user's hand-written files (answers files, private rules, saved memory), the notes vault, a client's or another team's repository, upstream tools, and a small fix the user wants changed as little as possible. A scope rule elsewhere in the brief does not cancel the sentence, so leaving it out is the only way to turn it off.",
+    own &&
+      'Name what the worker decides on its own (the shape of the code, the order of the work, its tools and method) and the routine steps that need no go-ahead (retrying a call that is safe to repeat, fixing a bug its change exposes, merging repeated code in code it owns, adding tests, updating docs its change made wrong). A general "act freely" does nothing; named steps do.',
+    own &&
+      "Before a worker's pull request is called ready, read its diff, not only its summary. A worker that owns the code makes changes nobody asked for (mostly tests and docs), sometimes changes how an existing feature behaves, and often leaves small changes out of its summary.",
   ]);
   add('running-workers', 'Building something new', [
     get('PREFS_BUILD_WHOLE_GOAL') &&
@@ -501,6 +533,11 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
     get('PREFS_QUOTA') && 'Treat subscription limits as scarce. Check them with `quota-axi` before heavy or parallel work, and take the cheapest path that still answers.',
     get('PREFS_QUOTA') && 'Pause heavy work near a limit and say so.',
     delegateRule(get),
+  ]);
+  add('models-and-research', 'Briefing helpers', [
+    get('PREFS_OWNERSHIP') &&
+      'Brief a helper with one closed task, why it matters, and what comes back. How it finds the answer (sources, order, tools) is its call, and retrying a call that is safe to repeat needs no go-ahead.',
+    get('PREFS_OWNERSHIP') && 'A helper that only reads or drafts changes no code, so its brief carries no ownership sentence. Check what it returns before you use it.',
   ]);
   add('models-and-research', 'Research', [
     browser &&
