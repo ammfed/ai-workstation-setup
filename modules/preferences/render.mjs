@@ -456,6 +456,20 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
     get('PREFS_TEST_FIRST') && TEST_FIRST_RULE,
     get('PREFS_GLOSSARY_ADR') && GLOSSARY_RULE,
     get('PREFS_MODEL_GUIDE') && "When a model is named for a task, read that vendor's official prompting guide first and brief the model the way it says.",
+    get('PREFS_MODEL_GUIDE') &&
+      'In a brief for a long task, name the only stops you want (nothing can move without the user, or a blocker that was put there on purpose) and ask the worker to work through ordinary errors, timeouts and failing tools, so it does not stop early with a list of what remains.',
+    get('PREFS_MODEL_GUIDE') &&
+      'Name exactly which actions need a go-ahead, write any exception into that rule itself, and name the safe steps that need none, such as retrying a call that is safe to repeat.',
+    get('PREFS_MODEL_GUIDE') &&
+      'Say who owns the code. When the worker may restructure as it goes, say the code is its own. When the change must stay small, leave that out and say so.',
+    get('PREFS_MODEL_GUIDE') &&
+      'Keep the cautions a worker carries few and current. Drop notes whose reason no longer holds, and give every "never" rule its scope and reason.',
+    get('PREFS_MODEL_GUIDE') &&
+      'To get less thinking, lower the effort. Do not ask a model to think less or to write its reasoning into the reply.',
+    get('PREFS_MODEL_GUIDE') &&
+      'For a new look, name the specific styles to avoid instead of asking for a look that is not generic.',
+    get('PREFS_MODEL_GUIDE') &&
+      'Ask for a final report that a reader who saw none of the work can follow: key points first, plain full sentences. Prefer "mostly short sentences" to hard word limits, which make the prose choppy.',
   ]);
   add('running-workers', 'Repositories and deadlines', [
     get('PREFS_PUBLIC_REPOS') && 'In a public repository, commit with a no-reply identity and add no trailer that carries an email address.',
@@ -466,27 +480,24 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
 
   // models-and-research
   add('models-and-research', 'Models and effort', [
-    routing === 'capable' && 'Use the most capable model at medium effort by default, for building and for everything else.',
+    routing === 'capable' && 'Use Opus 5.5 at medium effort by default, for building and for everything else.',
     routing === 'capable' &&
-      'Give the design of a new frontend look that is not yet settled (screens, look, layout, clickable journeys) to the most capable model at high effort.',
+      'Give the hard work to Fable 5.2 at low effort: the design of a new frontend look that is not yet settled (screens, look, layout, clickable journeys), a code bug hunt whose cause is unknown, a security audit, a plan that is hard to undo, and research that runs many steps to a decision or a finished write-up. On the vendor\'s published runs, Fable 5.2 at low already matches Opus 5.5 at its highest effort on hard reasoning, for under a tenth of its cost per task.',
     routing === 'capable' &&
-      'Give polish of a prototype whose look is already settled (spacing, copy, states, small layout fixes, fixes from a usability check) to the most capable model at medium effort.',
-    routing === 'capable' && 'Give a code bug hunt whose cause is unknown to the most capable model at high effort.',
+      'Give polish of a prototype whose look is already settled (spacing, copy, states, small layout fixes, fixes from a usability check), scouts, ordinary audits, plans, specs, slides and documents to Opus 5.5 at medium effort.',
     routing === 'capable' &&
-      'Give scouts, audits, plans, research, slides and documents to the most capable model at medium effort. Start security audits and hard-to-undo plans at high.',
+      'Re-run weak work one step up: weak Opus 5.5 work on Fable 5.2 at low, weak Fable 5.2 work at medium, then once more at high. Never use extra-high or max by rule, only when the user names it. Fix or build on Opus 5.5 at medium once the cause is proven or the plan is settled.',
+    routing === 'capable' && 'Give small, clear tasks (a bug with a clear repro, a docs or copy edit, a version bump, a config tweak) to Sonnet 5.5 at medium effort, and re-run it on Opus 5.5 at medium effort after a failed check.',
     routing === 'capable' &&
-      'Re-run weak work once at one effort level higher. Use extra-high only as the second re-run of a bug hunt or new look, or when the user names it. Never use extra-high or max by rule. Fix or build at medium effort once the cause is proven or the plan is settled.',
-    routing === 'capable' && 'Give small, clear tasks (a bug with a clear repro, a docs or copy edit, a version bump, a config tweak) to a faster model at medium effort, and re-run it on the most capable model at medium effort after a failed check.',
-    routing === 'capable' &&
-      'The research agent plans and checks the work. It hands bulk fetching to the bulk research CLI, reading and summaries to the reader subagent, and drafting to a faster model at medium effort.',
-    routing === 'capable' && 'Give reading, lookup and summary sub-tasks to the fastest model at medium effort (for example the reader subagent), low for a one-fact lookup.',
+      'Run research that runs many steps as one orchestrator on Fable 5.2 at low effort that plans, splits and checks the work. It sends direct fetch-and-report tasks to Haiku 5.5 subagents at medium effort (for example the reader subagent), which run in parallel and report back to it, bulk sweeps to the bulk research CLI, and drafting to Sonnet 5.5 at medium. A weak fetcher re-runs once on Sonnet 5.5 at medium. Many cheap fetchers give wider coverage at low cost, and the orchestrator keeps the judgment.',
+    routing === 'capable' && 'Give reading, lookup and summary sub-tasks to Haiku 5.5 at medium effort (for example the reader subagent), low for a one-fact lookup.',
     routing === 'capable' && 'Before planning, investigation or design work starts, check the effort level the agent doing it actually runs at.',
     routing === 'capable' && 'An agent on a lower effort than these rules pick hands that work to a worker at that effort and only reviews and relays the result.',
     routing === 'economical' && 'Use a balanced model at low effort for routine work and sub-tasks.',
     routing === 'economical' && 'Use medium effort for planning, design, hard reasoning and judgment calls.',
     routing === 'economical' && 'Use the most capable model at high effort for building a product, prototype or demo.',
     routing === 'balanced' && 'Use medium effort by default, and high effort for planning, design, hard reasoning and building.',
-    routing !== 'none' && 'Use a model above the one these rules pick only when the user names it for a task.',
+    routing !== 'none' && 'Use a stronger model or a higher effort than these rules pick only when the user names it for a task.',
     get('PREFS_QUOTA') && 'Treat subscription limits as scarce. Check them with `quota-axi` before heavy or parallel work, and take the cheapest path that still answers.',
     get('PREFS_QUOTA') && 'Pause heavy work near a limit and say so.',
     delegateRule(get),

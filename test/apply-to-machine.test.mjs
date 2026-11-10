@@ -63,10 +63,11 @@ test('the settings plan adds hooks and missing keys and keeps everything else', 
   assert.equal(data.model, 'sonnet');
   assert.equal(data.effortLevel, 'medium');
   assert.ok(changes.includes('set the default effort to medium'));
-  assert.deepEqual(data.modelSettings, settings.modelSettings);
+  assert.deepEqual(data.modelSettings, { ...settings.modelSettings, 'claude-fable-5-2': { effortLevel: 'low' } });
   assert.deepEqual(data.statusLine, { command: 'mine' });
   assert.deepEqual(Object.keys(data.hooks), ['UserPromptSubmit', 'PostToolUse', 'SessionStart']);
-  assert.equal(changes.length, 4);
+  assert.equal(changes.length, 5);
+  assert.ok(changes.includes('set the effort for claude-fable-5-2 to low'));
   assert.deepEqual(planSettings(data, { home, statusLine: 'keep', gitClone: false }).changes, []);
 });
 
@@ -74,7 +75,7 @@ test('the settings plan sets the default model and effort only when you have not
   const { data, changes } = planSettings({}, { home: sampleHome, statusLine: 'keep', gitClone: false });
   assert.equal(data.model, 'opus');
   assert.equal(data.effortLevel, 'medium');
-  assert.deepEqual(data.modelSettings, { 'claude-opus-5-5': { effortLevel: 'medium' } });
+  assert.deepEqual(data.modelSettings, { 'claude-opus-5-5': { effortLevel: 'medium' }, 'claude-fable-5-2': { effortLevel: 'low' } });
   assert.ok(changes.includes('set the default model to opus'));
   const own = planSettings({ model: 'haiku', effortLevel: 'low' }, { home: sampleHome, statusLine: 'keep', gitClone: false }).data;
   assert.equal(own.model, 'haiku');
@@ -126,7 +127,7 @@ test('apply-to-machine: dry run, apply, a second run, then undo', { skip: !unix 
   const after = JSON.parse(fs.readFileSync(f.settings, 'utf8'));
   const command = `node "${f.hook}" auto --user`;
   for (const key of ['env', 'model', 'statusLine', 'enabledPlugins']) assert.deepEqual(after[key], f.before[key], key);
-  assert.deepEqual(after.modelSettings, { 'sample-model': { effortLevel: 'low' }, 'claude-opus-5-5': { effortLevel: 'medium' } });
+  assert.deepEqual(after.modelSettings, { 'sample-model': { effortLevel: 'low' }, 'claude-opus-5-5': { effortLevel: 'medium' }, 'claude-fable-5-2': { effortLevel: 'low' } });
   assert.deepEqual(after.hooks.UserPromptSubmit, [{ hooks: [{ type: 'command', command }] }]);
   assert.deepEqual(after.hooks.PostToolUse, [f.other, { hooks: [{ type: 'command', command }] }]);
   assert.equal(after.hooks.SessionStart.filter((m) => m.hooks[0].command.includes('context-reminder.mjs')).length, 1);
