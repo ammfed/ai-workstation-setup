@@ -64,6 +64,7 @@ export const RULE_HOMES = [
 
   // Decisions
   row('Bring the user genuine decisions only', 'core'),
+  row('In work you were given, these steps need no go-ahead', 'core'),
   row('Put decisions on a Lavish decision-card page', 'core', undefined, { PREFS_DECISIONS: 'cards' }),
   row('Ask quick questions with the question tool', 'core'),
   row('Start each decision page from the template', PAGES, undefined, { PREFS_PAGES_ALL_CARDS: 'no' }),
@@ -113,6 +114,7 @@ export const RULE_HOMES = [
   row('Lay a decision page out horizontally', PAGES),
   row('For any visual choice, give every option its own preview', PAGES, ['give every option its own preview', "Never show only the recommended option's visual."]),
   row('Keep page text to the minimum', PAGES, ['Keep page text to the minimum', 'Let visuals carry the meaning']),
+  row('How the page is built is your call', PAGES),
   row('Every review page also reads well on a phone', PAGES, ['reads well on a phone (390 px wide)', 'Check a 390 by 844 screenshot']),
   row('Give review pages a generous header', PAGES),
 
@@ -131,6 +133,7 @@ export const RULE_HOMES = [
   row('Land: each worker opens a pull request', WORKERS, ['opening a pull request and watching its checks']),
   row('A review page is for a genuine decision', PAGES, ['A review page is for a genuine decision', 'do not get a review page']),
   row('Decisions go to the user only at genuine forks', WORKERS, ['only at genuine forks', 'is never escalated as a decision']),
+  row('Ownership in worker briefs', WORKERS, ['include this sentence word for word', 'Leave the sentence out, and say the change should stay small', 'Name what the worker decides on its own', "read its diff, not only its summary"]),
 
   // Building
   row('Before building something new', WORKERS),
@@ -145,7 +148,7 @@ export const RULE_HOMES = [
   row('When a model is named for a task', WORKERS),
   row('In a brief for a long task, name the only stops you want', WORKERS),
   row('Name exactly which actions need a go-ahead', WORKERS),
-  row('Say who owns the code', WORKERS),
+  row('Say who owns the code', WORKERS, undefined, { PREFS_OWNERSHIP: 'no' }),
   row('Keep the cautions a worker carries few and current', WORKERS),
   row('To get less thinking, lower the effort', WORKERS),
   row('For a new look, name the specific styles to avoid', WORKERS),
@@ -187,6 +190,7 @@ export const RULE_HOMES = [
   row('Examples of the current leading models', MODELS),
   row('Before advising what to buy', MODELS, ["fetch each product's own pricing page", 'Mark every claim']),
   row('Research is not finished as a report', MODELS),
+  row('Brief a helper with one closed task', MODELS, ['Brief a helper with one closed task', 'its brief carries no ownership sentence']),
 
   // Safety
   row('Never put secrets, tokens, passwords', 'core'),

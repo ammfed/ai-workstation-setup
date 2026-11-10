@@ -18,7 +18,7 @@ import { Context, detectPlatform } from '../lib/context.mjs';
 import firstmate from '../modules/firstmate/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
 import { parsePrivateRules } from '../modules/preferences/private-rules.mjs';
-import { BRIEF_BLOCK_END, BRIEF_BLOCK_START, PREFERENCE_SKILLS, mergeBriefBlock, renderBriefInclude, renderCaptain, renderCaptainShared, renderPreferenceSkills, renderPreferences } from '../modules/preferences/render.mjs';
+import { BRIEF_BLOCK_END, BRIEF_BLOCK_START, OWNERSHIP_SENTENCE, PREFERENCE_SKILLS, mergeBriefBlock, renderBriefInclude, renderCaptain, renderCaptainShared, renderPreferenceSkills, renderPreferences } from '../modules/preferences/render.mjs';
 import { ALL_ON, RULE_HOMES } from './rule-homes.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -128,6 +128,28 @@ test('building and the everyday habits are written in their sections, and each c
   const off = await render({ PREFS_BUILD_WHOLE_GOAL: 'no', PREFS_KUN: 'no', PREFS_MODEL_GUIDE: 'no', PREFS_HABITS: 'no' });
   assert.doesNotMatch(off, /## Building something new|run \/kun once/);
   assert.doesNotMatch(off, /End every reply with the next actions|"Check X"|A statement is a claim/);
+});
+
+test('ownership: the vendor sentence goes into worker briefs for code agents keep building, kept out of the user\'s own files, and one answer turns it all off', async () => {
+  const homes = await renderHomes();
+  const owner = sectionOf(homes['running-workers'], 'Ownership in briefs');
+  assert.ok(owner.includes(`include this sentence word for word: "${OWNERSHIP_SENTENCE}"`));
+  assert.match(owner, /Leave the sentence out, .* the notes vault, a client's or another team's repository/);
+  assert.match(owner, /read its diff, not only its summary/);
+  assert.doesNotMatch(homes['running-workers'], /- Say who owns the code\./, 'one home for the ownership guidance');
+  assert.match((await renderHomes({ PREFS_OWNERSHIP: 'no' }))['running-workers'], /- Say who owns the code\./, 'the short form returns when ownership is off');
+  assert.match(sectionOf(homes.core, 'Decisions'), /these steps need no go-ahead: retrying a call that is safe to repeat/);
+  assert.match(sectionOf(homes['review-pages'], 'Building the page'), /How the page is built is your call/);
+  assert.match(sectionOf(homes['models-and-research'], 'Briefing helpers'), /carries no ownership sentence/);
+  const ctx = await answer({ PREFS_TARGETS: 'claude,firstmate' });
+  const brief = renderBriefInclude((key) => ctx.get(key));
+  assert.match(sectionOf(brief, 'Room to work'), /When it says the code is yours, reshape what serves the goal/);
+  assert.match(sectionOf(brief, 'Room to work'), /merging, pushing, destructive actions and decisions still hold/);
+  assert.doesNotMatch(brief, /This codebase is yours/, 'the sentence itself goes only into briefs that should carry it');
+
+  const off = await render({ PREFS_OWNERSHIP: 'no' });
+  assert.doesNotMatch(off, /This codebase is yours|need no go-ahead|How the page is built is your call|Briefing helpers/);
+  assert.doesNotMatch(renderBriefInclude((key) => (key === 'PREFS_OWNERSHIP' ? false : ctx.get(key))), /Room to work/);
 });
 
 test('the /kun rule is on by default, in sessions and worker briefs, and can be turned off', async () => {
