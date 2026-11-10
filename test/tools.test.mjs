@@ -90,6 +90,36 @@ test('a check that never returns fails its step when it times out', async () => 
   assert.match(rec.failures[0], /node: installed, but its check timed out after 0\.5s \(never returns\)/);
 });
 
+// On Windows a killed check can leave its temporary folder busy (EBUSY). The failed cleanup
+// must not hide the real result: the timed-out message survives, and the cleanup only warns.
+test('a failed cleanup of the check folder does not hide the timed-out message', async () => {
+  const { ctx, rec } = context();
+  const tool = {
+    name: 'node',
+    install: { default: 'true' },
+    check: { about: 'never returns', files: { 'hang.js': 'setInterval(() => {}, 1000)' }, cmd: 'node "{tmp}/hang.js"', expect: /never matches/, timeoutMs: 500 },
+  };
+  const realRm = fs.rmSync;
+  let tmp;
+  fs.rmSync = (p, ...rest) => {
+    if (String(p).includes('-check-')) {
+      tmp = p;
+      throw Object.assign(new Error(`EBUSY: resource busy or locked, rmdir '${p}'`), { code: 'EBUSY' });
+    }
+    return realRm(p, ...rest);
+  };
+  try {
+    assert.equal(await ctx.step('node', () => ctx.ensureTool(tool)), undefined);
+  } finally {
+    fs.rmSync = realRm;
+    if (tmp) realRm(tmp, { recursive: true, force: true });
+  }
+  assert.equal(rec.failures.length, 1);
+  assert.match(rec.failures[0], /check timed out after 0\.5s/);
+  assert.doesNotMatch(rec.failures[0], /EBUSY/);
+  assert.ok(rec.warnings.some((w) => /could not remove the temporary folder.*EBUSY/.test(w)), 'the cleanup failure is a warning');
+});
+
 // Replays a tool's real output through its real check spec, with node standing in for the tool.
 const replay = (key, output) => ({
   name: 'node',
