@@ -66,9 +66,21 @@ passes after a FAILED one sends a short `recovered` note, so the failure does no
 The 09:30 catch-up (systemd and cron, when the daily time is earlier than 09:30) runs
 `daily-sync.mjs --catch-up`: it does nothing when a run already succeeded that day, so it only
 starts when the morning run failed or never happened. A run waits first, for at most
-`networkWaitSec` (300 by default; `0` turns it off), until the host of each repo it pulls or
-pushes resolves, because a run at boot can start before DNS works. After the wait it goes on and
-the steps that need the network report their own failure.
+`networkWaitSec` (600 by default; `0` turns it off), until the host of each repo it pulls,
+watches or pushes resolves and, for an https remote, accepts a secure connection with a valid
+certificate. A run at boot can start before DNS works, or while every https host shows the
+wrong certificate. A systemd user timer cannot wait for the system's network-online target, so
+the script does this wait itself, the same way on every platform.
+
+After the wait the steps still run. When no step that needs the network worked, and either the
+wait ended with the network still down or every such step failed with a network error (a name
+that did not resolve, a refused or reset connection, a timeout, a certificate error), the report
+gets one line, `network was down ...; the next run tries again`, instead of one failure per
+step. That line does not make the run FAILED and does not send the report by itself. The run is
+not a success either, so the 09:30 catch-up runs, and a network that stays down for `staleHours`
+is reported as no successful run. One service that fails while another network step works is
+still its own failure. On Linux, a system clock that is not synced to network time adds one
+plain note to the report (`clockCommand` `""` turns that check off).
 
 ## Pausing and removing it
 
@@ -133,6 +145,12 @@ Paths may start with `~`.
   that start `ingesting:` or `ingest (` (for the model-call count), `<name> failed on:` or
   `ingest: FAILED <file>: <reason>` (for failed files, on stdout or stderr), so
   a daily script should pass the ingest's own output through.
+- The vault's jobs share one lock, and timers that missed their time start together after a
+  wake-up. When the dry run says another job holds the lock, it is asked again every
+  `vault.lockPollSec` (30) seconds for at most `vault.lockWaitSec` (600) seconds. A lock that
+  frees in time is only logged. A vault that stays busy adds a plain note, and only the third
+  run in a row that finds it busy puts a line in "Needs you": one or two busy runs are timers
+  catching up together, while three separate starts point to a job that is stuck.
 - Each run also checks the vault read-only: a failing `bin/status` (a stuck run) or `bin/lint`
   (lint problems) puts one line in "Needs you". A vault without either script skips that check.
 - When every ingest attempt of a run fails (no success, at least one attempt), the run is
