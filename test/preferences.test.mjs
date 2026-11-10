@@ -256,24 +256,22 @@ test('planning effort is checked, and the agent decides process questions from t
   assert.doesNotMatch(await render({ PREFS_AUTONOMY: 'ask' }), /read the primary source/);
 });
 
-test('the capable model rules: medium effort for research, plans, audits and polish, high for a new look and an unknown-cause bug hunt, small tasks on a faster model at medium', async () => {
+test('the capable model rules: Opus 5.5 medium for most work, Fable 5.2 medium for hard work and weak re-runs, small tasks on Sonnet 5.5 medium', async () => {
   const models = sectionOf((await renderHomes())['models-and-research'], 'Models and effort');
-  assert.match(models, /Use the most capable model at medium effort by default, for building and for everything else\./);
-  assert.match(models, /Give the design of a new frontend look that is not yet settled \(screens, look, layout, clickable journeys\) to the most capable model at high effort\./);
-  assert.match(models, /Give polish of a prototype whose look is already settled \(spacing, copy, states, small layout fixes, fixes from a usability check\) to the most capable model at medium effort\./);
-  assert.match(models, /Give a code bug hunt whose cause is unknown to the most capable model at high effort\./);
-  assert.match(models, /Give scouts, audits, plans, research, slides and documents to the most capable model at medium effort\. Start security audits and hard-to-undo plans at high\./);
-  assert.match(models, /Re-run weak work once at one effort level higher\. Use extra-high only as the second re-run of a bug hunt or new look, or when the user names it\. Never use extra-high or max by rule\./);
-  assert.match(models, /to a faster model at medium effort, and re-run it on the most capable model at medium effort after a failed check\./);
-  assert.match(models, /The research agent plans and checks the work\. It hands bulk fetching to the bulk research CLI, reading and summaries to the reader subagent, and drafting to a faster model at medium effort\./);
-  assert.match(models, /Give reading, lookup and summary sub-tasks to the fastest model at medium effort \(for example the reader subagent\), low for a one-fact lookup\./);
+  assert.match(models, /Use Opus 5\.5 at medium effort by default, for building and for everything else\./);
+  assert.match(models, /Give the hard work to Fable 5\.2 at medium effort: the design of a new frontend look that is not yet settled \(screens, look, layout, clickable journeys\), a code bug hunt whose cause is unknown, a security audit, a plan that is hard to undo, and research that runs many steps/);
+  assert.match(models, /Give polish of a prototype whose look is already settled \(spacing, copy, states, small layout fixes, fixes from a usability check\), scouts, ordinary audits, plans, specs, slides and documents to Opus 5\.5 at medium effort\./);
+  assert.match(models, /Re-run weak work once on Fable 5\.2 at medium effort\. Re-run weak Fable 5\.2 work once at high\. Never use extra-high or max by rule, only when the user names it\./);
+  assert.match(models, /bills Fable to usage credits[^\n]*run the Fable work on Opus 5\.5 at high instead\./);
+  assert.match(models, /to Sonnet 5\.5 at medium effort, and re-run it on Opus 5\.5 at medium effort after a failed check\./);
+  assert.match(models, /The research agent plans and checks the work\. It hands bulk fetching to the bulk research CLI, reading and summaries to the reader subagent, and drafting to Sonnet 5\.5 at medium effort\./);
+  assert.match(models, /Give reading, lookup and summary sub-tasks to Haiku 5\.5 at medium effort \(for example the reader subagent\), low for a one-fact lookup\./);
   assert.doesNotMatch(models, /Run research on the most capable model at high effort/);
-  assert.doesNotMatch(models, /raise it to high after a failed check/);
   // No rule starts any work at extra-high or max.
-  for (const line of models.split('\n').filter((l) => /extra-high|\bmax\b/.test(l))) assert.match(line, /only as the second re-run|Never use extra-high or max/);
-  assert.doesNotMatch(models, /investigation, research or design work starts/);
+  for (const line of models.split('\n').filter((l) => /extra-high|\bmax\b/.test(l))) assert.match(line, /Never use extra-high or max/);
   assert.match(models, /Before planning, investigation or design work starts/);
   const other = await render({ PREFS_MODEL_ROUTING: 'balanced' });
+  assert.doesNotMatch(other, /Fable 5\.2/);
   assert.doesNotMatch(other, /Run research on the most capable model/);
 });
 

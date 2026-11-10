@@ -43,24 +43,20 @@ const BACKENDS = {
 export function dispatchProfiles(kind, harness) {
   const profile = (model, effort) => ({ harness, ...(harness === 'claude' ? { model } : {}), effort });
   if (kind === 'capable') {
-    // A starting example after docs/model-map.md; change it to suit your own work. A stronger
-    // model (Fable) is left to the person to ask for by name, not to a rule.
+    // A starting example after docs/model-map.md; change it to suit your own work. Fable 5.2 at
+    // medium takes the hard work that used Opus 5.5 at high: on the vendor's published runs it
+    // matches Opus 5.5 at its highest effort for well under the cost per task.
     return {
       rules: [
         {
-          when: "The task designs a prototype's user-facing frontend whose look is not yet settled: new screens, a new visual look, layout, characters, or new clickable user journeys.",
-          use: [profile('claude-opus-5-5', 'high')],
-          why: 'A new frontend look gets the most capable model at high effort. Re-run at extra-high effort only as a second re-run after a weak result, or when you name it.',
+          when: "Hard work: a prototype's user-facing frontend whose look is not yet settled (new screens, a new visual look, layout, characters, or new clickable user journeys), a code bug hunt whose cause is not yet known, a security audit, a plan that is hard to undo, or research that runs many steps to a decision or a finished write-up.",
+          use: [profile('claude-fable-5-2', 'medium')],
+          why: 'Fable 5.2 at medium matches or beats Opus 5.5 at its highest effort on the vendor runs, for well under its cost per task. Re-run a weak result once at high. When the plan bills Fable to usage credits, or the Fable share of the weekly limit runs low, run it on Opus 5.5 at high instead. Fix or build on Opus 5.5 at medium once the cause is proven or the plan is settled. Research hands bulk fetching to agy with gemini-3.8-flash-medium (claude-sonnet-4-6 on a Gemini quota error), reading and summaries to the reader subagent, and drafting to Sonnet 5.5 at medium effort.',
         },
         {
-          when: 'A code bug hunt whose cause is not yet known: a root-cause investigation or diagnosis of a failure, crash, or wrong behaviour in code.',
-          use: [profile('claude-opus-5-5', 'high')],
-          why: 'A bug hunt with an unknown cause gets high effort. Re-run at extra-high effort only as the second re-run when the cause stays hidden, and fix at medium effort once the cause is proven.',
-        },
-        {
-          when: 'The task is research, a scout report, an audit, a plan, a spec, an architecture decision, polish of a settled frontend look (spacing, copy, states, small layout fixes, usability fixes), or slides and documents.',
+          when: 'The task is a scout report, an ordinary audit, a plan, a spec, an architecture decision, polish of a settled frontend look (spacing, copy, states, small layout fixes, usability fixes), or slides and documents.',
           use: [profile('claude-opus-5-5', 'medium')],
-          why: 'The most capable model starts at medium effort; re-run once at high effort when the result is weak. Security audits and hard-to-undo plans start at high. Research hands bulk fetching to agy with gemini-3.8-flash-medium (claude-sonnet-4-6 on a Gemini quota error), reading and summaries to the reader subagent, and drafting to Sonnet 5.5 at medium effort.',
+          why: 'Opus 5.5 starts at medium effort. A weak result re-runs once on Fable 5.2 at medium.',
         },
         {
           when: 'A small, well-defined task with a clear outcome and little ambiguity: a bug fix with a clear repro, a docs or copy edit, a version bump, a config tweak, or another narrow mechanical change.',
@@ -230,7 +226,7 @@ export default {
       message: 'Crew dispatch profiles (config/crew-dispatch.json)',
       default: 'capable',
       choices: [
-        { value: 'capable', label: 'capable - Opus at medium effort for research with helpers, plans, audits, polish and documents, Opus at high for a new frontend look and a bug hunt with an unknown cause, small clear tasks on Sonnet at medium (docs/model-map.md)' },
+        { value: 'capable', label: 'capable - Opus at medium effort for most work, Fable at medium for a new frontend look, a bug hunt with an unknown cause, security audits, hard-to-undo plans and long research, small clear tasks on Sonnet at medium (docs/model-map.md)' },
         { value: 'starter', label: 'starter - strong model for builds, more effort for planning, light default' },
         { value: 'none', label: 'none - every worker uses the crew harness' },
       ],

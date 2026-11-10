@@ -155,7 +155,7 @@ export default {
       key: 'CLAUDE_MODEL_EFFORTS',
       type: 'text',
       message: 'Default effort per model, like "claude-opus-5-5=medium, claude-sonnet-5-5=low" (levels: low, medium, high, xhigh; empty to keep)',
-      default: 'claude-opus-5-5=medium',
+      default: 'claude-opus-5-5=medium, claude-fable-5-2=medium',
     },
     {
       key: 'CLAUDE_REMOTE_CONTROL',
