@@ -482,16 +482,14 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
   add('models-and-research', 'Models and effort', [
     routing === 'capable' && 'Use Opus 5.5 at medium effort by default, for building and for everything else.',
     routing === 'capable' &&
-      'Give the hard work to Fable 5.2 at medium effort: the design of a new frontend look that is not yet settled (screens, look, layout, clickable journeys), a code bug hunt whose cause is unknown, a security audit, a plan that is hard to undo, and research that runs many steps to a decision or a finished write-up. On the vendor\'s published runs, Fable 5.2 at medium matches or beats Opus 5.5 at its highest effort for well under its cost per task.',
+      'Give the hard work to Fable 5.2 at low effort: the design of a new frontend look that is not yet settled (screens, look, layout, clickable journeys), a code bug hunt whose cause is unknown, a security audit, a plan that is hard to undo, and research that runs many steps to a decision or a finished write-up. On the vendor\'s published runs, Fable 5.2 at low already matches Opus 5.5 at its highest effort on hard reasoning, for under a tenth of its cost per task.',
     routing === 'capable' &&
       'Give polish of a prototype whose look is already settled (spacing, copy, states, small layout fixes, fixes from a usability check), scouts, ordinary audits, plans, specs, slides and documents to Opus 5.5 at medium effort.',
     routing === 'capable' &&
-      'Re-run weak work once on Fable 5.2 at medium effort. Re-run weak Fable 5.2 work once at high. Never use extra-high or max by rule, only when the user names it. Fix or build on Opus 5.5 at medium once the cause is proven or the plan is settled.',
-    routing === 'capable' &&
-      'When the plan bills Fable to usage credits instead of its included limits, or the Fable share of the weekly limit runs low (check `quota-axi`), run the Fable work on Opus 5.5 at high instead.',
+      'Re-run weak work one step up: weak Opus 5.5 work on Fable 5.2 at low, weak Fable 5.2 work at medium, then once more at high. Never use extra-high or max by rule, only when the user names it. Fix or build on Opus 5.5 at medium once the cause is proven or the plan is settled.',
     routing === 'capable' && 'Give small, clear tasks (a bug with a clear repro, a docs or copy edit, a version bump, a config tweak) to Sonnet 5.5 at medium effort, and re-run it on Opus 5.5 at medium effort after a failed check.',
     routing === 'capable' &&
-      'The research agent plans and checks the work. It hands bulk fetching to the bulk research CLI, reading and summaries to the reader subagent, and drafting to Sonnet 5.5 at medium effort.',
+      'Run research that runs many steps as one orchestrator on Fable 5.2 at low effort that plans, splits and checks the work. It sends direct fetch-and-report tasks to Haiku 5.5 subagents at medium effort (for example the reader subagent), which run in parallel and report back to it, bulk sweeps to the bulk research CLI, and drafting to Sonnet 5.5 at medium. A weak fetcher re-runs once on Sonnet 5.5 at medium. Many cheap fetchers give wider coverage at low cost, and the orchestrator keeps the judgment.',
     routing === 'capable' && 'Give reading, lookup and summary sub-tasks to Haiku 5.5 at medium effort (for example the reader subagent), low for a one-fact lookup.',
     routing === 'capable' && 'Before planning, investigation or design work starts, check the effort level the agent doing it actually runs at.',
     routing === 'capable' && 'An agent on a lower effort than these rules pick hands that work to a worker at that effort and only reviews and relays the result.',

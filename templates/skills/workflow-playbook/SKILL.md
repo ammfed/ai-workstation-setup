@@ -374,7 +374,7 @@ Why: one supervisor that checks every phase against the same method catches drif
 
 1. **Match the model to the job.**
    - Follow the models-and-research skill for the model and effort of each job.
-   - Without it: the default strong model at medium effort for most work, the strongest model at medium effort for a code bug hunt whose cause is unknown and for a new look, and a faster model for small, clear tasks and bulk reading.
+   - Without it: the default strong model at medium effort for most work, the strongest model at low effort for a code bug hunt whose cause is unknown and for a new look, and a faster model for small, clear tasks and bulk reading.
    - Give each helper one task, and check its work yourself.
    - Use a model above these only when the owner names it for a task. Never set extra-high or max effort by rule.
    - A coordinator running at a lower effort than these rules pick never writes the plan itself. It hands planning to a worker at the right effort and checks the effort that actually started.
