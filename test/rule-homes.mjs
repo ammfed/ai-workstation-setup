@@ -82,7 +82,8 @@ export const RULE_HOMES = [
   row('Before describing a question as still open', 'core', undefined, { PREFS_DECISIONS: 'tool' }),
   row('Before calling a review page open', PAGES, [
     'Before calling a review page open',
-    'collects answers: leave it running',
+    'run `timeout 15 lavish-axi poll <file>` before calling it open',
+    'A poll consumes the answer it returns',
     'Never reopen a page the user ended',
     'does not mean answers were lost',
   ]),
@@ -120,6 +121,7 @@ export const RULE_HOMES = [
 
   // Review page delivery
   row('Before sending a page link', PAGES),
+  row('Check a set of options as one contact sheet', PAGES),
   row('Always give the user the page link in chat', PAGES),
   row('When a decision waits on a page', PAGES, ['build and check the page first', 'Do not ask the question anywhere else']),
   row('While waiting, prepare the next stage', PAGES),
