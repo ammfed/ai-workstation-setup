@@ -803,6 +803,7 @@ test('an unsynced system clock is one plain note', () => {
   const synced = job({ vault: vault(rawFolder()), clockCommand: node('print.cjs', 'yes') });
   synced.run();
   assert.doesNotMatch(synced.latest(), /clock:/);
+});
 
 test('open review pages with no listener are listed in one line, and the listing never polls', () => {
   const list = [
