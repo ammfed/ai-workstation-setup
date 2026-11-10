@@ -136,6 +136,8 @@ test('ownership: the vendor sentence goes into worker briefs for code agents kee
   assert.ok(owner.includes(`include this sentence word for word: "${OWNERSHIP_SENTENCE}"`));
   assert.match(owner, /Leave the sentence out, .* the notes vault, a client's or another team's repository/);
   assert.match(owner, /read its diff, not only its summary/);
+  assert.doesNotMatch(homes['running-workers'], /- Say who owns the code\./, 'one home for the ownership guidance');
+  assert.match((await renderHomes({ PREFS_OWNERSHIP: 'no' }))['running-workers'], /- Say who owns the code\./, 'the short form returns when ownership is off');
   assert.match(sectionOf(homes.core, 'Decisions'), /these steps need no go-ahead: retrying a call that is safe to repeat/);
   assert.match(sectionOf(homes['review-pages'], 'Building the page'), /How the page is built is your call/);
   assert.match(sectionOf(homes['models-and-research'], 'Briefing helpers'), /carries no ownership sentence/);

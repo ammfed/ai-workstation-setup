@@ -148,7 +148,7 @@ export const RULE_HOMES = [
   row('When a model is named for a task', WORKERS),
   row('In a brief for a long task, name the only stops you want', WORKERS),
   row('Name exactly which actions need a go-ahead', WORKERS),
-  row('Say who owns the code', WORKERS),
+  row('Say who owns the code', WORKERS, undefined, { PREFS_OWNERSHIP: 'no' }),
   row('Keep the cautions a worker carries few and current', WORKERS),
   row('To get less thinking, lower the effort', WORKERS),
   row('For a new look, name the specific styles to avoid', WORKERS),

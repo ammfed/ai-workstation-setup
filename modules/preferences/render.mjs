@@ -492,7 +492,8 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
       'In a brief for a long task, name the only stops you want (nothing can move without the user, or a blocker that was put there on purpose) and ask the worker to work through ordinary errors, timeouts and failing tools, so it does not stop early with a list of what remains.',
     get('PREFS_MODEL_GUIDE') &&
       'Name exactly which actions need a go-ahead, write any exception into that rule itself, and name the safe steps that need none, such as retrying a call that is safe to repeat.',
-    get('PREFS_MODEL_GUIDE') &&
+    // With PREFS_OWNERSHIP, "Ownership in briefs" above says this in full, so the short form is left out.
+    get('PREFS_MODEL_GUIDE') && !get('PREFS_OWNERSHIP') &&
       'Say who owns the code. When the worker may restructure as it goes, say the code is its own. When the change must stay small, leave that out and say so.',
     get('PREFS_MODEL_GUIDE') &&
       'Keep the cautions a worker carries few and current. Drop notes whose reason no longer holds, and give every "never" rule its scope and reason.',
