@@ -48,12 +48,22 @@ fs.writeFileSync(path.join(helpers, 'say.cjs'), 'console.log(process.argv.slice(
 fs.writeFileSync(path.join(helpers, 'sayerr.cjs'), 'console.error(process.argv.slice(2).join("\\n"));');
 // `lines.cjs <text> <count>` prints the text <count> times, one per line.
 fs.writeFileSync(path.join(helpers, 'lines.cjs'), 'for (let i = 0; i < Number(process.argv[3]); i += 1) console.log(`${process.argv[2]} f${i}`);');
+// `locked.cjs <counter> <busy>` stands in for a vault ingest dry run: for its first <busy> calls it
+// fails as the vault's lock helper does when another job holds .ingest/lock, then reports nothing new.
+fs.writeFileSync(
+  path.join(helpers, 'locked.cjs'),
+  "const fs = require('fs'); const f = process.argv[2]; const n = (fs.existsSync(f) ? Number(fs.readFileSync(f, 'utf8')) : 0) + 1; fs.writeFileSync(f, String(n));" +
+    " if (n <= Number(process.argv[3])) { console.error('ingest: another run holds the lock (pid 1) - exiting'); process.exit(1); } console.log('nothing new');",
+);
+// `fail.cjs <line>` prints the line to stderr and exits 1, as a command that cannot reach its server.
+fs.writeFileSync(path.join(helpers, 'fail.cjs'), 'console.error(process.argv.slice(2).join(" ")); process.exit(1);');
 // Stand-ins for clickup-axi and a TickTick CLI, printing the shapes the real ones print.
 fs.writeFileSync(
   path.join(helpers, 'clickup.cjs'),
   `console.log(${JSON.stringify('count: 3 active lists in space 9\nlists[3]{id,name,folder}:\n  "101",Milestones,(folderless)\n  "102",Deliverables,Team A\n  "103",Findings,Team B\nhelp[1]:\n  Run `clickup-axi lists --space "<name|id>" --archived` to see archived lists')});`,
 );
 fs.writeFileSync(path.join(helpers, 'ticktick.cjs'), `console.log(JSON.stringify([{ name: 'Work' }, { name: 'Personal' }, { name: 'Errands' }]));`);
+const HOUR_MS = 3_600_000;
 const node = (file, ...rest) => [`"${process.execPath}"`, `"${path.join(helpers, file)}"`, ...rest.map((r) => `"${r}"`)].join(' ');
 
 function git(dir, args) {
@@ -70,7 +80,8 @@ function job(config) {
   const notes = path.join(dir, 'notes.txt');
   const calls = path.join(dir, 'model-calls.txt');
   const file = path.join(dir, 'config.json');
-  const write = (c) => fs.writeFileSync(file, JSON.stringify({ notify: node('notify.cjs', notes), model: { command: node('model.cjs', calls) }, ...c }));
+  // clockCommand "" keeps the host's clock state out of the reports these tests compare.
+  const write = (c) => fs.writeFileSync(file, JSON.stringify({ notify: node('notify.cjs', notes), model: { command: node('model.cjs', calls) }, clockCommand: '', ...c }));
   write(config);
   return {
     dir,
@@ -579,7 +590,7 @@ test('a run waits a bounded time for the push remote to resolve, then goes on', 
   const lost = job({ networkWaitSec: 1, vault: { ...vault(rawFolder()), path: vaultRepo('https://no-such-host.invalid/x.git') } });
   const r = lost.run();
   assert.equal(r.code, 0, r.out);
-  assert.match(r.out, /network: no-such-host\.invalid did not resolve within 1s/);
+  assert.match(r.out, /network: no-such-host\.invalid could not be reached within 1s \(ENOTFOUND|EAI_AGAIN/);
   const up = job({ networkWaitSec: 1, vault: { ...vault(rawFolder()), path: vaultRepo('git@localhost:me/notes.git') } });
   assert.doesNotMatch(up.run().out, /network:/);
   const off = job({ networkWaitSec: 0, vault: { ...vault(rawFolder()), path: vaultRepo('https://no-such-host.invalid/x.git') } });
@@ -677,4 +688,119 @@ test('cron gets a second 09:30 line that runs with --catch-up', () => {
   const again = recordingCtx(input);
   cronLine(again, '/x/daily-sync.mjs', at('07:30'));
   assert.deepEqual(again.ran, [], 'both lines already there: nothing is rewritten');
+});
+
+/** A port on this machine that nothing listens on, so a connection to it is refused at once. */
+async function closedPort() {
+  const net = await import('node:net');
+  const server = net.createServer();
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  await new Promise((resolve) => server.close(resolve));
+  return port;
+}
+
+test('a network that stays down is one plain line: not FAILED, not sent, and not a success', async () => {
+  const url = `https://127.0.0.1:${await closedPort()}/x.git`;
+  const pulled = path.join(tmp, `clone${++n}`);
+  git(tmp, ['init', '-q', '-b', 'main', pulled]);
+  git(pulled, ['remote', 'add', 'origin', url]);
+  const fails = 'curl: (6) Could not resolve host: api.example.invalid';
+  const j = job({
+    networkWaitSec: 1,
+    retryWaitSec: 0,
+    pull: [pulled],
+    clickup: { command: node('fail.cjs', fails), space: '9', lists: ['101'] },
+    ticktick: { command: node('fail.cjs', 'getaddrinfo ENOTFOUND api.example.invalid'), lists: ['Work'] },
+  });
+  j.setState({ lastSuccess: Date.now() - HOUR_MS, lastRun: { at: Date.now() - HOUR_MS, failed: 0 } });
+  const before = j.state().lastSuccess;
+  const r = j.run();
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /network: 127\.0\.0\.1 could not be reached within 1s \(ECONNREFUSED\)/);
+  const report = j.latest();
+  assert.match(report, /^daily-sync .*: network was down \(no model calls\)\nnetwork was down after a 1-second wait, so 3 step\(s\) that need it could not run \(127\.0\.0\.1: the connection was refused\); the next run tries again\n/);
+  assert.doesNotMatch(report, /FAILED|Failed:|fetch from|clickup:|ticktick:/);
+  assert.deepEqual(j.notified(), [], 'a network-down run alone sends nothing');
+  assert.equal(j.state().lastSuccess, before, 'a network-down run is not a success, so the catch-up runs and a long outage turns stale');
+  assert.equal(j.state().lastRun.networkDown, true);
+  assert.equal(spawnSync(process.execPath, [script, '--config', path.join(j.dir, 'config.json'), '--status'], { encoding: 'utf8' }).stdout, '');
+  // A day later the stale notice names the network as the reason.
+  j.setState({ ...j.state(), lastSuccess: Date.now() - 30 * HOUR_MS });
+  j.write({ networkWaitSec: 0, retryWaitSec: 0 });
+  j.run();
+  assert.match(j.latest(), /no successful run since .* \(30h ago\): the network was down at the last run/);
+});
+
+test('every network step failing with a network error is one line even without a repo to probe', () => {
+  const j = job({
+    retryWaitSec: 0,
+    clickup: { command: node('fail.cjs', 'Error: connect ECONNREFUSED 10.0.0.1:443'), space: '9', lists: ['101'] },
+    ticktick: { command: node('fail.cjs', 'SSL: no alternative certificate subject name matches target host name'), lists: ['Work'] },
+  });
+  assert.equal(j.run().code, 0);
+  assert.match(j.latest(), /^daily-sync .*: network was down .*\nnetwork was down, so 2 step\(s\) that need it could not run \(clickup: could not read/);
+  assert.deepEqual(j.notified(), []);
+});
+
+test('one service down while the network works still fails loudly on its own', () => {
+  const { clone } = remoteAndClone();
+  const j = job({ networkWaitSec: 1, retryWaitSec: 0, pull: [clone], clickup: { command: node('fail.cjs', 'curl: (6) Could not resolve host: api.example.invalid'), space: '9', lists: ['101'] } });
+  assert.equal(j.run().code, 1);
+  const [sent] = j.notified();
+  assert.match(sent, /^FAILED daily-sync .*: 1 failed/);
+  assert.match(sent, /- clickup: could not read the lists of space 9 \(exit 1\): curl: \(6\) Could not resolve host/);
+  assert.doesNotMatch(sent, /network was down/);
+  // Two network steps that fail for different reasons are not a network outage either.
+  const mixed = job({
+    retryWaitSec: 0,
+    clickup: { command: node('fail.cjs', 'Could not resolve host: api.example.invalid'), space: '9', lists: ['101'] },
+    ticktick: { command: node('fail.cjs', 'error: 401 unauthorized'), lists: ['Work'] },
+  });
+  assert.equal(mixed.run().code, 1);
+  assert.match(mixed.latest(), /^FAILED daily-sync .*: 2 failed/);
+  assert.doesNotMatch(mixed.latest(), /network was down/);
+});
+
+test('a vault busy with another vault job is waited for, and a lock that frees in time is only logged', () => {
+  const counter = path.join(tmp, `lockcount${++n}`);
+  const j = job({ vault: { ...vault(rawFolder()), dryRun: node('locked.cjs', counter, '2'), lockWaitSec: 5, lockPollSec: 0.2 } });
+  const r = j.run();
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /vault: another vault job held its lock; it was free after \d+s/);
+  assert.equal(fs.readFileSync(counter, 'utf8'), '3');
+  assert.match(j.latest(), /all quiet/);
+  assert.deepEqual(j.notified(), []);
+  assert.equal(j.state().vaultBusy, undefined);
+});
+
+test('a vault that stays busy is a note until the third run in a row, then it needs you', () => {
+  const counter = path.join(tmp, `lockcount${++n}`);
+  const j = job({ vault: { ...vault(rawFolder()), dryRun: node('locked.cjs', counter, '1000'), lockWaitSec: 0.3, lockPollSec: 0.1 } });
+  for (const runs of [1, 2]) {
+    assert.equal(j.run().code, 0);
+    assert.match(j.latest(), new RegExp(`vault: busy with another vault job for the whole wait; ingest is checked again next run \\(${runs} busy run\\(s\\) in a row, reported at 3\\)`));
+    assert.doesNotMatch(j.latest(), /Needs you/);
+    assert.equal(j.state().vaultBusy.runs, runs);
+    assert.ok(j.state().lastSuccess, 'a busy vault is no failed step');
+  }
+  assert.deepEqual(j.notified(), []);
+  assert.equal(j.run().code, 0);
+  const [sent] = j.notified();
+  assert.match(sent, /Needs you:\n- vault: another vault job has held its lock through the last 3 runs \(since .*\), so nothing was ingested; check which vault job is stuck/);
+  // Once the lock is free again, the count starts over.
+  fs.writeFileSync(counter, '1000');
+  assert.equal(j.run().code, 0);
+  assert.equal(j.state().vaultBusy, undefined);
+  assert.doesNotMatch(j.latest(), /vault: /);
+});
+
+test('an unsynced system clock is one plain note', () => {
+  const j = job({ vault: vault(rawFolder()), clockCommand: node('print.cjs', 'no') });
+  assert.equal(j.run().code, 0);
+  assert.match(j.latest(), /all quiet .*\nclock: the system clock is not synced to network time/);
+  assert.deepEqual(j.notified(), []);
+  const synced = job({ vault: vault(rawFolder()), clockCommand: node('print.cjs', 'yes') });
+  synced.run();
+  assert.doesNotMatch(synced.latest(), /clock:/);
 });

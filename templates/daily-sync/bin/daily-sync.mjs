@@ -12,7 +12,8 @@
 // When something changed, needs you, or failed, the report is also piped to your notify
 // command. A failed step or a previous run that never finished makes the report start with
 // FAILED, and no successful run for staleHours is listed under "Needs you", so the job cannot
-// go quiet unnoticed.
+// go quiet unnoticed. A network that is down for the whole run is one line instead of a failure per
+// step, and a vault busy with another vault job is reported only after several runs in a row.
 // `--status` prints that FAILED line and nothing otherwise, for a session-start hook, which
 // also catches a schedule that stopped running altogether.
 //
@@ -137,13 +138,15 @@ function git(repo, gitArgs, timeoutSec = 60) {
   return { code, out: r.stdout || '', err: r.stderr || '' };
 }
 
+const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.max(0, ms));
+
 // A network read gets one more try after a pause, so a blip (DNS, Wi-Fi coming back after
 // sleep, a run caught up right after login) is not reported as a failure.
 let retryWaitMs = 20_000;
 function retry(fn) {
   const first = fn();
   if (first.code === 0) return first;
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, retryWaitMs);
+  sleep(retryWaitMs);
   return fn();
 }
 
@@ -156,38 +159,113 @@ function alive(pid) {
   }
 }
 
-// A run started at boot or right after wake-up can come before DNS works. Before any step runs,
-// wait (at most networkWaitSec, default 300) for the host of each repo the run pulls or pushes.
+// A run started at boot or right after wake-up can come before the network works: DNS is not up
+// yet, or a captive or half-started connection answers every https host with the wrong
+// certificate. Before any step runs, wait (at most networkWaitSec, default 600) until the host
+// of each repo the run pulls, watches or pushes resolves and, for an https remote, accepts a TLS
+// handshake with a valid certificate.
 function remoteHost(url) {
   const u = String(url).trim();
   const m = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]*@)?([^/:]+)/i.exec(u) || /^(?:[^@/\\:]+@)?([^/\\:@]+):(?![/\\])/.exec(u);
   return m?.[1];
 }
 
-function resolves(host, timeoutSec) {
-  const code = 'require("node:dns").lookup(process.argv[1], (err) => process.exit(err ? 1 : 0))';
-  return spawnSync(process.execPath, ['-e', code, host], { stdio: 'ignore', timeout: timeoutSec * 1000, killSignal: 'SIGKILL' }).status === 0;
+/** `{ host, tlsPort }`: tlsPort is set for an https remote only; ssh and http get a DNS check. */
+function remoteTarget(url) {
+  const host = remoteHost(url);
+  if (!host) return undefined;
+  const https = /^https:\/\/(?:[^@/]*@)?[^/:]+(?::(\d+))?/i.exec(String(url).trim());
+  return { host, tlsPort: https ? https[1] || '443' : '' };
 }
 
+// Runs in a child process, so a hung lookup or handshake is killed by the timeout. Prints the
+// error code and exits 1 when the host cannot be reached.
+const PROBE = `const [host, tlsPort] = process.argv.slice(1);
+const fail = (e) => { console.log(e.code || e.message); process.exit(1); };
+require('node:dns').lookup(host, (err) => {
+  if (err) fail(err);
+  if (!tlsPort) process.exit(0);
+  const s = require('node:tls').connect({ host, port: Number(tlsPort), servername: host }, () => { s.end(); process.exit(0); });
+  s.on('error', fail);
+});`;
+
+/** null when the target answers, else a short reason. */
+function unreachable(target, timeoutSec) {
+  const r = spawnSync(process.execPath, ['-e', PROBE, target.host, target.tlsPort], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: timeoutSec * 1000, killSignal: 'SIGKILL' });
+  if (r.status === 0) return null;
+  return r.error ? 'timed out' : lastLine(r.stdout) || `exit ${r.status}`;
+}
+
+/** The probe's error code in plain words, for the report. */
+function plainWhy(code) {
+  if (/ENOTFOUND|EAI_AGAIN|EAI_NONAME/.test(code)) return 'its name did not resolve';
+  if (/ECONNREFUSED/.test(code)) return 'the connection was refused';
+  if (/CERT|ALTNAME|SELF_SIGNED|SSL|TLS/i.test(code)) return 'it showed a certificate that does not check out';
+  if (/timed out|ETIMEDOUT/.test(code)) return 'it did not answer';
+  return code;
+}
+
+// Whether the network was still down after the wait, and why; set by waitForNetwork.
+const network = { down: false, reason: '', waitSec: 0 };
+
 function waitForNetwork(config) {
-  const waitSec = config.networkWaitSec === undefined ? 300 : Number(config.networkWaitSec);
+  const waitSec = config.networkWaitSec === undefined ? 600 : Number(config.networkWaitSec);
+  network.waitSec = waitSec;
   if (dryRun || !(waitSec > 0)) return;
-  const repos = [...(config.pull || []).map(repoEntry), ...(config.vault?.path ? [repoEntry(config.vault.path)] : [])];
-  const hosts = new Set();
+  const repos = [...[...(config.pull || []), ...(config.watch || [])].map(repoEntry), ...(config.vault?.path ? [repoEntry(config.vault.path)] : [])];
+  const targets = new Map();
   for (const r of repos) {
-    if (isRepo(r.path)) hosts.add(remoteHost(git(r.path, ['remote', 'get-url', '--push', r.remote]).out));
+    if (!isRepo(r.path)) continue;
+    const t = remoteTarget(git(r.path, ['remote', 'get-url', '--push', r.remote]).out);
+    if (t) targets.set(`${t.host}:${t.tlsPort}`, t);
   }
-  hosts.delete(undefined);
   const deadline = Date.now() + waitSec * 1000;
-  for (const host of hosts) {
+  for (const t of targets.values()) {
     const began = Date.now();
-    while (!resolves(host, 10)) {
+    let why;
+    while ((why = unreachable(t, 15))) {
       const left = deadline - Date.now();
-      if (left <= 0) return log(`network: ${host} did not resolve within ${waitSec}s; the steps that need it report their own failure`);
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(5000, left));
+      if (left <= 0) {
+        Object.assign(network, { down: true, reason: `${t.host}: ${plainWhy(why)}` });
+        return log(`network: ${t.host} could not be reached within ${waitSec}s (${why}); the steps that need it still run`);
+      }
+      sleep(Math.min(5000, left));
     }
-    if (Date.now() - began > 1000) log(`network: ${host} resolved after ${Math.round((Date.now() - began) / 1000)}s`);
+    if (Date.now() - began > 1000) log(`network: ${t.host} answered after ${Math.round((Date.now() - began) / 1000)}s`);
   }
+}
+
+// A step failure that says the network itself is not there, rather than one service refusing:
+// DNS, a refused or reset connection, no route, a timeout, or a TLS or certificate error.
+const NET_ERROR =
+  /resolve host|name or service not known|name resolution|getaddrinfo|ENOTFOUND|EAI_AGAIN|connection refused|ECONNREFUSED|connection reset|ECONNRESET|network is unreachable|ENETUNREACH|no route to host|EHOSTUNREACH|timed out|ETIMEDOUT|failed to connect|could not connect|unable to connect|\bssl\b|\btls\b|certificate|subject name|CERT_|self[- ]signed/i;
+
+// Network steps that worked this run. One success means the network was up, so every failure
+// stays its own line.
+let netOk = 0;
+
+// When the network was down for the whole run, every step that needs it fails at once. Those
+// failures become one line, which never makes the run FAILED or sends the report by itself; a
+// network that stays down for staleHours is reported as no successful run, as any other gap is.
+function foldNetworkFailures() {
+  const net = items.filter((i) => i.net);
+  if (netOk > 0 || !net.length) return null;
+  const matched = net.filter((i) => NET_ERROR.test(i.text));
+  if (!network.down && !(matched.length >= 2 && matched.length === net.length)) return null;
+  for (const i of net) items.splice(items.indexOf(i), 1);
+  const reason = network.reason || clip(matched[0].text, 160);
+  const w = network.waitSec;
+  const waited = network.down && w ? ` after a ${w >= 60 ? `${Math.round(w / 60)}-minute` : `${w}-second`} wait` : '';
+  return `network was down${waited}, so ${net.length} step(s) that need it could not run (${reason}); the next run tries again`;
+}
+
+// A clock that is not synced to network time makes the schedule fire late and can make every
+// certificate look wrong. Linux only; `clockCommand` "" turns it off.
+function clockNote(config) {
+  const cmd = config.clockCommand ?? (process.platform === 'linux' ? 'timedatectl show -p NTPSynchronized --value' : '');
+  if (!cmd) return;
+  const r = sh(cmd, { timeoutSec: 10 });
+  if (r.code === 0 && r.out.trim() === 'no') notes.push('clock: the system clock is not synced to network time, so runs can start late and secure connections can fail; turn on automatic time');
 }
 
 // ---------------------------------------------------------------- findings
@@ -200,6 +278,12 @@ const modelCalls = { explain: 0, ingest: 0 };
 // Plain lines at the end of the report that never make a run FAILED or send it by themselves.
 const notes = [];
 let checks = 0;
+// The vault stayed busy with another vault job for the whole lock wait.
+let vaultBusy = false;
+// How many runs in a row may find the vault busy before the report tells you: the vault's timers
+// catch up together after a wake-up, so one or two busy runs are a coincidence, while three
+// separate starts that all find it busy point to a job that is stuck or never ends.
+const BUSY_RUNS_NOTICE = 3;
 
 function check(name, fn) {
   checks += 1;
@@ -275,7 +359,8 @@ function pull(entry) {
   if (!isRepo(p)) return add('failed', `${key}:missing`, `${label}: not a git repository`);
   if (!dryRun) {
     const f = retry(() => git(p, ['fetch', '--quiet', remote], 120));
-    if (f.code !== 0) return add('failed', `${key}:fetch`, `${label}: fetch from ${remote} failed (${exitText(f)}): ${clip(lastLine(f.err))}`);
+    if (f.code !== 0) return add('failed', `${key}:fetch`, `${label}: fetch from ${remote} failed (${exitText(f)}): ${clip(lastLine(f.err))}`, { net: true });
+    netOk += 1;
   }
   const def = defaultBranch(p, remote);
   if (!def) return add('attention', `${key}:default`, `${label}: cannot tell ${remote}'s default branch; run \`git remote set-head ${remote} --auto\` in it`);
@@ -314,7 +399,8 @@ function watch(entry) {
   const branch = defaultBranch(p, remote) || git(p, ['symbolic-ref', '--quiet', '--short', 'HEAD']).out.trim();
   if (!branch) return add('attention', `${key}:branch`, `${label}: no default branch known; cannot tell whether it is behind`);
   const r = retry(() => git(p, ['ls-remote', remote, `refs/heads/${branch}`], 60));
-  if (r.code !== 0) return add('failed', `${key}:remote`, `${label}: ${remote} did not answer (${exitText(r)}): ${clip(lastLine(r.err))}`);
+  if (r.code !== 0) return add('failed', `${key}:remote`, `${label}: ${remote} did not answer (${exitText(r)}): ${clip(lastLine(r.err))}`, { net: true });
+  netOk += 1;
   const sha = r.out.trim().split(/\s+/)[0];
   if (!sha) return add('attention', `${key}:no-branch`, `${label}: ${remote} has no branch ${branch}`);
   const ref = localRef(p, branch);
@@ -358,9 +444,26 @@ function vault(v) {
 
   const env = { RAW_DIR: raw, VAULT_PATH: vp, ...expandEnv(v.env) };
   const limit = Number(v.limit) || 50;
-  const d = sh(v.dryRun, { cwd: vp, env, timeoutSec: 600 });
+  // The vault's jobs share one lock (<vault>/.ingest/lock), and timers that missed their time all
+  // start together after a wake-up. A busy vault is asked again every lockPollSec (30) seconds
+  // for at most lockWaitSec (600); one that stays busy is counted in run() instead of reported.
+  const busy = (r) => r.code !== 0 && /holds the lock/i.test(r.out + r.err);
+  // A --dry-run you started by hand does not sit through the wait.
+  const lockWaitMs = dryRun ? 0 : (v.lockWaitSec === undefined ? 600 : Number(v.lockWaitSec)) * 1000;
+  const pollMs = (Number(v.lockPollSec) || 30) * 1000;
+  const began = Date.now();
+  let d = sh(v.dryRun, { cwd: vp, env, timeoutSec: 600 });
+  const wasBusy = busy(d);
+  while (busy(d) && Date.now() - began < lockWaitMs) {
+    sleep(Math.min(pollMs, lockWaitMs - (Date.now() - began)));
+    d = sh(v.dryRun, { cwd: vp, env, timeoutSec: 600 });
+  }
   const text = d.out + d.err;
-  if (d.code !== 0 && /holds the lock/i.test(text)) return add('attention', 'vault:busy', 'vault: another vault job holds its lock; ingest is checked again next run');
+  if (busy(d)) {
+    vaultBusy = true;
+    return log(`busy vault: another vault job held its lock for the whole ${Math.round(lockWaitMs / 1000)}s wait; ingest is checked again next run`);
+  }
+  if (wasBusy) log(`vault: another vault job held its lock; it was free after ${Math.round((Date.now() - began) / 1000)}s`);
   if (d.code !== 0) return add('failed', 'vault:dry-run', `vault: ingest dry run failed (${exitText(d)}): ${clip(lastLine(text))}`);
   const pending = (text.match(/^would (?:ingest|update|retry)\b/gm) || []).length;
   if (!pending) return log(`ok   vault: ${files} raw file(s) in ${tilde(raw)}, nothing new to ingest`);
@@ -502,7 +605,11 @@ function expandEnv(env = {}) {
 function command(c) {
   if (dryRun) return log(`dry  ${c.name}: would run ${c.run}`);
   const r = sh(c.run, { cwd: c.cwd ? expandHome(c.cwd) : undefined, env: expandEnv(c.env), timeoutSec: Number(c.timeoutSec) || 300 });
-  if (r.code !== 0) return add('failed', `cmd:${c.name}:failed`, `${c.name}: ${exitText(r)}: ${clip(lastLine(r.err || r.out))}`);
+  if (r.code !== 0) {
+    // A command may or may not use the network, so only a failure that says so joins a network-down line.
+    const text = `${c.name}: ${exitText(r)}: ${clip(lastLine(r.err || r.out))}`;
+    return add('failed', `cmd:${c.name}:failed`, text, { net: NET_ERROR.test(text) });
+  }
   const prefix = `${c.name}:`.toLowerCase();
   const out = lines(r.out)
     .map((l) => (l.toLowerCase().startsWith(prefix) ? l.slice(prefix.length).trim() : l))
@@ -602,7 +709,8 @@ function clickup(c) {
   // A scheduled run does not see your shell profile, so the workspace is passed explicitly.
   const env = c.workspace ? { CLICKUP_AXI_WORKSPACE: String(c.workspace) } : {};
   const r = retry(() => sh(`${c.command || 'clickup-axi'} lists --space "${c.space}"`, { env, timeoutSec: 120 }));
-  if (r.code !== 0) return add('failed', 'clickup:read', `clickup: could not read the lists of space ${c.space} (${exitText(r)}): ${clip(lastLine(r.err || r.out))}`);
+  if (r.code !== 0) return add('failed', 'clickup:read', `clickup: could not read the lists of space ${c.space} (${exitText(r)}): ${clip(lastLine(r.err || r.out))}`, { net: true });
+  netOk += 1;
   const live = parseClickupLists(r.out);
   if (!live.size) return add('failed', 'clickup:parse', `clickup: read no list from space ${c.space}; is the space right, and did clickup-axi's output change?`);
   const source = c.lists.file ? ` in ${tilde(expandHome(c.lists.file))}` : '';
@@ -623,13 +731,17 @@ function ticktick(t) {
   if (t.authCommand) {
     const a = retry(() => sh(t.authCommand, { timeoutSec: 60 }));
     if (a.code !== 0 || /not signed in|not authenticated|unauthenticated|expired/i.test(a.out)) {
-      return add('attention', 'ticktick:auth', `ticktick: not signed in (\`${t.authCommand}\`: ${clip(lastLine(a.out + a.err))}); sign in once and it is read without prompts again`);
+      const why = clip(lastLine(a.out + a.err));
+      // A sign-in check that could not reach its server says nothing about the sign-in.
+      if (a.code !== 0 && NET_ERROR.test(why)) return add('failed', 'ticktick:auth-net', `ticktick: the sign-in check could not reach its server (${exitText(a)}): ${why}`, { net: true });
+      return add('attention', 'ticktick:auth', `ticktick: not signed in (\`${t.authCommand}\`: ${why}); sign in once and it is read without prompts again`);
     }
     const secs = Number((a.out.match(/expires\s+(?:in\s+)?(\d+)\s*s/i) || [])[1]);
     if (secs && secs < 14 * 86_400) add('attention', 'ticktick:expiring', `ticktick: the sign-in expires in ${Math.floor(secs / 86_400)} day(s); renew it before then`);
   }
   const r = retry(() => sh(t.command, { timeoutSec: 120 }));
-  if (r.code !== 0) return add('failed', 'ticktick:read', `ticktick: read failed (${exitText(r)}): ${clip(lastLine(r.err || r.out))}`);
+  if (r.code !== 0) return add('failed', 'ticktick:read', `ticktick: read failed (${exitText(r)}): ${clip(lastLine(r.err || r.out))}`, { net: true });
+  netOk += 1;
   let names;
   try {
     const data = JSON.parse(r.out);
@@ -668,7 +780,7 @@ function explain(model, item) {
 
 // ---------------------------------------------------------------- report and delivery
 
-function report(startedAt) {
+function report(startedAt, networkDown) {
   const by = (level) => items.filter((i) => i.level === level);
   const [failed, changed, attention] = [by('failed'), by('changed'), by('attention')];
   const calls = modelCalls.explain + modelCalls.ingest;
@@ -676,12 +788,13 @@ function report(startedAt) {
     ? `model calls: ${[modelCalls.explain && `${modelCalls.explain} to explain drift`, modelCalls.ingest && `${modelCalls.ingest} by the vault ingest`].filter(Boolean).join(', ')}`
     : 'no model calls';
   const when = stamp(startedAt);
-  if (!items.length) return [`daily-sync ${when}: all quiet (${checks} check(s), ${callText})`, ...notes].join('\n');
-  const counts = [failed.length && `${failed.length} failed`, changed.length && `${changed.length} changed`, attention.length && `${attention.length} need you`];
+  if (!items.length && !networkDown) return [`daily-sync ${when}: all quiet (${checks} check(s), ${callText})`, ...notes].join('\n');
+  const counts = [networkDown && 'network was down', failed.length && `${failed.length} failed`, changed.length && `${changed.length} changed`, attention.length && `${attention.length} need you`];
   const section = (title, list) =>
     list.length ? [`${title}:`, ...list.map((i) => `- ${i.still ? '(still) ' : ''}${i.text}${i.model ? `\n  model: ${i.model}` : ''}`)] : [];
   return [
     `${failed.length ? 'FAILED ' : ''}daily-sync ${when}: ${counts.filter(Boolean).join(', ')} (${callText})`,
+    ...(networkDown ? [networkDown] : []),
     ...section('Failed', failed),
     ...section('Changed', changed),
     ...section('Needs you', attention),
@@ -759,10 +872,12 @@ function run() {
   if (state.lastSuccess && !state.paused && startedAt - state.lastSuccess > staleHours * HOUR) {
     const hours = Math.round((startedAt - state.lastSuccess) / HOUR);
     // A notice, not a failed step: this run's own checks decide whether it is FAILED, and a pass records the success.
-    add('attention', 'run:stale', `no successful run since ${stamp(state.lastSuccess)} (${hours}h ago): the schedule missed runs (machine off, timer stopped) or they failed`);
+    const why = state.lastRun?.networkDown ? 'the network was down at the last run' : 'the schedule missed runs (machine off, timer stopped) or they failed';
+    add('attention', 'run:stale', `no successful run since ${stamp(state.lastSuccess)} (${hours}h ago): ${why}`);
   }
 
   waitForNetwork(config);
+  clockNote(config);
 
   for (const r of config.pull || []) check('pull', () => pull(r));
   for (const r of config.watch || []) check('watch', () => watch(r));
@@ -776,6 +891,17 @@ function run() {
   for (const v of config.versions || []) check(v.name || 'version', () => version(v));
   if (config.clickup) check('clickup', () => clickup(config.clickup));
   if (config.ticktick) check('ticktick', () => ticktick(config.ticktick));
+  const networkDown = foldNetworkFailures();
+
+  // A vault that stays busy is only a log line and a note, until it has been busy for
+  // BUSY_RUNS_NOTICE runs in a row.
+  const busyRuns = vaultBusy ? (state.vaultBusy?.runs || 0) + 1 : 0;
+  const busySince = vaultBusy ? state.vaultBusy?.since || startedAt : undefined;
+  if (busyRuns >= BUSY_RUNS_NOTICE) {
+    add('attention', 'vault:busy', `vault: another vault job has held its lock through the last ${busyRuns} runs (since ${stamp(busySince)}), so nothing was ingested; check which vault job is stuck`);
+  } else if (vaultBusy) {
+    notes.push(`vault: busy with another vault job for the whole wait; ingest is checked again next run (${busyRuns} busy run(s) in a row, reported at ${BUSY_RUNS_NOTICE})`);
+  }
 
   // A FAILED report was sent last time, so say it is over, or it looks like it still is.
   if (state.lastRun?.failed && !items.some((i) => i.level === 'failed')) {
@@ -798,7 +924,7 @@ function run() {
     i.model = explain(model, i);
   }
 
-  const text = report(startedAt);
+  const text = report(startedAt, networkDown);
   const failed = items.filter((i) => i.level === 'failed');
   const attention = items.filter((i) => i.level === 'attention');
   const remindMs = (Number(config.remindDays) || 7) * 24 * HOUR;
@@ -832,10 +958,11 @@ function run() {
   }
   const ownFailures = failed.filter((i) => !i.run).length;
   writeJson(FILES.state, {
-    lastRun: { at: startedAt, finishedAt: Date.now(), failed: failed.length, report: reportFile, notifyError },
-    lastSuccess: ownFailures ? state.lastSuccess : startedAt,
+    lastRun: { at: startedAt, finishedAt: Date.now(), failed: failed.length, report: reportFile, notifyError, ...(networkDown ? { networkDown: true } : {}) },
+    lastSuccess: ownFailures || networkDown ? state.lastSuccess : startedAt,
     attention: attentionState,
     paused: false,
+    ...(busyRuns ? { vaultBusy: { runs: busyRuns, since: busySince } } : {}),
   });
   fs.rmSync(FILES.lock, { force: true });
   log(`end: ${text.split('\n')[0]}`);
