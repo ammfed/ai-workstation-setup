@@ -64,7 +64,7 @@ Why: one supervisor that checks every phase against the same method catches drif
 | 9. Ship and hand over | No extra check: validation is the step Kun names. It runs through no-mistakes when the repository has it. Without it, offer to set it up, or use a fresh adversarial reviewer. The merge waits for the owner's word |
 | 10. Improve | Check Kun's tools list for one that turns repeated corrections into checks, such as backpass. Bring each proposal as a card |
 
-**Skills that own no phase.** This setup installs six more skills. Each one helps inside a phase when its moment comes. None of them starts a phase or takes over from its owner.
+**Skills that own no phase.** This setup installs more skills. Each one helps inside a phase when its moment comes. None of them starts a phase or takes over from its owner.
 
 | Skill | Use it when |
 | --- | --- |
@@ -74,6 +74,8 @@ Why: one supervisor that checks every phase against the same method catches drif
 | composio-cli | The work needs an outside app the owner has connected, such as email, a calendar or a tracker |
 | motion-designer | A video plan or review that needs motion decisions: timing, easing, staging and follow-through, used beside the video tool (video.md, stage 5) |
 | diagnosing-bugs | A bug or a slowdown whose cause is unknown: find and prove the cause before the fix (the bug path below) |
+| retro (owner starts it) | After a session that went badly or slowly: look back at it and change the agent's environment (signposts, automated checks, rules). It reads writing-for-agents first |
+| writing-for-agents | Writing or editing a skill, an `AGENTS.md` or a `CLAUDE.md` |
 | stow | Before compacting or a long break: save what the session learned into the files where it belongs (rule 9.3) |
 
 **Which phases a piece of work needs.** Pick by the kind of work, never by a guess of how long it takes.

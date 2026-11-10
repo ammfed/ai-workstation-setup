@@ -63,8 +63,7 @@ plugin: the plugin adds every skill at once, so the same skill loads twice and t
 skills start on their own. Never turn a plugin on inside another tool's own clone, because
 that changes a file the tool tracks.
 
-Before a compaction or a long break, stow saves what the session learned into the files where
-it belongs. The pack's handoff skill is not needed beside it.
+The pack's handoff skill is not needed beside stow (see the next section).
 
 Pack skills this setup leaves out, and what would bring each one back:
 
@@ -76,13 +75,31 @@ Pack skills this setup leaves out, and what would bring each one back:
 | ask-matt | Never: the playbook and kun say which skill to use |
 | improve-codebase-architecture | A refactor starts that needs a survey of the code |
 | wizard | A setup step needs you to enter credentials by hand more than once |
-| writing-for-agents | Editing skills or agent files goes wrong twice in the improve step |
 | setup-ts-deep-modules | A TypeScript repository with several packages |
 | software-factory (unfinished) | You design an agent factory beyond your fleet tool |
 
 The pack's setup skill (`setup-matt-pocock-skills`) writes an issue tracker file and a
 domain file into a repository. Run it only in a repository that has a tracker in use,
 agents working in it, and code the engineering skills apply to.
+
+## Stow, retro and backpass
+
+Three tools improve how agents work, each at a different point.
+
+- **stow** saves what the current conversation learned (preferences, facts, decisions, next
+  steps) into the files where it belongs. Run `/stow` before a compaction or a long break.
+- **retro** looks back at a coding session you name and suggests changes to the agent's
+  environment: signposts to files, automated checks, coding standards, the size of `AGENTS.md`,
+  expensive tool use, instructions that change nothing, and missing information. Only you can
+  start it, by typing `/retro`. It reads writing-for-agents first, which the skills module
+  installs with it. Run it after a session that went badly or slowly.
+- **backpass** is the optional, privacy-gated tool in the `backpass` module. It reads past
+  sessions of the projects on your allowlist and proposes evidence-backed edits to `AGENTS.md`,
+  `CLAUDE.md` and project skills. It never applies them. Use it for a pattern across many sessions.
+
+They hand off in this order. stow saves the lessons while the session is fresh. retro turns one
+session's trouble into changes to the environment, which you approve. backpass finds what repeats
+across many sessions and leaves its proposals for you to review with `backpass apply`.
 
 ## Build rules that go with it
 

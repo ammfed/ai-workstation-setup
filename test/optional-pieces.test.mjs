@@ -745,9 +745,22 @@ test('the vision skill comes from its own upstream repository', () => {
 test('the default skill set is every skill on offer, so a fresh clone gets the full set', () => {
   const q = skills.questions.find((x) => x.key === 'SKILLS');
   assert.deepEqual([...q.default].sort(), q.choices.map((c) => c.value).sort());
-  const full = ['kun', 'vision', 'grilling', 'teach', 'tdd', 'codebase-design', 'to-spec', 'to-tickets', 'to-questionnaire', 'wayfinder', 'find-docs', 'no-mistakes', 'workflow-playbook', 'motion-designer', 'composio-cli'];
+  const full = ['kun', 'vision', 'grilling', 'teach', 'tdd', 'codebase-design', 'to-spec', 'to-tickets', 'to-questionnaire', 'wayfinder', 'find-docs', 'no-mistakes', 'retro', 'workflow-playbook', 'motion-designer', 'composio-cli'];
   for (const name of full) assert.ok(q.default.includes(name), name);
   assert.deepEqual(q.choices.find((c) => c.value === 'wayfinder').helpers, ['domain-modeling', 'research', 'prototype']);
+  const retro = q.choices.find((c) => c.value === 'retro');
+  assert.equal(retro.repo, 'mattpocock/skills');
+  assert.deepEqual(retro.helpers, ['writing-for-agents']);
+});
+
+test('choosing retro also installs writing-for-agents, both by the official command', () => {
+  const { code, out } = skillsDryRun(`SKILLS=retro\nSKILLS_OFFERED=${skills.questions.find((x) => x.key === 'SKILLS').choices.map((c) => c.value).join(',')}\n`);
+  assert.equal(code, 0, out);
+  assert.match(out, /would run: npx -y skills add mattpocock\/skills --skill retro -g -a claude-code -y/);
+  assert.match(out, /would run: npx -y skills add mattpocock\/skills --skill writing-for-agents -g -a claude-code -y/);
+  assert.match(out, /would install: retro, writing-for-agents \(for retro\)\n/);
+  assert.equal(fs.existsSync(path.join(repoRoot, 'templates/skills/retro')), false, 'retro is installed, never copied into this repo');
+  assert.equal(fs.existsSync(path.join(repoRoot, 'templates/skills/writing-for-agents')), false);
 });
 
 // Ask the skills questions the way a rerun does, from saved answers.
@@ -819,7 +832,7 @@ test('the end of the install lists the skills installed and skipped, then says t
   const { code, out } = skillsDryRun();
   assert.equal(code, 0, out);
   const tail = out.slice(out.indexOf('\nSummary'));
-  assert.match(tail, /would install: kun, vision, grilling, teach, tdd, codebase-design, to-spec, to-tickets, to-questionnaire, diagnosing-bugs, wayfinder, domain-modeling \(for wayfinder\), research \(for wayfinder\), prototype \(for wayfinder\), find-docs, stow, workflow-playbook, motion-designer\n/);
+  assert.match(tail, /would install: kun, vision, grilling, teach, tdd, codebase-design, to-spec, to-tickets, to-questionnaire, diagnosing-bugs, wayfinder, domain-modeling \(for wayfinder\), research \(for wayfinder\), prototype \(for wayfinder\), find-docs, stow, retro, writing-for-agents \(for retro\), workflow-playbook, motion-designer\n/);
   assert.match(tail, /skipped: no-mistakes: the no-mistakes CLI is not installed/);
   assert.match(tail, /skipped: composio-cli: the composio CLI is not installed/);
   assert.doesNotMatch(tail, /failed:/);
