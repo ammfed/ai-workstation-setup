@@ -451,7 +451,7 @@ test('the Simplified Technical English style is a choice that adds its rules and
   const tone = sectionOf((await renderHomes({ PREFS_WRITING_STYLE: 'ste' })).core, 'House style');
   assert.match(tone, /based on Simplified Technical English \(ASD-STE100\)/);
   assert.match(tone, /One instruction per sentence, as a command\. Put the condition first/);
-  assert.match(tone, /20 words or fewer in steps, 25 or fewer in explanations/);
+  assert.match(tone, /Keep sentences mostly short\./);
   assert.match(tone, /In a warning, state the risk in plain words first/);
   assert.match(tone, /does not apply to anything written as the user for other people/);
   await assert.rejects(answer({ PREFS_WRITING_STYLE: 'strict' }), /PREFS_WRITING_STYLE/);

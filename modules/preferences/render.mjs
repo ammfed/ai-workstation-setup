@@ -9,12 +9,12 @@ const STE_RULES = [
   'House style for everything written to the user (instructions, warnings, questions, action items, status lines), based on Simplified Technical English (ASD-STE100):',
   'One instruction per sentence, as a command. Put the condition first, then the command ("If the check fails, stop and tell me.").',
   'Use active voice and name who acts.',
-  'Keep sentences short: 20 words or fewer in steps, 25 or fewer in explanations. Keep paragraphs to six sentences or fewer, one topic each.',
+  'Keep sentences mostly short. Keep paragraphs to six sentences or fewer, one topic each.',
   'Use simple tenses (present, past, "will"). Keep the small words such as "the" and "to"; no telegraphic shorthand.',
   'Use one word for one thing every time (for example start, stop, finish, examine, undo, pull request). Do not swap in synonyms for variety.',
   'Use verbs, not noun phrases ("check", not "perform a check of"). No semicolons and no em dashes.',
   'In a warning, state the risk in plain words first, then the command, then what can go wrong.',
-  'Relax the style for a warm opening or closing line, the reason behind a recommendation, and short acknowledgements, but never inside an instruction or a warning. Vary sentence length within the limits so it does not read as monotone.',
+  'Relax the style for a warm opening or closing line, the reason behind a recommendation, and short acknowledgements, but never inside an instruction or a warning. Vary sentence length so it does not read as monotone.',
   'The house style does not apply to anything written as the user for other people (documents, emails, decks, pull request text): those follow the rules for outward writing.',
 ];
 
