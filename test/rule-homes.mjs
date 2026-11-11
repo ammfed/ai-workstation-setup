@@ -30,7 +30,7 @@ export const RULE_HOMES = [
   row('House style for everything written to the user', 'core'),
   row('One instruction per sentence, as a command.', 'core'),
   row('Use active voice and name who acts.', 'core'),
-  row('Keep sentences short: 20 words', 'core'),
+  row('Keep sentences mostly short', 'core'),
   row('Use simple tenses', 'core'),
   row('Use one word for one thing every time', 'core'),
   row('Use verbs, not noun phrases', 'core'),
