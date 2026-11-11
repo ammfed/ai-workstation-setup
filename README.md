@@ -240,6 +240,12 @@ never read from or written to answers files: export `CLICKUP_TOKEN`,
 `CONTEXT7_API_KEY` or `OPENROUTER_API_KEY`, or sign in afterwards. See `./install.sh --help`.
 An AI assistant installing for someone follows [docs/install-with-ai.md](docs/install-with-ai.md).
 
+## Restoring on a new machine
+
+A clean install brings back the tools. Your vault, Firstmate's records, Claude Code memory,
+your answers and any timers you made by hand come back from your own copies:
+[docs/restore.md](docs/restore.md) gives the order, from a blank machine.
+
 ## Sharing this setup
 
 - Send the repository link, not files. The other person runs `./install.sh` (or
