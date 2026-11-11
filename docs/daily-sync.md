@@ -163,6 +163,9 @@ Paths may start with `~`.
 - When every ingest attempt of a run fails (no success, at least one attempt), the run is
   `FAILED` with one line, exits non-zero and does not count as a success. When only some fail,
   the line reads `ingested 3 of 5` and each failed file is listed under "Needs you".
+- When the run command ends without an error but reads none of the waiting files (its time went
+  to an earlier step, such as a long sort), "Needs you" gets one line with how long it ran and
+  its last output line, instead of an `ingested 0` change.
 - When the newest `.eml` file or the newest `bookmarks*.html` export in `vault.rawDir` is more
   than `vault.staleSourceDays` (14) days old, "Needs you" gets one line naming the source, its
   age and the action: export a fresh copy into that folder.

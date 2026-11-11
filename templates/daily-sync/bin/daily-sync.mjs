@@ -482,6 +482,7 @@ function vault(v) {
   // bin/ingest.mjs does) stops starting files in time and the command's own last steps still run.
   const timeoutSec = (Number(v.timeoutMin) || 120) * 60;
   const deadline = Math.floor(Date.now() / 1000 + timeoutSec - Math.min(600, timeoutSec / 10));
+  const ranFrom = Date.now();
   const r = sh(String(v.run).split('{limit}').join(String(limit)), { cwd: vp, env: { INGEST_DEADLINE: String(deadline), ...env }, timeoutSec });
   const out = r.out + r.err;
   const runs = (out.match(/^ingest(?:ing:| \()/gm) || []).length;
@@ -500,6 +501,11 @@ function vault(v) {
   // A run where every attempt failed ingested nothing: that is a failed run, not a changed one.
   if (attempts > 0 && ok === 0) {
     return add('failed', 'vault:ingest-all-failed', `vault: every ingest attempt failed (${attempts} of ${attempts}), so nothing was ingested (${sample(failedOn)}); check that the vault's agent command runs, then retry with --retry-failed`);
+  }
+  // The run command ended well but read no file, though files waited: its time went to something
+  // before the ingest (a long sort, a wait). That needs a look, it is not a change.
+  if (attempts === 0 && batch > 0) {
+    return add('attention', 'vault:ingest-none', `vault: the run command ended without an error after ${Math.round((Date.now() - ranFrom) / 60000)} minute(s) but ingested none of the ${pending} waiting raw file(s); see what it spent its time on. Last line: ${clip(lastLine(out))}`);
   }
   add('changed', 'vault:ingest', `vault: ingested ${failedOn.length ? `${ok} of ${attempts}` : runs} new raw file(s) with the vault's own agent${left}`);
   for (const f of failedOn) {

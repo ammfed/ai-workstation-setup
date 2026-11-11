@@ -197,6 +197,17 @@ test('the vault step handles 50 raw files a day unless the config sets another l
   assert.match(own.notified()[0], /vault: ingested 10 new raw file\(s\) with the vault's own agent; 50 more wait for the next run/);
 });
 
+// The run command can spend its whole time before the ingest (sorting a large pile, say) and
+// still exit 0. Files waited and none was read: that needs a look, it is not a change.
+test('a run command that ends well but ingests none of the waiting files is reported, not counted as a change', () => {
+  const j = job({ vault: { ...vault(rawFolder()), dryRun: node('say.cjs', 'would ingest: a', 'would ingest: b', 'would ingest: c'), run: node('say.cjs', 'daily: sorted 800 files') } });
+  assert.equal(j.run().code, 0);
+  const [note] = j.notified();
+  assert.match(note, /^daily-sync [^\n]*1 need you/);
+  assert.match(note, /Needs you:\n- vault: the run command ended without an error after \d+ minute\(s\) but ingested none of the 3 waiting raw file\(s\); see what it spent its time on\. Last line: daily: sorted 800 files/);
+  assert.doesNotMatch(note, /ingested 0 new raw file/);
+});
+
 // Answers the daily-sync questions the way an unattended run does: given answers first, then
 // defaults, skipping the questions whose condition is not met; returns the config it would write.
 test('an ingest stopped at its time limit says how far it got; one that honours the deadline is a change', () => {
