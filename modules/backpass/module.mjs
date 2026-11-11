@@ -43,6 +43,12 @@ export default {
       default: '',
     },
     {
+      key: 'BACKPASS_CLONE_ROOTS',
+      type: 'text',
+      message: 'Other folders that hold copies (clones) of those projects, comma-separated, * allowed (empty when there are none)',
+      default: '',
+    },
+    {
       key: 'BACKPASS_DENYLIST',
       type: 'text',
       path: true,
@@ -85,6 +91,7 @@ export default {
     await ctx.step('acpx', () => ctx.ensureTool({ name: 'acpx', install: { default: { npm: 'acpx@latest' } }, check: versionCheck('acpx') }));
     await ctx.step('backpass', () => ctx.ensureTool({ name: 'backpass', install: { default: { npm: 'backpass' } }, check: versionCheck('backpass') }));
 
+    const cloneRoots = String(ctx.get('BACKPASS_CLONE_ROOTS') || '').split(',').map((p) => p.trim()).filter(Boolean);
     const base = dir(ctx);
     const runner = path.join(base, 'backpass-gate.mjs');
     const denylist = ctx.get('BACKPASS_DENYLIST');
@@ -99,6 +106,7 @@ export default {
         `${JSON.stringify(
           {
             projects: projects.map((p) => ctx.path(p)),
+            cloneRoots,
             denylist,
             agent: ctx.get('BACKPASS_AGENT'),
             model,

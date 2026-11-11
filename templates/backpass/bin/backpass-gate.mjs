@@ -13,6 +13,12 @@
 //     exclude);
 //   - one agent and one model are pinned for both passes (config.json "agent", "model").
 // It never runs `backpass apply`: proposals wait for you to review and apply yourself.
+// backpass only finds a session when it ran in the project folder, in one of its git
+// worktrees, or in another clone of the same repository that sits next to it. Clones kept
+// anywhere else are named in config.json "cloneRoots" (a clone, or a folder of clones;
+// `~` and `*` allowed). The gate lists them in backpass's own user config before it looks
+// for sessions, so the check and the run see the same sessions. backpass takes a clone
+// from there only when it shares a git remote with the project.
 // A session that starts between the local check and the run is not covered, so the
 // scheduled mode only runs while you are not actively working in that project.
 //
@@ -24,12 +30,14 @@
 //                                               does not hold up the others; a project
 //                                               whose last run failed is due again after a day
 //   add --dry-run to do every check without calling a model
+//   (a dry run still lists the clone folders, or its result would differ from a real run)
 //
 // Logs one line per run to runs.log next to this script (counts only, never content).
 // Installed by ai-workstation-setup (backpass module). No dependencies.
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -53,9 +61,6 @@ const option = (name) => {
 };
 const dryRun = flag('--dry-run');
 
-// cron starts with a bare PATH; make sure npx next to this node is found.
-process.env.PATH = [path.dirname(process.execPath), process.env.PATH].filter(Boolean).join(path.delimiter);
-
 function log(project, outcome) {
   const line = `${new Date().toISOString()}\t${project ? path.basename(project) : '-'}\t${outcome}${dryRun ? '\t(dry run)' : ''}\n`;
   fs.appendFileSync(FILES.log, line);
@@ -73,6 +78,55 @@ function readJson(file, fallback) {
 function expandHome(p) {
   const home = process.env.HOME || process.env.USERPROFILE || '';
   return path.resolve(String(p).replace(/^~(?=$|[\\/])/, home));
+}
+
+// The folders that the "cloneRoots" patterns name and that exist now. `*` stands for any
+// run of characters inside one folder name.
+export function cloneRootDirs(patterns) {
+  const found = new Set();
+  for (const pattern of patterns) {
+    const full = expandHome(pattern);
+    const { root } = path.parse(full);
+    let dirs = [root];
+    for (const part of full.slice(root.length).split(path.sep).filter(Boolean)) {
+      if (!part.includes('*')) {
+        dirs = dirs.map((d) => path.join(d, part));
+        continue;
+      }
+      const name = new RegExp(`^${part.split('*').map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`);
+      dirs = dirs.flatMap((d) => {
+        try {
+          return fs.readdirSync(d).filter((n) => name.test(n)).map((n) => path.join(d, n));
+        } catch {
+          return [];
+        }
+      });
+    }
+    for (const d of dirs) if (fs.statSync(d, { throwIfNoEntry: false })?.isDirectory()) found.add(d);
+  }
+  return [...found].sort();
+}
+
+// backpass reads its clone roots only from its user config (it has no flag for them).
+export function backpassUserConfig() {
+  return path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'backpass', 'config.json');
+}
+
+// Adds the folders to discovery.cloneRoots in backpass's user config and keeps everything
+// else in that file. A file that is not readable JSON is left alone.
+export function listCloneRoots(file, dirs) {
+  if (!dirs.length) return;
+  let config = {};
+  if (fs.existsSync(file)) {
+    config = readJson(file, null);
+    if (!config || typeof config !== 'object' || Array.isArray(config)) return;
+  }
+  const listed = Array.isArray(config.discovery?.cloneRoots) ? config.discovery.cloneRoots : [];
+  const missing = dirs.filter((d) => !listed.includes(d));
+  if (!missing.length) return;
+  config.discovery = { ...config.discovery, cloneRoots: [...listed, ...missing] };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`);
 }
 
 function backpass(cwd, extra) {
@@ -162,6 +216,8 @@ function runProject(project, config, pattern) {
 }
 
 function main() {
+  // cron starts with a bare PATH; make sure npx next to this node is found.
+  process.env.PATH = [path.dirname(process.execPath), process.env.PATH].filter(Boolean).join(path.delimiter);
   if (fs.existsSync(FILES.off)) return log(null, 'skipped: kill switch present');
   const config = readJson(FILES.config, null);
   if (!config) return log(null, 'skipped: config.json missing or unreadable');
@@ -192,6 +248,11 @@ function main() {
 
   if (!lock()) return log(null, 'skipped: another run is in progress');
   try {
+    try {
+      listCloneRoots(backpassUserConfig(), cloneRootDirs(Array.isArray(config.cloneRoots) ? config.cloneRoots : []));
+    } catch {
+      log(null, 'the clone folders could not be listed in the backpass config, so sessions in them are not found');
+    }
     for (const project of targets) {
       if (runProject(project, config, pattern) && flag('--scheduled')) break;
     }
@@ -200,4 +261,4 @@ function main() {
   }
 }
 
-main();
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) main();

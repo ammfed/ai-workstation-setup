@@ -1,7 +1,7 @@
 // Tests for the optional pieces: the Pixel Agents settings and office-names patch, the
 // office-names helper, the stow reminder, the merge permission, the link-open guard, the
 // lavish-axi wrapper, skill updates, OpenWhispr AppImage detection, and the value checks
-// behind their questions. Invented values and
+// behind their questions, and the clone folders of the backpass gate. Invented values and
 // invented program text only; a temporary folder stands in for the home.
 // Run: node --test test/optional-pieces.test.mjs
 
@@ -19,6 +19,8 @@ import { cswapThreshold, researchBrowserPort } from '../modules/agent-clis/modul
 import { createHash } from 'node:crypto';
 import { PATCH_MARKER, PRISTINE_SHA256, earlierOfficeNamesHelper, mergePixelSettings, patchPixelAgents, patchPixelCli, planPixelPatch } from '../modules/agent-clis/pixel-agents.mjs';
 import { PR_MERGE_RULES, registerContextReminder, reminderTokens } from '../modules/claude-code/module.mjs';
+import backpass from '../modules/backpass/module.mjs';
+import { cloneRootDirs, listCloneRoots } from '../templates/backpass/bin/backpass-gate.mjs';
 import { findOpenWhisprAppImage, lavishUnits, openGuardSeconds } from '../modules/extras/module.mjs';
 import firstmate, { isLinkedWorktree, stowTokens } from '../modules/firstmate/module.mjs';
 import openrouter, { MODEL_CHOICES, withEnv } from '../modules/openrouter/module.mjs';
@@ -1185,4 +1187,49 @@ test('the Lavish Library units write WorkingDirectory as a bare path that system
   fs.rmSync(dir, { recursive: true, force: true });
   assert.doesNotMatch(r.stdout + r.stderr, /WorkingDirectory|not absolute|fatal/i, r.stdout + r.stderr);
   assert.equal(r.status, 0, r.stdout + r.stderr);
+});
+
+test('the backpass gate lists the clone folders its config names in the backpass user config, and keeps what is there', () => {
+  const home = tempHome();
+  // Two pool slots hold a folder of clones, a third holds none, and a file sits beside them.
+  for (const slot of ['pool-a/1', 'pool-a/2']) fs.mkdirSync(path.join(home, slot, 'clones'), { recursive: true });
+  fs.mkdirSync(path.join(home, 'pool-a', '3'), { recursive: true });
+  fs.writeFileSync(path.join(home, 'pool-a', 'state.json'), '{}');
+  const wanted = ['1', '2'].map((slot) => path.join(home, 'pool-a', slot, 'clones'));
+  assert.deepEqual(cloneRootDirs([path.join(home, 'pool-*', '*', 'clones')]), wanted);
+  assert.deepEqual(cloneRootDirs([path.join(home, 'pool-a', '1', 'clones'), path.join(home, 'missing', '*')]), [wanted[0]]);
+  assert.deepEqual(cloneRootDirs([]), []);
+
+  const file = path.join(home, 'config', 'backpass', 'config.json');
+  listCloneRoots(file, []);
+  assert.equal(fs.existsSync(file), false, 'no clone folders, so no file is written');
+  listCloneRoots(file, wanted);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), { discovery: { cloneRoots: wanted } });
+
+  // Settings the person made stay, and a folder is listed once.
+  fs.writeFileSync(file, JSON.stringify({ jobs: 2, discovery: { since: '14d', cloneRoots: ['/their/own'] } }));
+  listCloneRoots(file, wanted);
+  listCloneRoots(file, wanted);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), { jobs: 2, discovery: { since: '14d', cloneRoots: ['/their/own', ...wanted] } });
+
+  // A file that is not JSON is the person's to fix, so it is left as it is.
+  fs.writeFileSync(file, 'not json');
+  listCloneRoots(file, wanted);
+  assert.equal(fs.readFileSync(file, 'utf8'), 'not json');
+});
+
+test('the backpass module writes the clone folders into the gate config, and importing the gate runs nothing', async () => {
+  const home = tempHome();
+  const ctx = context(home);
+  ctx.values.BACKPASS_PROJECTS = path.join(home, 'work', 'app');
+  ctx.values.BACKPASS_CLONE_ROOTS = '~/pool-*/*/clones, ~/other';
+  ctx.values.BACKPASS_DENYLIST = path.join(home, 'deny.txt');
+  ctx.values.BACKPASS_AGENT = 'claude';
+  ctx.values.BACKPASS_MODEL = 'claude-opus-5-5';
+  ctx.values.BACKPASS_SCHEDULE = 'none';
+  ctx.ensureTool = async () => {};
+  await backpass.install(ctx);
+  const base = path.join(home, '.config', 'ai-workstation-setup', 'backpass');
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(base, 'config.json'), 'utf8')).cloneRoots, ['~/pool-*/*/clones', '~/other']);
+  assert.equal(fs.existsSync(path.join(base, 'runs.log')), false);
 });
