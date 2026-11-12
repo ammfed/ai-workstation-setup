@@ -149,7 +149,15 @@ Notes:
 
 The installer writes the Firstmate config files it owns from your answers. Anything you
 added to `config/` by hand, and any timer or cron job you made by hand, comes back only from
-your own copy or notes:
+your own copy or notes.
+
+If your own backup script also saves a `machine/` folder in the records backup from step 8,
+look there first. It may hold these hand-made pieces: `systemd-user/` (systemd user units),
+`firstmate-config/` (your hand-written Firstmate config), `ai-workstation-setup/` (this
+setup's saved state), `crontab.txt`, `answers.env` and Claude Code's `settings.json`. This
+repository does not make that folder, so its names and layout are your own. Restore from it
+before you recreate anything from notes, and look at what each target already holds before
+you copy over it. The list below covers what is left.
 
 - systemd user timers: put the `.service` and `.timer` files back in
   `~/.config/systemd/user/`, then `systemctl --user daemon-reload` and
