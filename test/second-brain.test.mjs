@@ -376,6 +376,48 @@ test('claude files: in an existing vault the rule names bin/search only when the
   }
 });
 
+test('claude files: a vault with bin/lookup gets the lookup-first search bullet, one without does not name it', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-claude-'));
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const dir = path.join(home, 'my vault');
+    fs.mkdirSync(path.join(dir, 'bin'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'bin', 'search'), '#!/bin/sh\n');
+    git(dir, 'init', '-q');
+    git(dir, 'add', '.');
+    git(dir, 'commit', '-qm', 'start');
+    const rules = claudeFile(home, 'rules', 'second-brain.md');
+    const text = () => fs.readFileSync(rules, 'utf8');
+
+    await claudeFilesInto(home);
+    assert.doesNotMatch(text(), /lookup/, 'no bin/lookup in the vault, none named');
+    assert.match(text(), /- Search it with `rg -i "phrase"/);
+
+    fs.rmSync(path.join(home, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'bin', 'lookup'), '#!/bin/sh\n');
+    await claudeFilesInto(home);
+    const bullet = text().split('\n- ').find((l) => l.startsWith('Start with'));
+    assert.ok(bullet, 'the search bullet starts with lookup');
+    assert.equal(
+      bullet.replace(/\s+/g, ' ').trim(),
+      `Start with \`"${path.join(dir, 'bin', 'lookup')}" terms\`: one call gives the top notes with their current state and linked notes. `
+      + `Then \`"${path.join(dir, 'bin', 'search')}" "terms"\` for ranked results (narrow with \`--type\` or \`--status\`), `
+      + `or \`rg -i "phrase" "${dir}"\` for exact text.`,
+    );
+    assert.doesNotMatch(text(), /Search it with/, 'the old bullet is gone');
+    assert.ok(text().indexOf('bin/lookup') < text().indexOf('bin/search'), 'lookup is named before search');
+
+    // A node lookup keeps the node prefix, as search does.
+    fs.rmSync(path.join(home, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'bin', 'lookup'), '#!/usr/bin/env node\n');
+    await claudeFilesInto(home);
+    assert.ok(text().includes(`\`node "${path.join(dir, 'bin', 'lookup')}" terms\``));
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('claude files: a bin/search that is not a node script is called by its own path, the shipped node entry by node', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'second-brain-claude-'));
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
