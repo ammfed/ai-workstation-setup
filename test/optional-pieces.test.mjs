@@ -24,6 +24,7 @@ import { cloneRootDirs, listCloneRoots } from '../templates/backpass/bin/backpas
 import { findOpenWhisprAppImage, lavishUnits, openGuardSeconds } from '../modules/extras/module.mjs';
 import firstmate, { isLinkedWorktree, stowTokens } from '../modules/firstmate/module.mjs';
 import openrouter, { MODEL_CHOICES, withEnv } from '../modules/openrouter/module.mjs';
+import dotfiles, { parseLinks } from '../modules/dotfiles/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
 import { renderBriefInclude } from '../modules/preferences/render.mjs';
 import skills, { writeBundledSkill } from '../modules/skills/module.mjs';
@@ -1232,4 +1233,71 @@ test('the backpass module writes the clone folders into the gate config, and imp
   const base = path.join(home, '.config', 'ai-workstation-setup', 'backpass');
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(base, 'config.json'), 'utf8')).cloneRoots, ['~/pool-*/*/clones', '~/other']);
   assert.equal(fs.existsSync(path.join(base, 'runs.log')), false);
+});
+
+// A dotfiles clone with a home/ folder, and answers for the dotfiles module.
+function dotfilesHome() {
+  const home = tempHome();
+  const clone = path.join(home, 'repos', 'dots');
+  fs.mkdirSync(path.join(clone, 'home'), { recursive: true });
+  fs.writeFileSync(path.join(clone, 'home', '.vimrc'), 'set mouse=c\n');
+  fs.writeFileSync(path.join(clone, 'home', '.bashrc'), 'clone copy\n');
+  fs.writeFileSync(path.join(clone, 'home', 'AGENTS.md'), '# shared rules\n');
+  for (const dir of ['.claude', '.codex']) fs.mkdirSync(path.join(home, dir));
+  return { home, clone };
+}
+
+function dotfilesContext(home, clone, { dryRun = false } = {}) {
+  const ctx = context(home, { dryRun });
+  Object.assign(ctx.values, { DOTFILES_DIR: clone, DOTFILES_LINKS: '.vimrc, .bashrc', DOTFILES_AGENTS_FILE: 'home/AGENTS.md', DOTFILES_AGENTS_TOOLS: ['claude', 'codex', 'opencode', 'gemini'] });
+  return ctx;
+}
+
+test('dotfiles links through ~/.dotfiles, backs up a same-text file and keeps a different one', { skip: !unix }, async () => {
+  const { home, clone } = dotfilesHome();
+  fs.writeFileSync(path.join(home, '.vimrc'), 'set mouse=c\n');
+  fs.writeFileSync(path.join(home, '.bashrc'), 'live copy with newer edits\n');
+  const saved = process.env.CLAUDE_CONFIG_DIR;
+  delete process.env.CLAUDE_CONFIG_DIR;
+  try {
+    const dry = await capture(() => dotfiles.install(dotfilesContext(home, clone, { dryRun: true })));
+    assert.match(dry, /would link .*\.vimrc/);
+    assert.equal(fs.lstatSync(path.join(home, '.vimrc')).isSymbolicLink(), false, 'a dry run changes nothing');
+
+    const ctx = dotfilesContext(home, clone);
+    const out = await capture(() => dotfiles.install(ctx));
+    const fixed = path.join(home, '.dotfiles');
+    assert.equal(fs.readlinkSync(fixed), clone);
+    assert.equal(fs.readlinkSync(path.join(home, '.vimrc')), path.join(fixed, 'home', '.vimrc'));
+    assert.equal(fs.readdirSync(home).filter((f) => f.startsWith('.vimrc.bak-')).length, 1, 'the same-text file is backed up');
+    assert.equal(fs.readFileSync(path.join(home, '.bashrc'), 'utf8'), 'live copy with newer edits\n', 'a different live file is kept');
+    assert.match(out, /\.bashrc differs from .*merge/);
+    for (const link of ['.claude/CLAUDE.md', '.codex/AGENTS.md']) assert.equal(fs.readlinkSync(path.join(home, link)), path.join(fixed, 'home', 'AGENTS.md'));
+    assert.equal(fs.existsSync(path.join(home, '.config', 'opencode')), false, 'no folder is made for a tool that is not there');
+    assert.match(out, /opencode does not exist|opencode is not set up/);
+
+    // An edit through the link is an edit in the clone.
+    fs.appendFileSync(path.join(home, '.codex', 'AGENTS.md'), 'one more rule\n');
+    assert.match(fs.readFileSync(path.join(clone, 'home', 'AGENTS.md'), 'utf8'), /one more rule/);
+
+    const again = await capture(() => dotfiles.install(dotfilesContext(home, clone)));
+    assert.match(again, /already links/);
+    assert.equal(fs.readdirSync(home).filter((f) => f.startsWith('.vimrc.bak-')).length, 1, 'a rerun makes no new backup');
+  } finally {
+    if (saved !== undefined) process.env.CLAUDE_CONFIG_DIR = saved;
+  }
+});
+
+test('dotfiles leaves a ~/.dotfiles that points elsewhere and refuses paths outside the clone', { skip: !unix }, async () => {
+  const { home, clone } = dotfilesHome();
+  fs.symlinkSync(path.join(home, 'elsewhere'), path.join(home, '.dotfiles'));
+  const out = await capture(() => dotfiles.install(dotfilesContext(home, clone)));
+  assert.match(out, /points at .*elsewhere/);
+  assert.equal(fs.lstatSync(path.join(home, '.claude', 'CLAUDE.md'), { throwIfNoEntry: false }), undefined, 'nothing links through a wrong ~/.dotfiles');
+
+  fs.rmSync(path.join(home, '.dotfiles'));
+  const ctx = dotfilesContext(home, clone);
+  ctx.values.DOTFILES_LINKS = '../outside';
+  assert.match(await capture(() => dotfiles.install(ctx)), /must be a path inside your dotfiles clone/);
+  assert.deepEqual(parseLinks(' .bashrc, ,.config/x.toml '), ['.bashrc', '.config/x.toml']);
 });

@@ -182,6 +182,7 @@ test('the picker shows the design parts, recommended first, each heading once', 
     '   [ ] Extra desktop tools',
     '   [ ] Learning from past sessions',
     '   [ ] One OpenRouter key for the tools that use it',
+    '   [ ] Your own config files, from your dotfiles repo',
     '   [ ] Outside connections for Claude',
   ]);
   const covered = new Set(parts.flatMap((p) => p.modules));

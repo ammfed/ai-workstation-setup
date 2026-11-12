@@ -35,6 +35,7 @@ packages their publishers ship.
 | `ledger` | inside WSL | systemd user service, cron `@reboot` when systemd stays off |
 | `news-digest` | inside WSL | systemd user timer, cron when systemd stays off |
 | `openrouter` | inside WSL | the key file stays in WSL |
+| `dotfiles` | inside WSL | the links and the agent tools that read them live in WSL |
 | `wsl` | Windows side | installs WSL, Ubuntu and the Windows apps, then runs this setup inside Ubuntu |
 | `terminal` | Windows side | WezTerm and its font are Windows apps; the `wsl` module installs them and writes `%UserProfile%\.wezterm.lua` |
 
