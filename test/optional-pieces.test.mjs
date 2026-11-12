@@ -1,5 +1,5 @@
 // Tests for the optional pieces: the Pixel Agents settings and office-names patch, the
-// office-names helper, the stow reminder, the merge permission, the link-open guard, the
+// office-names helper, the stow reminder, the Firstmate session names, the merge permission, the link-open guard, the
 // lavish-axi wrapper, skill updates, OpenWhispr AppImage detection, and the value checks
 // behind their questions, and the clone folders of the backpass gate. Invented values and
 // invented program text only; a temporary folder stands in for the home.
@@ -29,6 +29,7 @@ import { renderBriefInclude } from '../modules/preferences/render.mjs';
 import skills, { writeBundledSkill } from '../modules/skills/module.mjs';
 import { cursorBlinkMs } from '../modules/terminal/module.mjs';
 import { officeNames } from '../templates/pixel-agents/bin/pixel-office-names.mjs';
+import { taskTitle, titleFor } from '../templates/claude-code/bin/firstmate-session-name.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const unix = process.platform !== 'win32';
@@ -900,7 +901,7 @@ function firstmateFixture() {
   return { home, dir, ops, standalone, linked };
 }
 
-async function runFirstmate(f) {
+async function runFirstmate(f, extra = {}) {
   const answers = {
     FIRSTMATE_DIR: f.dir,
     FIRSTMATE_HOME: f.ops,
@@ -908,6 +909,7 @@ async function runFirstmate(f) {
     FIRSTMATE_DISPATCH: 'none',
     FIRSTMATE_STOW_REMINDER: 'no',
     FIRSTMATE_WATCH_UPDATES: 'no',
+    ...extra,
   };
   const ctx = new Context({
     platform: { ...detectPlatform(), os: 'linux', shell: 'bash', home: f.home },
@@ -1232,4 +1234,64 @@ test('the backpass module writes the clone folders into the gate config, and imp
   const base = path.join(home, '.config', 'ai-workstation-setup', 'backpass');
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(base, 'config.json'), 'utf8')).cloneRoots, ['~/pool-*/*/clones', '~/other']);
   assert.equal(fs.existsSync(path.join(base, 'runs.log')), false);
+});
+
+// An invented launch record in an operational-inbox folder, and the doorbell line naming it.
+function launchRecord(body) {
+  const dir = path.join(tempHome(), 'state', 'operational-inbox');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, '1-test.msg');
+  fs.writeFileSync(file, body);
+  return { file, prompt: `: Firstmate operational input waiting: read '${file}' and handle its contents as Firstmate operational input.` };
+}
+
+test('a task id becomes a session name in full words', () => {
+  assert.equal(taskTitle('ai-workstation-mate'), 'AI workstation mate');
+  assert.equal(taskTitle('session-names'), 'Session names');
+  assert.equal(taskTitle('aws-followup-findings'), 'AWS followup findings');
+  assert.equal(taskTitle('daily_sync.stall'), 'Daily sync stall');
+});
+
+test('the session-name hook names a session only from a Firstmate launch brief', () => {
+  const brief = '\u2063FIRSTMATE_OP: v1 launch-brief: # Task\nReport to: echo x >> /srv/fm/state/ai-workstation-mate.status\n';
+  const { file, prompt } = launchRecord(brief);
+  assert.equal(titleFor({ prompt }), 'AI workstation mate');
+  // A session that already has a name keeps it.
+  assert.equal(titleFor({ prompt, session_title: 'mine' }), '');
+  // Any other prompt, or a doorbell for something that is not a launch brief, stays quiet.
+  assert.equal(titleFor({ prompt: 'hello' }), '');
+  fs.writeFileSync(file, '\u2063FIRSTMATE_OP: v1 from-firstmate: see /srv/fm/state/other-task.status');
+  assert.equal(titleFor({ prompt }), '');
+  // A missing record, or a record outside an operational-inbox folder, stays quiet.
+  fs.rmSync(file);
+  assert.equal(titleFor({ prompt }), '');
+  const stray = path.join(tempHome(), 'x.msg');
+  fs.writeFileSync(stray, brief);
+  assert.equal(titleFor({ prompt: `: Firstmate operational input waiting: read '${stray}' and handle it.` }), '');
+});
+
+test('the session-name hook prints the sessionTitle Claude Code reads, and nothing for other prompts', () => {
+  const script = path.join(repoRoot, 'templates', 'claude-code', 'bin', 'firstmate-session-name.mjs');
+  const { prompt } = launchRecord('\u2063FIRSTMATE_OP: v1 launch-brief: status in /h/state/session-names.status\n');
+  const run = (input) => spawnSync(process.execPath, [script], { input, encoding: 'utf8' });
+  const named = run(JSON.stringify({ prompt, session_id: 's' }));
+  assert.equal(named.status, 0);
+  assert.deepEqual(JSON.parse(named.stdout), { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', sessionTitle: 'Session names' } });
+  for (const input of [JSON.stringify({ prompt: 'hello' }), 'not json', '']) {
+    const r = run(input);
+    assert.equal(r.status, 0);
+    assert.equal(r.stdout, '');
+  }
+});
+
+test('the firstmate run adds the session-name hook by default and removes it on no', { skip: !unix }, async () => {
+  const f = firstmateFixture();
+  await runFirstmate(f);
+  const settings = path.join(f.home, '.claude', 'settings.json');
+  const hooks = () => (readJson(settings).hooks?.UserPromptSubmit || []).flatMap((m) => m.hooks.map((h) => h.command));
+  const script = path.join(f.home, '.claude', 'hooks', 'firstmate-session-name.mjs');
+  assert.deepEqual(hooks(), [`node "${script}"`]);
+  assert.ok(fs.existsSync(script));
+  await runFirstmate(f, { FIRSTMATE_SESSION_NAMES: 'no' });
+  assert.deepEqual(hooks(), []);
 });
