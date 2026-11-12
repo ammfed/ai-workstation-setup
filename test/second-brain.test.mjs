@@ -405,7 +405,7 @@ test('claude files: a vault with bin/lookup gets the lookup-first search bullet,
       + `or \`rg -i "phrase" "${dir}"\` for exact text.`,
     );
     assert.doesNotMatch(text(), /Search it with/, 'the old bullet is gone');
-    assert.ok(text().indexOf('bin/lookup') < text().indexOf('bin/search'), 'lookup is named before search');
+    assert.ok(text().indexOf(path.join(dir, 'bin', 'lookup')) < text().indexOf(path.join(dir, 'bin', 'search')), 'lookup is named before search');
 
     // A node lookup keeps the node prefix, as search does.
     fs.rmSync(path.join(home, '.claude'), { recursive: true });
