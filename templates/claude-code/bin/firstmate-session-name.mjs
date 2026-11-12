@@ -16,6 +16,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const DOORBELL = /^: Firstmate operational input waiting: read '([^']+)'/;
 const LAUNCH = /FIRSTMATE_OP: v1 launch-brief:/;
@@ -72,7 +73,7 @@ function main() {
   if (title) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', sessionTitle: title } }));
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   try {
     main();
   } catch {
