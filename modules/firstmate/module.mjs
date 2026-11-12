@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { Skip } from '../../lib/context.mjs';
-import { claudeDir, setHook } from '../../lib/claude.mjs';
+import { claudeDir, removeHook, setHook } from '../../lib/claude.mjs';
 import { TOOLS, versionCheck } from '../agent-clis/tools.mjs';
 import { reminderTokens } from '../claude-code/module.mjs';
 
@@ -277,6 +277,12 @@ export default {
       when: (ctx) => ctx.get('FIRSTMATE_STOW_REMINDER'),
     },
     {
+      key: 'FIRSTMATE_SESSION_NAMES',
+      type: 'confirm',
+      message: 'Name each worker and second-mate session after its task (for example "AI workstation mate"), instead of "Firstmate operational input"?',
+      default: true,
+    },
+    {
       key: 'FIRSTMATE_WATCH_UPDATES',
       type: 'confirm',
       message: 'Watch for updates to firstmate, quota-axi and lavish-axi (config/watched-tools.json)?',
@@ -400,6 +406,18 @@ export default {
         register(dir);
       });
       for (const mate of mates) await mateStep('stow reminder', mate, () => register(mate));
+    }
+    // Claude Code titles a session from its first prompt, and Firstmate starts every worker
+    // and second mate with the same doorbell line. A user-level UserPromptSubmit hook names
+    // the session after the task instead; it stays quiet for every other prompt.
+    const nameScript = path.join(claudeDir(ctx), 'hooks', 'firstmate-session-name.mjs');
+    if (ctx.get('FIRSTMATE_SESSION_NAMES')) {
+      await ctx.step('session names', async () => {
+        await ctx.writeFile(nameScript, ctx.template('claude-code/bin/firstmate-session-name.mjs'), { onConflict: 'ask' });
+        setHook(ctx, 'UserPromptSubmit', 'firstmate-session-name.mjs', `node "${nameScript}"`);
+      });
+    } else {
+      await ctx.step('session names', () => removeHook(ctx, 'UserPromptSubmit', 'firstmate-session-name.mjs'));
     }
     ctx.todo(`start firstmate: cd "${dir}" && claude   (or your harness; its AGENTS.md takes over)`);
     ctx.info('second mates (one persistent home per domain): see docs/firstmate.md');
