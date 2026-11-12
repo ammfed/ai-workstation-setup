@@ -201,7 +201,15 @@ export async function writeClaudeFiles(ctx, vault, pillars) {
   const searchTool = tools.includes('search')
     && (fs.existsSync(path.join(vault, 'bin', 'search')) || !isExistingVault(vault) || ctx.get('VAULT_REFRESH'));
   const narrow = searchTool && isNodeSearch(path.join(vault, 'bin', 'search')) ? ' (narrow with `--type` or `--folder`)' : '';
-  const search = `- Search it with \`rg -i "phrase" "${vault}"\`${searchTool ? `, or ${searchCommand(vault)} for ranked\n  results${narrow}` : ''}.`;
+  // bin/lookup is not shipped by this setup: name it only when the vault has its own.
+  const lookupTool = fs.existsSync(path.join(vault, 'bin', 'lookup'));
+  const rg = `\`rg -i "phrase" "${vault}"\``;
+  const search = lookupTool
+    ? [
+      `- Start with ${toolCommand(vault, 'lookup', 'terms')}: one call gives the top notes with their current state and`,
+      `  linked notes. Then ${searchTool ? searchCommand(vault) : ''}${searchTool ? ` for ranked results${narrow || ' (narrow with `--type` or `--status`)'}, or ` : ''}${rg} for exact text.`,
+    ].join('\n')
+    : `- Search it with ${rg}${searchTool ? `, or ${searchCommand(vault)} for ranked\n  results${narrow}` : ''}.`;
   const edit = [
     scripts
       ? `- Read only: do not edit vault notes by hand. Its own scripts (${writers}) write it, and\n  ${contract} is the contract if a task needs a change there.`
@@ -239,8 +247,13 @@ export async function writeClaudeFiles(ctx, vault, pillars) {
  * A file this run is about to write is the node entry.
  */
 export function searchCommand(vault) {
-  const file = path.join(vault, 'bin', 'search');
-  return isNodeSearch(file) ? `\`node "${file}" "terms"\`` : `\`"${file}" "terms"\``;
+  return toolCommand(vault, 'search', '"terms"');
+}
+
+// The same calling convention for any bin/ tool: node entry by node, anything else by its own path.
+function toolCommand(vault, name, args) {
+  const file = path.join(vault, 'bin', name);
+  return isNodeSearch(file) ? `\`node "${file}" ${args}\`` : `\`"${file}" ${args}\``;
 }
 
 function isNodeSearch(file) {
