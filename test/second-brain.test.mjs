@@ -726,16 +726,47 @@ test('housekeeping: checks the vault and leaves MAP.md and every other file as i
   }
 });
 
-test('housekeeping: a project with no stage is a warning and exits 0', () => {
+test('housekeeping: a project with no stage is not warned about, and still exits 0', () => {
   const root = vault();
   try {
     fs.mkdirSync(path.join(root, 'projects'));
-    fs.writeFileSync(path.join(root, 'projects', 'Roadmap.md'), note('Roadmap', 'project', 'Plans (captured by t, 2026-01-01)'));
+    for (const name of ['Roadmap', 'Board Card', 'Old Redirect', 'Team Plan']) {
+      fs.writeFileSync(path.join(root, 'projects', `${name}.md`), note(name, 'project', 'Plans (captured by t, 2026-01-01)'));
+    }
     const r = node(root, 'housekeeping.mjs', ['--quiet']);
     assert.equal(r.status, 0, r.stdout + r.stderr);
-    assert.match(r.stdout, /projects[\\/]Roadmap\.md: warning: a project needs stage/);
-    assert.match(r.stdout, /contract ok, 1 warning\(s\)/);
+    assert.doesNotMatch(r.stdout, /warning/);
+    assert.doesNotMatch(r.stdout, /needs stage/);
+    assert.match(r.stdout, /contract ok \(check\.mjs\)/);
     assert.equal(node(root, 'check.mjs', []).status, 1, 'the checker on its own still flags it');
+    assert.equal(node(root, 'check.mjs', ['--allow-no-stage']).status, 0);
+  } finally {
+    removeVault(root);
+  }
+});
+
+test('housekeeping: a vault with an executable bin/lint is judged by that linter', () => {
+  if (process.platform === 'win32') return; // no execute bit to test
+  const root = vault();
+  try {
+    fs.mkdirSync(path.join(root, 'projects'));
+    fs.writeFileSync(path.join(root, 'projects', 'Log.md'), note('Log', 'project', 'Plans (captured by t, 2026-01-01)'));
+    const lint = path.join(root, 'bin', 'lint');
+    fs.writeFileSync(lint, '#!/bin/sh\necho "vault lint says fine"\nexit 0\n', { mode: 0o755 });
+    const ok = node(root, 'housekeeping.mjs', ['--quiet']);
+    assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+    assert.match(ok.stdout, /contract ok \(bin\/lint\)/);
+    assert.doesNotMatch(ok.stdout, /needs stage/);
+    fs.writeFileSync(lint, '#!/bin/sh\necho "bad note"\nexit 1\n', { mode: 0o755 });
+    const bad = node(root, 'housekeeping.mjs', ['--quiet']);
+    assert.equal(bad.status, 1);
+    assert.match(bad.stdout, /bad note/);
+    assert.match(bad.stdout, /contract FAILING \(bin\/lint\)/);
+    // A bin/lint that cannot run directly is ignored, and the built-in checker takes over.
+    fs.chmodSync(lint, 0o644);
+    const fallback = node(root, 'housekeeping.mjs', ['--quiet']);
+    assert.equal(fallback.status, 0, fallback.stdout + fallback.stderr);
+    assert.match(fallback.stdout, /contract ok \(check\.mjs\)/);
   } finally {
     removeVault(root);
   }
