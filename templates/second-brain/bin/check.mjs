@@ -7,9 +7,10 @@
 // link to a note that was renamed away is a dead end: both are silent failures, so they get
 // a loud gate instead.
 //
-// Usage: node bin/check.mjs [--stage-warnings] [file...]      (no files means the whole vault)
+// Usage: node bin/check.mjs [--allow-no-stage] [file...]      (no files means the whole vault)
 // Exits non-zero if anything is wrong. Link targets always resolve against the whole vault.
-// --stage-warnings reports a project with no stage as a warning that does not fail the check.
+// --allow-no-stage accepts a project with no stage at all, with no warning. A stage that is
+// present but not one of the allowed values is still a problem.
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -17,8 +18,8 @@ import {
   TYPES, STATUSES, STAGES, REQUIRED, SOURCE_KEYS, FOLDER_TYPE, DATED_DIRS,
 } from './lib-vault.mjs';
 
-const stageWarnings = process.argv.includes('--stage-warnings');
-const args = process.argv.slice(2).filter((a) => a !== '--stage-warnings');
+const allowNoStage = process.argv.includes('--allow-no-stage');
+const args = process.argv.slice(2).filter((a) => a !== '--allow-no-stage');
 // Args are files to check, never the root: the root comes from $VAULT_PATH or this script's folder.
 const root = vaultRoot([]);
 const dirs = noteDirs(root);
@@ -30,7 +31,6 @@ const targets = args.length
   : allNotes;
 
 const problems = [];
-const warnings = [];
 const flag = (rel, msg) => problems.push(`${rel}: ${msg}`);
 // A real calendar date, not just the right shape: 2026-13-99 is a typo worth catching.
 const isDate = (s) => {
@@ -57,10 +57,8 @@ for (const rel of targets) {
   if (fixed && fields.type && fields.type !== fixed) flag(rel, `every note in ${dir}/ must be type: ${fixed}, got "${fields.type}"`);
   if (!fixed && fields.type && fields.type !== 'topic') flag(rel, `a life-area folder holds type: topic, got "${fields.type}"`);
 
-  if (fields.type === 'project' && !STAGES.includes(fields.stage)) {
-    const msg = `a project needs stage: ${STAGES.join('|')}`;
-    if (stageWarnings && !fields.stage) warnings.push(`${rel}: warning: ${msg}`);
-    else flag(rel, msg);
+  if (fields.type === 'project' && !STAGES.includes(fields.stage) && !(allowNoStage && !fields.stage)) {
+    flag(rel, `a project needs stage: ${STAGES.join('|')}`);
   }
   if (fields.type === 'source') {
     for (const key of SOURCE_KEYS) if (!fields[key]) flag(rel, `a source note is missing: ${key}`);
@@ -77,9 +75,8 @@ for (const rel of targets) {
   }
 }
 
-for (const p of [...problems, ...warnings]) console.log(p);
-const warned = warnings.length ? `, ${warnings.length} warning(s)` : '';
+for (const p of problems) console.log(p);
 console.log(problems.length
-  ? `${problems.length} problem(s) in ${targets.length} note(s)${warned}`
-  : `ok: ${targets.length} note(s), no problems${warned}`);
+  ? `${problems.length} problem(s) in ${targets.length} note(s)`
+  : `ok: ${targets.length} note(s), no problems`);
 process.exit(problems.length ? 1 : 0);

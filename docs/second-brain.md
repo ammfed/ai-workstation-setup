@@ -101,8 +101,11 @@ note, grouped by folder. `MAP.md` answers "what exists", `rg` answers "where is 
 
 `bin/housekeeping.mjs` is the unattended pass: run the checker and print one line. It is
 check-only and never writes `MAP.md` or any other file, so it never leaves the vault dirty for
-a job that needs it clean; `bin/index.mjs` stays the one writer of the map. A project with no
-stage yet is a warning; any other contract problem makes it exit non-zero. Point a systemd user
+a job that needs it clean; `bin/index.mjs` stays the one writer of the map. When the vault has
+its own executable `bin/lint`, housekeeping runs that and reports its result as it is. Otherwise
+it runs its copy of `check.mjs`, which accepts a project with no `stage` (a vault may keep log
+notes, cards or redirects that carry none) but still rejects a stage with a wrong value. Any
+contract problem makes it exit non-zero. Point a systemd user
 timer, launchd agent, Task Scheduler entry or cron job at it every few hours. It makes no network
 calls and needs no credentials, which is what makes it safe to leave running. It deliberately
 does not ingest: reading new raw material costs money and deserves a person nearby.
