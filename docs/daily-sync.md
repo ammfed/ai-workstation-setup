@@ -177,6 +177,12 @@ Paths may start with `~`.
   minutes) before it: the template's `bin/ingest.mjs` starts no file after it and leaves a file
   it cuts off for the next run, and the report then counts the files still waiting. A daily
   script that runs its own ingest should pass it on (`--deadline "$INGEST_DEADLINE"`).
+  An ingest that stops on its own, with `ingest: stopped at the quota gate` or `ingest: stopped at
+  the time budget`, is an expected skip: a run that ingested nothing then adds a plain note (the
+  stop line, and the `quota-gate:` reason line before it) instead of "Needs you". A run that
+  ingests nothing and prints no such stop line is still "Needs you".
+- Every vault run's full output is kept in `reports/vault-run-latest.log` (the latest run only,
+  overwritten each time), so the one line a report quotes can be read in context.
 - A version source is `{ "file" | "dir" | "command", "pattern" }`; the highest version the
   pattern's first group matches on each side is compared.
 - `clickup.lists` can also point at a JSON file you already keep:
