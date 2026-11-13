@@ -390,6 +390,8 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
     allCards && 'For a diagram on a page, use the diagram-design skill.',
     cards && cardsPath && !allCards && `Start each decision page from the template at \`${cardsPath}\`.`,
     cards && cardsPath &&
+      'Every card but the first, and the recap, has a Back button that returns to the previous card with its pick and note filled in. Before sending a link, click Back on a middle card and check that it works.',
+    cards && cardsPath &&
       'End each card with a short "Based on" line (the template\'s `based` field) that names the types of sources behind it, such as the user\'s notes, a design system or a usability study.',
     cards && hideKitPath &&
       `Every Lavish prototype, slide or doc page carries the hide tray, so the user can hide parts and send the list back as "remove these". Paste \`${hideKitPath}\` into a script just before </body> and call \`HideKit.attach(document.body)\`. The card template already has it.`,

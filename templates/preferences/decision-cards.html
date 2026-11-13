@@ -17,6 +17,8 @@
   - the canvas shows the current card: every option gets a button, so you can flip between
     every option's preview, and the canvas follows the option you select;
   - a card with no options (a report, plan or explainer step) has a Next button instead;
+  - every card but the first, and the recap, has a Back button beside Next or Send: it returns to
+    the previous card with its pick and note filled in, and a changed answer replaces the old one;
   - a short "why" stays closed until opened;
   - a card can end with one short "Based on" line that names the types of sources behind it;
   - answers are queued, shown in a one-screen recap, then sent together;
@@ -120,6 +122,9 @@ textarea{width:100%;font:inherit;font-size:14px;border:1px solid var(--line);bor
 .note-label+textarea{margin-top:4px}
 button.primary{font:inherit;font-weight:500;background:var(--accent);color:var(--on-accent);border:0;border-radius:12px;padding:10px 18px;margin-top:12px;cursor:pointer}
 button.primary:disabled{opacity:.4;cursor:not-allowed}
+.nav{display:flex;flex-wrap:wrap;gap:8px}
+button.secondary{font:inherit;font-weight:500;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:10px 18px;margin-top:12px;cursor:pointer}
+button.secondary:focus-visible,button.primary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .recap li{margin:4px 0}
 .headline{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin:6px 0}
 .headline .num{font-size:40px;font-weight:800;line-height:1;color:var(--accent-deep);white-space:nowrap}
@@ -525,9 +530,9 @@ function writeDraftFields(text) {
 }
 
 function saveDraft() {
+  rememberCard();
   const c = CARDS[index];
-  const cur = c?.options?.length ? { id: c.id, value: picked() || '', note: $('note')?.value || '' } : null;
-  const text = JSON.stringify({ at: c ? c.id : 'recap', answers, shown, cur });
+  const text = JSON.stringify({ at: c ? c.id : 'recap', answers, shown, pending });
   try { localStorage.setItem(draftKey, text); } catch (e) {}
   writeDraftFields(text);
 }
@@ -559,18 +564,15 @@ function applyDraft(d) {
   answers.sort((x, y) => at.get(x.id) - at.get(y.id));
   shown = {};
   for (const [id, v] of Object.entries(d.shown && typeof d.shown === 'object' ? d.shown : {})) if (option(id, v)) shown[id] = v;
+  pending = {};
+  for (const [id, p] of Object.entries(d.pending && typeof d.pending === 'object' ? d.pending : {})) {
+    if (!at.has(id) || !p || typeof p !== 'object') continue;
+    pending[id] = { value: option(id, p.value) ? p.value : '', note: String(p.note || '') };
+  }
   const place = at.has(d.at) ? at.get(d.at) : CARDS.length;
   const gap = CARDS.findIndex((c, i) => i < place && c.options?.length && !answers.some((a) => a.id === c.id));
   index = gap >= 0 ? gap : place;
   drawCard();
-  const c = CARDS[index];
-  const cur = d.cur;
-  if (c?.options?.length && cur && cur.id === c.id) {
-    const radio = [...$('card').querySelectorAll('input[type=radio]')].find((r) => r.value === cur.value);
-    if (radio) { radio.checked = true; $('next').disabled = false; }
-    $('note').value = String(cur.note || '');
-    drawCanvas();
-  }
   saveDraft();
 }
 
@@ -641,6 +643,38 @@ function drawCanvas() {
   hideKit.refresh();
 }
 
+// Picks and notes typed on a card but not yet confirmed with Next, by card id, so Back and a
+// reload bring them back. A confirmed answer lives in answers instead.
+let pending = {};
+
+// Records what the current decision card shows into pending.
+function rememberCard() {
+  const c = CARDS[index];
+  if (!c?.options?.length || !$('note')) return;
+  const value = picked() || '';
+  const note = $('note').value || '';
+  if (value || note) pending[c.id] = { value, note };
+  else delete pending[c.id];
+}
+
+// Fills a decision card with its unconfirmed pick and note, else with its answer.
+function fillCard(c) {
+  const a = pending[c.id] || answers.find((x) => x.id === c.id);
+  if (!a) return;
+  const radio = [...$('card').querySelectorAll('input[type=radio]')].find((r) => r.value === a.value);
+  if (radio) { radio.checked = true; $('next').disabled = false; }
+  $('note').value = String(a.note || '');
+}
+
+// Every card but the first, and the recap, has a Back button beside its main button.
+const backButton = () => (index > 0 ? '<button type="button" class="secondary" id="back">Back</button>' : '');
+function goBack() {
+  rememberCard();
+  index -= 1;
+  drawCard();
+  saveDraft();
+}
+
 function drawCard() {
   const n = Math.min(index + 1, CARDS.length);
   $('count').textContent = `${n} of ${CARDS.length}`;
@@ -655,9 +689,10 @@ function drawCard() {
       ${c.body ? `<div class="body">${c.body}</div>` : ''}
       ${c.evidence ? `<p class="evidence">${esc(c.evidence)}</p>` : ''}
       ${c.why ? `<details><summary>Why</summary><p>${c.why}</p></details>` : ''}
-      <button type="button" class="primary" id="next">Next</button>
+      <div class="nav">${backButton()}<button type="button" class="primary" id="next">Next</button></div>
       ${basedOn(c)}`;
     $('next').addEventListener('click', advance);
+    $('back')?.addEventListener('click', goBack);
     drawCanvas();
     return;
   }
@@ -668,20 +703,23 @@ function drawCard() {
     ${c.why ? `<details><summary>Why</summary><p>${c.why}</p></details>` : ''}
     <label class="label note-label" for="note">Note</label>
     <textarea id="note" rows="2" placeholder="Optional"></textarea>
-    <button type="button" class="primary" id="next" disabled>Next</button>
+    <div class="nav">${backButton()}<button type="button" class="primary" id="next" disabled>Next</button></div>
     ${basedOn(c)}`;
+  fillCard(c);
   $('card').querySelectorAll('input[type=radio]').forEach((r) => r.addEventListener('change', () => {
     $('next').disabled = false;
     shown[c.id] = r.value;
     drawCanvas();
   }));
+  $('back')?.addEventListener('click', goBack);
   $('next').addEventListener('click', () => {
     const value = picked();
-    // A restored draft can already hold an answer for this card; the new one replaces it.
+    // One answer per card: a changed answer replaces the earlier one, so nothing counts twice.
     const old = answers.findIndex((a) => a.id === c.id);
     if (old >= 0) answers.splice(old, 1);
     answers.push({ id: c.id, title: c.title, value, label: c.options.find(([v]) => v === value)[1], note: $('note').value.trim() });
     answers.sort((x, y) => CARDS.findIndex((k) => k.id === x.id) - CARDS.findIndex((k) => k.id === y.id));
+    delete pending[c.id];
     advance();
   });
   drawCanvas();
@@ -690,20 +728,14 @@ function drawCard() {
 function drawRecap() {
   drawCanvas();
   if (!decisions().length) {
-    $('card').innerHTML = '<h2>That is everything</h2>';
+    $('card').innerHTML = `<h2>That is everything</h2><div class="nav">${backButton()}</div>`;
+    $('back')?.addEventListener('click', goBack);
     return;
   }
   $('card').innerHTML = `<h2>Your answers</h2>
     <ul class="recap">${answers.map((a) => `<li><b>${esc(a.title)}:</b> ${esc(a.label)}${a.note ? ` (${esc(a.note)})` : ''}</li>`).join('')}</ul>
-    <button type="button" class="primary" id="back">Change the last answer</button>
-    <button type="button" class="primary" id="send">Send answers</button>`;
-  $('back').addEventListener('click', () => {
-    // Step back over content cards to the last decision answered.
-    const last = answers.pop();
-    index = CARDS.findIndex((c) => c.id === last.id);
-    drawCard();
-    saveDraft();
-  });
+    <div class="nav">${backButton()}<button type="button" class="primary" id="send">Send answers</button></div>`;
+  $('back')?.addEventListener('click', goBack);
   $('send').addEventListener('click', () => {
     checkListening();
     for (const a of answers) {

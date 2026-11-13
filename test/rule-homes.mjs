@@ -76,6 +76,7 @@ export const RULE_HOMES = [
     { text: 'While the user is away, open nothing', ifOld: 'While the user is away' },
   ]),
   row('Leave a page file as it is while the user has the page open', PAGES),
+  row('Every card but the first, and the recap, has a Back button', PAGES),
   row('Ask decisions with the question tool', 'core', undefined, { PREFS_DECISIONS: 'tool' }),
   row('Ask decisions in chat', 'core', undefined, { PREFS_DECISIONS: 'chat' }),
   row('Ask a simple yes-or-no question in plain chat', 'core'),

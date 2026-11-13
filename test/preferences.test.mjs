@@ -547,7 +547,7 @@ test('a card with based ends with one "Based on" line, and a card without it ren
   assert.ok(content.endsWith(line), content);
   const without = render({ id: 'c', title: 'C', question: 'Which?', options: [['x', 'X']] });
   assert.doesNotMatch(without, /Based on/);
-  assert.ok(without.endsWith('<button type="button" class="primary" id="next" disabled>Next</button>'), without);
+  assert.ok(without.endsWith('<div class="nav"><button type="button" class="primary" id="next" disabled>Next</button></div>'), without);
   assert.doesNotMatch(render({ id: 'd', title: 'D', body: '<p>Plan</p>' }), /Based on/);
 });
 
@@ -632,6 +632,37 @@ test('the card template saves every pick, note and answer, restores them after a
   for (const m of third.html.matchAll(/localStorage\.(?:getItem|setItem|removeItem)/g)) {
     assert.match(third.html.slice(Math.max(0, m.index - 80), m.index), /try\s*\{[^}]*$/, 'storage access is wrapped in try/catch');
   }
+});
+
+test('every card but the first, and the recap, has Back, which returns with the pick and note filled in', () => {
+  const page = runCardPage(memoryStorage());
+  page.run(`CARDS.length = 0; CARDS.push(
+    { id: 'a', title: 'A', question: 'A?', options: [['x', 'X'], ['y', 'Y']] },
+    { id: 'info', title: 'Info', body: '<p>Read</p>' },
+    { id: 'b', title: 'B', question: 'B?', options: [['p', 'P'], ['q', 'Q']] });
+    index = 0; answers.length = 0; pending = {}; drawCard();`);
+  assert.doesNotMatch(page.card(), /id="back"/, 'the first card has no Back');
+  page.run('index = 1; drawCard();');
+  assert.match(page.card(), /<div class="nav"><button type="button" class="secondary" id="back">Back<\/button><button type="button" class="primary" id="next">Next<\/button><\/div>/, 'a content card has Back beside Next');
+  page.run('index = 2; drawCard();');
+  assert.match(page.card(), /id="back">Back<\/button><button type="button" class="primary" id="next" disabled>Next/, 'a decision card has Back beside Next');
+  page.run('index = 3; drawCard();');
+  assert.match(page.card(), /id="back">Back<\/button><button type="button" class="primary" id="send">Send answers/, 'the recap has Back');
+  assert.doesNotMatch(page.html, /Change the last answer/);
+  // Back from the recap lands on the last card, and back again on a decision card whose
+  // answer and unconfirmed pick come back; Next replaces the answer, so nothing counts twice.
+  page.run(`answers.push({ id: 'a', title: 'A', value: 'y', label: 'Y', note: 'first' }, { id: 'b', title: 'B', value: 'p', label: 'P', note: '' }); index = 3; goBack();`);
+  assert.equal(page.run('index'), 2);
+  page.run('goBack(); goBack();');
+  assert.equal(page.run('index'), 0);
+  assert.equal(page.run('answers.length'), 2, 'Back keeps answers for the cards it passes');
+  assert.match(page.html, /function fillCard\(c\) \{\n  const a = pending\[c\.id\] \|\| answers\.find\(\(x\) => x\.id === c\.id\);/, 'a card is filled from its unconfirmed pick, else its answer');
+  assert.match(page.html, /if \(old >= 0\) answers\.splice\(old, 1\);/);
+  // Unconfirmed picks are part of the saved draft, so Back and a reload agree.
+  page.run(`index = 2; drawCard(); document.getElementById('note').value = 'half typed'; saveDraft();`);
+  const draft = JSON.parse(page.fields.map((f) => f.value).join(''));
+  assert.equal(draft.pending.b.note, 'half typed');
+  assert.equal(draft.at, 'b');
 });
 
 test('the card template is light by default with a guarded dark switch', () => {
