@@ -547,8 +547,122 @@ test('a card with based ends with one "Based on" line, and a card without it ren
   assert.ok(content.endsWith(line), content);
   const without = render({ id: 'c', title: 'C', question: 'Which?', options: [['x', 'X']] });
   assert.doesNotMatch(without, /Based on/);
-  assert.ok(without.endsWith('<button type="button" class="primary" id="next" disabled>Next</button>'), without);
+  assert.ok(without.endsWith('<div class="nav"><button type="button" class="primary" id="next" disabled>Next</button></div>'), without);
   assert.doesNotMatch(render({ id: 'd', title: 'D', body: '<p>Plan</p>' }), /Based on/);
+});
+
+// Runs the card page script against a small fake DOM. storage is the page's localStorage; the
+// #draft block gets 16 fake textareas, so the Lavish replay fields can be read and written.
+function runCardPage(storage) {
+  const html = fs.readFileSync(path.join(repoRoot, 'templates/preferences/decision-cards.html'), 'utf8');
+  const pageScript = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).find((s) => s.includes('function drawCard'));
+  const fields = Array.from({ length: 16 }, () => ({ value: '', events: 0, dispatchEvent() { this.events += 1; } }));
+  const elements = new Map();
+  const element = (id) => ({
+    innerHTML: '', textContent: '', hidden: false, disabled: false, value: '', style: {}, dataset: {},
+    addEventListener() {}, setAttribute() {}, querySelector: () => null, close() {}, showModal() {},
+    querySelectorAll: (sel) => (id === 'draft' && sel === 'textarea' ? fields : []),
+  });
+  const document = {
+    documentElement: { dataset: {} },
+    getElementById: (id) => elements.get(id) || elements.set(id, element(id)).get(id),
+    querySelector: () => null,
+  };
+  const listeners = [];
+  const page = vm.createContext({
+    document, location: { pathname: '/cards.html' }, localStorage: storage, Event: class { constructor(type) { this.type = type; } },
+    window: { addEventListener: (type, fn) => listeners.push([type, fn]) }, setTimeout: (fn) => fn(), HideKit: { attach: () => ({ refresh() {} }) },
+  });
+  vm.runInContext(pageScript, page);
+  const run = (code) => vm.runInContext(code, page);
+  const message = (data) => listeners.filter(([type]) => type === 'message').forEach(([, fn]) => fn({ data }));
+  return { html, fields, run, message, card: () => document.getElementById('card').innerHTML };
+}
+
+function memoryStorage() {
+  const map = new Map();
+  return { map, getItem: (k) => map.get(k) ?? null, setItem: (k, v) => map.set(k, String(v)), removeItem: (k) => map.delete(k) };
+}
+
+test('the card template saves every pick, note and answer, restores them after a reload, and clears them on Send', () => {
+  const storage = memoryStorage();
+  const first = runCardPage(storage);
+  assert.match(first.html, /<div id="draft" hidden data-lavish-question="decision-cards-draft">/, 'the draft rides in a field Lavish replays');
+  assert.match(first.html, /\$\('card'\)\.addEventListener\('input', saveDraft\)/, 'typing saves');
+  assert.match(first.html, /\$\('card'\)\.addEventListener\('change', saveDraft\)/, 'a pick saves');
+  assert.match(first.html, /if \(window\.lavish\) clearDraft\(\);/, 'Send clears the draft');
+  // One answered card, then a pick and a note on the next card.
+  first.run(`answers.push({ id: 'layout', title: 'Report layout', value: 'sections', label: 'A section per area', note: 'kept' }); index = 1; shown = { chart: 'table' }; saveDraft();`);
+  const key = 'decision-cards-draft:/cards.html';
+  assert.ok(storage.map.has(key), 'saved to localStorage under the page path');
+  assert.equal(first.fields.map((f) => f.value).join(''), storage.map.get(key), 'the same draft sits in the Lavish fields');
+  assert.ok(first.fields[0].events > 0, 'the fields announce the change to Lavish');
+
+  // A reload: a fresh page with the same storage comes back on the same card with the answer.
+  const second = runCardPage(storage);
+  assert.equal(second.run('index'), 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(second.run('answers'))), [{ id: 'layout', title: 'Report layout', value: 'sections', label: 'A section per area', note: 'kept' }]);
+  assert.equal(second.run('shown.chart'), 'table');
+
+  // Inside Lavish localStorage throws; the draft comes back from the replayed fields instead.
+  const throwing = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); }, removeItem() { throw new Error('blocked'); } };
+  const lavish = runCardPage(throwing);
+  assert.equal(lavish.run('index'), 0, 'nothing to restore yet');
+  const saved = storage.map.get(key);
+  lavish.fields.forEach((f, i) => { f.value = saved.slice(i * 1900, (i + 1) * 1900); });
+  lavish.message({ type: 'lavish:restoreReviewState' });
+  assert.equal(lavish.run('index'), 1);
+  assert.equal(lavish.run('answers.length'), 1);
+
+  // A draft larger than one field is split and joined again.
+  lavish.run(`answers[0].note = 'x'.repeat(5000); saveDraft();`);
+  assert.ok(lavish.fields[2].value.length > 0, 'a long draft spans several fields');
+  lavish.run('answers.length = 0; index = 0;');
+  lavish.message({ type: 'lavish:restoreReviewState' });
+  assert.equal(lavish.run('answers[0].note.length'), 5000);
+
+  // An answer for a card that is gone is dropped; Send clears both stores.
+  storage.setItem(key, JSON.stringify({ at: 'chart', answers: [{ id: 'gone', value: 'x' }, { id: 'layout', value: 'one-page' }], shown: { chart: 'nope' } }));
+  const third = runCardPage(storage);
+  assert.deepEqual(JSON.parse(JSON.stringify(third.run('answers'))).map((a) => a.id), ['layout']);
+  assert.equal(third.run('shown.chart'), undefined, 'a preview for an option that is gone is dropped');
+  third.run('clearDraft()');
+  assert.ok(!storage.map.has(key));
+  assert.equal(third.fields.map((f) => f.value).join(''), '');
+  for (const m of third.html.matchAll(/localStorage\.(?:getItem|setItem|removeItem)/g)) {
+    assert.match(third.html.slice(Math.max(0, m.index - 80), m.index), /try\s*\{[^}]*$/, 'storage access is wrapped in try/catch');
+  }
+});
+
+test('every card but the first, and the recap, has Back, which returns with the pick and note filled in', () => {
+  const page = runCardPage(memoryStorage());
+  page.run(`CARDS.length = 0; CARDS.push(
+    { id: 'a', title: 'A', question: 'A?', options: [['x', 'X'], ['y', 'Y']] },
+    { id: 'info', title: 'Info', body: '<p>Read</p>' },
+    { id: 'b', title: 'B', question: 'B?', options: [['p', 'P'], ['q', 'Q']] });
+    index = 0; answers.length = 0; pending = {}; drawCard();`);
+  assert.doesNotMatch(page.card(), /id="back"/, 'the first card has no Back');
+  page.run('index = 1; drawCard();');
+  assert.match(page.card(), /<div class="nav"><button type="button" class="secondary" id="back">Back<\/button><button type="button" class="primary" id="next">Next<\/button><\/div>/, 'a content card has Back beside Next');
+  page.run('index = 2; drawCard();');
+  assert.match(page.card(), /id="back">Back<\/button><button type="button" class="primary" id="next" disabled>Next/, 'a decision card has Back beside Next');
+  page.run('index = 3; drawCard();');
+  assert.match(page.card(), /id="back">Back<\/button><button type="button" class="primary" id="send">Send answers/, 'the recap has Back');
+  assert.doesNotMatch(page.html, /Change the last answer/);
+  // Back from the recap lands on the last card, and back again on a decision card whose
+  // answer and unconfirmed pick come back; Next replaces the answer, so nothing counts twice.
+  page.run(`answers.push({ id: 'a', title: 'A', value: 'y', label: 'Y', note: 'first' }, { id: 'b', title: 'B', value: 'p', label: 'P', note: '' }); index = 3; goBack();`);
+  assert.equal(page.run('index'), 2);
+  page.run('goBack(); goBack();');
+  assert.equal(page.run('index'), 0);
+  assert.equal(page.run('answers.length'), 2, 'Back keeps answers for the cards it passes');
+  assert.match(page.html, /function fillCard\(c\) \{\n  const a = pending\[c\.id\] \|\| answers\.find\(\(x\) => x\.id === c\.id\);/, 'a card is filled from its unconfirmed pick, else its answer');
+  assert.match(page.html, /if \(old >= 0\) answers\.splice\(old, 1\);/);
+  // Unconfirmed picks are part of the saved draft, so Back and a reload agree.
+  page.run(`index = 2; drawCard(); document.getElementById('note').value = 'half typed'; saveDraft();`);
+  const draft = JSON.parse(page.fields.map((f) => f.value).join(''));
+  assert.equal(draft.pending.b.note, 'half typed');
+  assert.equal(draft.at, 'b');
 });
 
 test('the card template is light by default with a guarded dark switch', () => {

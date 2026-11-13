@@ -288,6 +288,7 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
 2. **Build, open and send the page the way the review-pages skill says.**
    - That skill holds the card template, the layout, the "Based on" line, the screenshot checks, and when to open and send the link.
    - Without it: one card at a time, each with one decision, a picture where it helps, little text and clear choices. End each card with a short "Based on" line that names the types of sources behind it.
+   - Every card but the first, and the recap, has a Back button that returns with the pick and note filled in.
    - At every stage end, send a short results page: what was found, what was decided and by whom, and what is still open.
 
    Why: page rules kept in two places drift apart, and the owner then gets pages built two ways.
@@ -305,6 +306,7 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
 5. **Check the page before sharing it.**
    - Run the review-pages skill's screenshot checks, at the owner's target screen size first (checkpoints.md, step 18).
    - Then open the hosted page itself. Check that it loads, has no answers yet and includes every source it cites.
+   - Click Back on a middle card. Check that the previous card comes back with its pick and note.
    - Only then tell the owner it is ready.
 
    Why: a page marked ready that is broken or already answered wastes a round.
@@ -331,6 +333,11 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
    6. The screenshot check: the page really renders at the target sizes (rule 4.5).
 
    Why: each check catches a failure the owner would otherwise find first, and the owner's time goes to decisions, not to finding mistakes.
+8. **Leave an open page alone.**
+   - While the owner has a page open and has not sent or ended it, keep its file as it is.
+   - Queue the change, and make it after the owner sends or ends the page.
+
+   Why: the page reloads when its file changes, and the reload can wipe what the owner is typing.
 
 ## 5. Asking and acting
 

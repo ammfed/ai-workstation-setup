@@ -253,6 +253,19 @@ export default {
       when: (ctx) => ctx.get('CLAUDE_CONTEXT_REMINDER'),
     },
     {
+      key: 'CLAUDE_STOW_GATE',
+      type: 'confirm',
+      message: 'Refuse every tool call once the context gets large, until the agent has run the stow skill (a hard stop, stricter than the reminder)?',
+      default: false,
+    },
+    {
+      key: 'CLAUDE_STOW_GATE_TOKENS',
+      type: 'text',
+      message: 'Stop tool calls once the context passes how many tokens ("auto": three quarters of the auto-compact window, so 300000 for a 400000 window)',
+      default: 'auto',
+      when: (ctx) => ctx.get('CLAUDE_STOW_GATE'),
+    },
+    {
       key: 'CLAUDE_READER_AGENT',
       type: 'confirm',
       message: 'Add a read-only "reader" subagent on Haiku for reading, lookup and summaries (keeps your own reader if you have one)?',
@@ -440,6 +453,16 @@ export default {
         registerContextReminder(ctx, command, ctx.get('CLAUDE_COMPACT_REMINDER'));
       });
     }
+
+    // A PreToolUse hook that refuses tool calls past the stow line until the stow skill has
+    // started; see templates/claude-code/bin/stow-gate.mjs. Answering no removes the hook.
+    await ctx.step('stow gate hook', async () => {
+      if (!ctx.get('CLAUDE_STOW_GATE')) return removeHook(ctx, 'PreToolUse', 'stow-gate.mjs');
+      const tokens = reminderTokens(ctx.get('CLAUDE_STOW_GATE_TOKENS'), 'CLAUDE_STOW_GATE_TOKENS');
+      const script = path.join(claudeDir(ctx), 'hooks', 'stow-gate.mjs');
+      await ctx.writeFile(script, ctx.template('claude-code/bin/stow-gate.mjs'), { onConflict: 'ask' });
+      setHook(ctx, 'PreToolUse', 'stow-gate.mjs', `node "${script}" ${tokens}`);
+    });
 
     // Fetches the template at most once a day and prints one line when this clone is behind;
     // see templates/claude-code/bin/update-check.mjs. Answering no removes the hook.

@@ -17,9 +17,13 @@
   - the canvas shows the current card: every option gets a button, so you can flip between
     every option's preview, and the canvas follows the option you select;
   - a card with no options (a report, plan or explainer step) has a Next button instead;
+  - every card but the first, and the recap, has a Back button beside Next or Send: it returns to
+    the previous card with its pick and note filled in, and a changed answer replaces the old one;
   - a short "why" stays closed until opened;
   - a card can end with one short "Based on" line that names the types of sources behind it;
   - answers are queued, shown in a one-screen recap, then sent together;
+  - every pick, note and answer is saved as you go and comes back after a reload (Lavish reloads
+    the page when its file changes); Send clears the saved draft. Leave the #draft block as it is;
   - a banner says when no agent is listening (the page was opened without lavish-axi);
   - what is already decided sits below, collapsed;
   - light by default, whatever the browser's dark setting says; a small "Dark" button at the top
@@ -118,6 +122,9 @@ textarea{width:100%;font:inherit;font-size:14px;border:1px solid var(--line);bor
 .note-label+textarea{margin-top:4px}
 button.primary{font:inherit;font-weight:500;background:var(--accent);color:var(--on-accent);border:0;border-radius:12px;padding:10px 18px;margin-top:12px;cursor:pointer}
 button.primary:disabled{opacity:.4;cursor:not-allowed}
+.nav{display:flex;flex-wrap:wrap;gap:8px}
+button.secondary{font:inherit;font-weight:500;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:10px 18px;margin-top:12px;cursor:pointer}
+button.secondary:focus-visible,button.primary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .recap li{margin:4px 0}
 .headline{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin:6px 0}
 .headline .num{font-size:40px;font-weight:800;line-height:1;color:var(--accent-deep);white-space:nowrap}
@@ -163,6 +170,7 @@ dialog.zoom button{position:sticky;top:0;float:right;font:inherit;font-size:14px
   </div>
   <div class="hide-slot" id="hide-slot"></div>
   <details class="decided" id="decided" hidden><summary>Decided so far</summary><table id="decided-rows"></table></details>
+  <div id="draft" hidden data-lavish-question="decision-cards-draft"><textarea name="draft-0" aria-hidden="true" tabindex="-1"></textarea><textarea name="draft-1" aria-hidden="true" tabindex="-1"></textarea><textarea name="draft-2" aria-hidden="true" tabindex="-1"></textarea><textarea name="draft-3" aria-hidden="true" tabindex="-1"></textarea><textarea name="draft-4" aria-hidden="true" tabindex="-1"></textarea><textarea name="draft-5" aria-hidden="true" tabindex="-1"></textarea><textarea name="draft-6" aria-hidden="true" tabindex="-1"></textarea><textarea name="draft-7" aria-hidden="true" tabindex="-1"></textarea><textarea name="draft-8" aria-hidden="true" tabindex="-1"></textarea><textarea name="draft-9" aria-hidden="true" tabindex="-1"></textarea><textarea name="draft-10" aria-hidden="true" tabindex="-1"></textarea><textarea name="draft-11" aria-hidden="true" tabindex="-1"></textarea><textarea name="draft-12" aria-hidden="true" tabindex="-1"></textarea><textarea name="draft-13" aria-hidden="true" tabindex="-1"></textarea><textarea name="draft-14" aria-hidden="true" tabindex="-1"></textarea><textarea name="draft-15" aria-hidden="true" tabindex="-1"></textarea></div>
 </div>
 <dialog class="zoom" id="zoom" aria-label="Full-size picture"><button type="button" id="zoom-close">Close</button><div id="zoom-body"></div></dialog>
 <script>
@@ -504,6 +512,83 @@ setTheme(document.documentElement.dataset.theme === 'dark', false);
 $('theme').addEventListener('click', () => setTheme(document.documentElement.dataset.theme !== 'dark', true));
 const decisions = () => CARDS.filter((c) => c.options?.length);
 
+// Draft autosave: every pick, note and answer survives a reload, because Lavish reloads the page
+// when its file changes. The draft goes to two places. localStorage (per page path) works when the
+// page is opened on its own. Inside Lavish the page runs in a sandboxed frame where localStorage
+// throws, so the draft also rides in the hidden #draft fields, which Lavish replays after a reload.
+// Lavish keeps at most 2000 characters per field, so the draft is split over the 16 fields.
+// Send clears both.
+const draftKey = 'decision-cards-draft:' + location.pathname;
+const DRAFT_CHUNK = 1900;
+const draftFields = () => [...$('draft').querySelectorAll('textarea')];
+
+function writeDraftFields(text) {
+  const fields = draftFields();
+  fields.forEach((f, i) => { f.value = text.slice(i * DRAFT_CHUNK, (i + 1) * DRAFT_CHUNK); });
+  // Lavish records the fields on an input event from inside the data-lavish-question wrapper.
+  fields[0]?.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function saveDraft() {
+  rememberCard();
+  const c = CARDS[index];
+  const text = JSON.stringify({ at: c ? c.id : 'recap', answers, shown, pending });
+  try { localStorage.setItem(draftKey, text); } catch (e) {}
+  writeDraftFields(text);
+}
+
+function clearDraft() {
+  try { localStorage.removeItem(draftKey); } catch (e) {}
+  writeDraftFields('');
+}
+
+function readDraft(fromFields) {
+  let text = '';
+  if (fromFields) text = draftFields().map((f) => f.value).join('');
+  else { try { text = localStorage.getItem(draftKey) || ''; } catch (e) {} }
+  if (!text) return null;
+  try { const d = JSON.parse(text); return d && typeof d === 'object' ? d : null; } catch (e) { return null; }
+}
+
+// Applies a saved draft to the cards on the page now. The page may have changed since the draft
+// was saved, so answers and previews for cards or options that are gone are dropped, and a
+// decision card added before the saved place is shown first.
+function applyDraft(d) {
+  const at = new Map(CARDS.map((c, i) => [c.id, i]));
+  const option = (id, v) => CARDS[at.get(id)]?.options?.find(([x]) => x === v);
+  answers.length = 0;
+  for (const a of Array.isArray(d.answers) ? d.answers : []) {
+    const o = option(a?.id, a?.value);
+    if (o && !answers.some((x) => x.id === a.id)) answers.push({ id: a.id, title: CARDS[at.get(a.id)].title, value: o[0], label: o[1], note: String(a.note || '') });
+  }
+  answers.sort((x, y) => at.get(x.id) - at.get(y.id));
+  shown = {};
+  for (const [id, v] of Object.entries(d.shown && typeof d.shown === 'object' ? d.shown : {})) if (option(id, v)) shown[id] = v;
+  pending = {};
+  for (const [id, p] of Object.entries(d.pending && typeof d.pending === 'object' ? d.pending : {})) {
+    if (!at.has(id) || !p || typeof p !== 'object') continue;
+    pending[id] = { value: option(id, p.value) ? p.value : '', note: String(p.note || '') };
+  }
+  const place = at.has(d.at) ? at.get(d.at) : CARDS.length;
+  const gap = CARDS.findIndex((c, i) => i < place && c.options?.length && !answers.some((a) => a.id === c.id));
+  index = gap >= 0 ? gap : place;
+  drawCard();
+  saveDraft();
+}
+
+function restoreDraft(fromFields) {
+  const d = readDraft(fromFields);
+  if (!d) return false;
+  applyDraft(d);
+  return true;
+}
+
+$('card').addEventListener('input', saveDraft);
+$('card').addEventListener('change', saveDraft);
+window.addEventListener('message', (e) => {
+  if (e.data?.type === 'lavish:restoreReviewState') setTimeout(() => restoreDraft(true), 0);
+});
+
 // lavish-axi injects window.lavish after the page script can already have run, so decide the
 // banner once the page has settled, and again whenever answers are sent.
 const checkListening = () => { $('banner').hidden = Boolean(window.lavish); };
@@ -551,11 +636,43 @@ function drawCanvas() {
     const preview = c.previews?.[current];
     const stage = preview ? `<div class="stage">${stageHtml(preview, c.previewsTall?.[current])}</div>` : `<div class="stage empty"><span class="none">${esc(label)}</span></div>`;
     el.innerHTML = `<h2>${esc(c.title)}</h2><div class="tabs" role="group" aria-label="Option previews">${tabs}</div>${stage}`;
-    el.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => { shown[c.id] = b.dataset.v; drawCanvas(); }));
+    el.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => { shown[c.id] = b.dataset.v; drawCanvas(); saveDraft(); }));
   }
   const stage = el.querySelector('.stage:not(.empty)');
   stage?.addEventListener('click', () => zoom(stage));
   hideKit.refresh();
+}
+
+// Picks and notes typed on a card but not yet confirmed with Next, by card id, so Back and a
+// reload bring them back. A confirmed answer lives in answers instead.
+let pending = {};
+
+// Records what the current decision card shows into pending.
+function rememberCard() {
+  const c = CARDS[index];
+  if (!c?.options?.length || !$('note')) return;
+  const value = picked() || '';
+  const note = $('note').value || '';
+  if (value || note) pending[c.id] = { value, note };
+  else delete pending[c.id];
+}
+
+// Fills a decision card with its unconfirmed pick and note, else with its answer.
+function fillCard(c) {
+  const a = pending[c.id] || answers.find((x) => x.id === c.id);
+  if (!a) return;
+  const radio = [...$('card').querySelectorAll('input[type=radio]')].find((r) => r.value === a.value);
+  if (radio) { radio.checked = true; $('next').disabled = false; }
+  $('note').value = String(a.note || '');
+}
+
+// Every card but the first, and the recap, has a Back button beside its main button.
+const backButton = () => (index > 0 ? '<button type="button" class="secondary" id="back">Back</button>' : '');
+function goBack() {
+  rememberCard();
+  index -= 1;
+  drawCard();
+  saveDraft();
 }
 
 function drawCard() {
@@ -565,16 +682,17 @@ function drawCard() {
   const c = CARDS[index];
   if (!c) return drawRecap();
   const label = `<p class="label">${c.label ? `${esc(c.label)} · ` : ''}${n} of ${CARDS.length}</p>`;
-  const advance = () => { index += 1; drawCard(); };
+  const advance = () => { index += 1; drawCard(); saveDraft(); };
   if (!c.options?.length) {
     $('card').innerHTML = `${label}<h2>${esc(c.question || c.title)}</h2>
       ${c.headline ? `<div class="headline"><span class="num">${esc(c.headline.num)}</span><span class="cap">${esc(c.headline.cap)}</span></div>` : ''}
       ${c.body ? `<div class="body">${c.body}</div>` : ''}
       ${c.evidence ? `<p class="evidence">${esc(c.evidence)}</p>` : ''}
       ${c.why ? `<details><summary>Why</summary><p>${c.why}</p></details>` : ''}
-      <button type="button" class="primary" id="next">Next</button>
+      <div class="nav">${backButton()}<button type="button" class="primary" id="next">Next</button></div>
       ${basedOn(c)}`;
     $('next').addEventListener('click', advance);
+    $('back')?.addEventListener('click', goBack);
     drawCanvas();
     return;
   }
@@ -585,16 +703,23 @@ function drawCard() {
     ${c.why ? `<details><summary>Why</summary><p>${c.why}</p></details>` : ''}
     <label class="label note-label" for="note">Note</label>
     <textarea id="note" rows="2" placeholder="Optional"></textarea>
-    <button type="button" class="primary" id="next" disabled>Next</button>
+    <div class="nav">${backButton()}<button type="button" class="primary" id="next" disabled>Next</button></div>
     ${basedOn(c)}`;
+  fillCard(c);
   $('card').querySelectorAll('input[type=radio]').forEach((r) => r.addEventListener('change', () => {
     $('next').disabled = false;
     shown[c.id] = r.value;
     drawCanvas();
   }));
+  $('back')?.addEventListener('click', goBack);
   $('next').addEventListener('click', () => {
     const value = picked();
+    // One answer per card: a changed answer replaces the earlier one, so nothing counts twice.
+    const old = answers.findIndex((a) => a.id === c.id);
+    if (old >= 0) answers.splice(old, 1);
     answers.push({ id: c.id, title: c.title, value, label: c.options.find(([v]) => v === value)[1], note: $('note').value.trim() });
+    answers.sort((x, y) => CARDS.findIndex((k) => k.id === x.id) - CARDS.findIndex((k) => k.id === y.id));
+    delete pending[c.id];
     advance();
   });
   drawCanvas();
@@ -603,19 +728,14 @@ function drawCard() {
 function drawRecap() {
   drawCanvas();
   if (!decisions().length) {
-    $('card').innerHTML = '<h2>That is everything</h2>';
+    $('card').innerHTML = `<h2>That is everything</h2><div class="nav">${backButton()}</div>`;
+    $('back')?.addEventListener('click', goBack);
     return;
   }
   $('card').innerHTML = `<h2>Your answers</h2>
     <ul class="recap">${answers.map((a) => `<li><b>${esc(a.title)}:</b> ${esc(a.label)}${a.note ? ` (${esc(a.note)})` : ''}</li>`).join('')}</ul>
-    <button type="button" class="primary" id="back">Change the last answer</button>
-    <button type="button" class="primary" id="send">Send answers</button>`;
-  $('back').addEventListener('click', () => {
-    // Step back over content cards to the last decision answered.
-    const last = answers.pop();
-    index = CARDS.findIndex((c) => c.id === last.id);
-    drawCard();
-  });
+    <div class="nav">${backButton()}<button type="button" class="primary" id="send">Send answers</button></div>`;
+  $('back')?.addEventListener('click', goBack);
   $('send').addEventListener('click', () => {
     checkListening();
     for (const a of answers) {
@@ -624,6 +744,7 @@ function drawRecap() {
     window.lavish?.sendQueuedPrompts?.();
     $('send').disabled = true;
     $('send').textContent = window.lavish ? 'Sent' : 'Not sent: no agent is listening';
+    if (window.lavish) clearDraft();
   });
 }
 
@@ -638,7 +759,7 @@ const hideKit = HideKit.attach($('canvas'), {
   },
 });
 
-drawCard();
+if (!restoreDraft(false)) drawCard();
 </script>
 </body>
 </html>
