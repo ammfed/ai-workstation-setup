@@ -38,6 +38,10 @@ it lives.
    easily missed. While you are away it opens nothing, and the link waits for your return.
 4. **Wait for answers.** `lavish-axi poll review.html` waits until you press send. Leave it
    running; if it is interrupted, run it again. Answers stay queued until they are collected.
+   While you have the page open and have not sent or ended it, the agent keeps its file as it
+   is and queues any change for afterwards: Lavish reloads the page when its file changes. The
+   card template also saves your picks and notes as you go and brings them back after a reload,
+   and Send clears that saved draft.
 5. **Check the real state before saying anything about it.** Running `lavish-axi` with no
    arguments lists every session with its status and the number of answers waiting to be
    collected. An agent looks there (or polls) before it ever tells you a page is still open

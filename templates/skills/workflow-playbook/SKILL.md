@@ -331,6 +331,11 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
    6. The screenshot check: the page really renders at the target sizes (rule 4.5).
 
    Why: each check catches a failure the owner would otherwise find first, and the owner's time goes to decisions, not to finding mistakes.
+8. **Leave an open page alone.**
+   - While the owner has a page open and has not sent or ended it, keep its file as it is.
+   - Queue the change, and make it after the owner sends or ends the page.
+
+   Why: the page reloads when its file changes, and the reload can wipe what the owner is typing.
 
 ## 5. Asking and acting
 

@@ -1295,3 +1295,85 @@ test('the firstmate run adds the session-name hook by default and removes it on 
   await runFirstmate(f, { FIRSTMATE_SESSION_NAMES: 'no' });
   assert.deepEqual(hooks(), []);
 });
+
+// Runs the shipped stow gate once, as Claude Code would before a tool call, for a session whose
+// transcript holds `entries`. Returns the deny reason, or '' when the call is allowed.
+function gateReply(home, entries, { args = ['auto'], tool = 'Bash', toolInput = {}, cwd = home } = {}) {
+  const transcript = path.join(home, `gate-${Math.random().toString(36).slice(2)}.jsonl`);
+  fs.writeFileSync(transcript, entries.map((e) => JSON.stringify(e)).join('\n') + '\n');
+  const input = { hook_event_name: 'PreToolUse', transcript_path: transcript, cwd, tool_name: tool, tool_input: toolInput };
+  const script = path.join(repoRoot, 'templates', 'claude-code', 'bin', 'stow-gate.mjs');
+  const env = { ...process.env, HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude') };
+  const r = spawnSync(process.execPath, [script, ...args], { input: JSON.stringify(input), encoding: 'utf8', env });
+  assert.equal(r.status, 0, r.stderr);
+  if (!r.stdout) return '';
+  const out = JSON.parse(r.stdout).hookSpecificOutput;
+  assert.equal(out.permissionDecision, 'deny');
+  return out.permissionDecisionReason;
+}
+
+const turn = (tokens) => ({ type: 'assistant', message: { usage: { input_tokens: tokens, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } });
+const stowCall = (tokens) => ({ type: 'assistant', message: { usage: turn(tokens).message.usage, content: [{ type: 'tool_use', name: 'Skill', input: { skill: 'stow' } }] } });
+
+test('the stow gate refuses tool calls past three quarters of the auto-compact window until a stow starts', () => {
+  const home = tempHome();
+  writeSettings(path.join(home, '.claude', 'settings.json'), { autoCompactWindow: 400000 });
+  assert.equal(gateReply(home, [turn(290000)]), '', 'below the line every call runs');
+  assert.match(gateReply(home, [turn(310000)]), /Stow gate: context is 310000 tokens, past the stow line of 300000 \(auto-compaction at 400000\)/);
+  assert.equal(gateReply(home, [turn(310000)], { tool: 'Skill', toolInput: { skill: 'stow' } }), '', 'the stow skill itself runs');
+  assert.equal(gateReply(home, [turn(305000), stowCall(310000), turn(320000)]), '', 'a started stow opens the gate');
+  assert.equal(gateReply(home, [turn(305000), { type: 'user', message: { content: '<command-name>/stow</command-name>' } }, turn(320000)]), '', 'a typed /stow counts');
+  assert.match(gateReply(home, [stowCall(100000), turn(320000)]), /past the stow line/, 'a stow far below the line does not count');
+  assert.match(gateReply(home, [stowCall(310000), { subtype: 'compact_boundary' }, turn(310000)]), /past the stow line/, 'a compaction re-arms the gate');
+  assert.equal(gateReply(home, [turn(200000)], { args: ['250000'] }), '');
+  assert.match(gateReply(home, [turn(260000)], { args: ['250000'] }), /stow line of 250000/);
+});
+
+test('the stow gate without a window gates at 150000 and allows the call on bad input', () => {
+  const home = tempHome();
+  assert.equal(gateReply(home, [turn(140000)]), '');
+  assert.match(gateReply(home, [turn(160000)]), /stow line of 150000\./);
+  const script = path.join(repoRoot, 'templates', 'claude-code', 'bin', 'stow-gate.mjs');
+  const r = spawnSync(process.execPath, [script], { input: 'not json', encoding: 'utf8' });
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '');
+});
+
+test('the stow gate answers without waiting for stdin to close', async () => {
+  const home = tempHome();
+  const transcript = path.join(home, 't.jsonl');
+  fs.writeFileSync(transcript, JSON.stringify(turn(160000)) + '\n');
+  const { spawn } = await import('node:child_process');
+  const script = path.join(repoRoot, 'templates', 'claude-code', 'bin', 'stow-gate.mjs');
+  const env = { ...process.env, HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude') };
+  const run = (payload) =>
+    new Promise((resolve) => {
+      const child = spawn(process.execPath, [script], { env });
+      let out = '';
+      child.stdout.on('data', (d) => { out += d; });
+      const started = Date.now();
+      const kill = setTimeout(() => child.kill(), 10000);
+      child.on('exit', (code) => { clearTimeout(kill); resolve({ code, out, ms: Date.now() - started }); });
+      if (payload) child.stdin.write(payload); // stdin is never closed
+    });
+  const full = await run(JSON.stringify({ transcript_path: transcript, cwd: home, tool_name: 'Bash', tool_input: {} }));
+  assert.equal(full.code, 0);
+  assert.match(full.out, /"permissionDecision":"deny"/, 'a complete payload is answered at once');
+  assert.ok(full.ms < 1500, `took ${full.ms} ms`);
+  const silent = await run('');
+  assert.equal(silent.code, 0);
+  assert.equal(silent.out, '', 'no payload in 2 seconds allows the call');
+  assert.ok(silent.ms < 5000, `took ${silent.ms} ms`);
+});
+
+test('the stow gate is off by default and a dry run registers it on PreToolUse when chosen', () => {
+  const home = tempHome();
+  const answers = path.join(home, 'answers.env');
+  fs.writeFileSync(answers, 'CLAUDE_STOW_GATE=yes\nCLAUDE_STOW_GATE_TOKENS=250000\n');
+  const env = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude') };
+  const r = spawnSync(process.execPath, [path.join(repoRoot, 'lib', 'installer.mjs'), '--dry-run', '--yes', '--modules', 'claude-code', '--answers', answers], { encoding: 'utf8', env });
+  assert.match(r.stdout, /PreToolUse hook stow-gate\.mjs/, r.stdout + r.stderr);
+  assert.ok(r.stdout.includes(`would write ${path.join(home, '.claude', 'hooks', 'stow-gate.mjs')}`), r.stdout);
+  const example = fs.readFileSync(path.join(repoRoot, 'answers.example.env'), 'utf8');
+  assert.match(example, /^CLAUDE_STOW_GATE=no$/m);
+});

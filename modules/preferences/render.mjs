@@ -417,6 +417,8 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
   add('review-pages', 'Opening and sending', [
     cards && 'Create review pages without launching a browser tab (`--no-open`, or `LAVISH_AXI_NO_OPEN=1`).',
     cards && 'Never re-run the open command just to refresh a page; the running page already updates.',
+    cards &&
+      'Leave a page file as it is while the user has the page open and has not sent or ended it: Lavish reloads the page when its file changes, and that can wipe what they are typing. Queue the change and make it after they send or end the page.',
     cards && "Once the page is checked, open it once in the user's browser at hand-over and give the link: a page that is only linked is easily missed.",
     cards && away && 'While the user is away, open nothing; the link goes into the return brief.',
     cards && get('PREFS_PAGE_CHECK_BEFORE_SEND') &&

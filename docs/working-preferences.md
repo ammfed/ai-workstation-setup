@@ -331,3 +331,13 @@ section at the end of each file (never in a skill), so edit them in your private
   `~/.claude/hooks`, registers it on every event above with your threshold and text, keeps a
   backup set of each file it changes, and leaves the rest of `~/.claude/settings.json` alone.
   `--dry-run` shows what it would change and `--undo` restores the latest backup set.
+- **Stow gate**: an opt-in hook from the claude-code module (`CLAUDE_STOW_GATE`, off by default)
+  that turns the reminder into a hard stop. Once the context passes `CLAUDE_STOW_GATE_TOKENS`,
+  every tool call is refused except the stow skill, until a stow has started; the stow then
+  runs normally, and the gate stays open until the next compaction. The default `auto` puts the
+  line at three quarters of the auto-compact window that applies (300000 for a 400000 window,
+  150000 when no window is set), so the stow has room before compaction. It needs the stow
+  skill (skills module). It is a `PreToolUse` hook in `~/.claude/hooks/stow-gate.mjs`; it never
+  blocks on its own errors, and it stops waiting for its input after 2 seconds, so a session
+  whose hook input never closes is not frozen. Answering no removes the hook. `apply-to-machine.sh`
+  does not register it.
