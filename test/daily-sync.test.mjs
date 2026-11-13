@@ -204,8 +204,48 @@ test('a run command that ends well but ingests none of the waiting files is repo
   assert.equal(j.run().code, 0);
   const [note] = j.notified();
   assert.match(note, /^daily-sync [^\n]*1 need you/);
-  assert.match(note, /Needs you:\n- vault: the run command ended without an error after \d+ minute\(s\) but ingested none of the 3 waiting raw file\(s\); see what it spent its time on\. Last line: daily: sorted 800 files/);
+  assert.match(note, /Needs you:\n- vault: the run command ended without an error after \d+ minute\(s\) but ingested none of the 3 waiting raw file\(s\); see what it spent its time on \(full output: [^)]*vault-run-latest\.log\)\. Last line: daily: sorted 800 files/);
   assert.doesNotMatch(note, /ingested 0 new raw file/);
+});
+
+// The vault's ingest stops on purpose when the quota gate holds it or its time budget ends. That
+// is an expected skip: the report names the stop (and the gate's reason), it is not "Needs you".
+const triage = ['triage: 12 file(s) sorted', 'triage: 2048 file(s) kept for ingest'];
+const gate = 'quota-gate: claude: wait, the week is ahead of pace (80 of 100 used)';
+const afterStop = 'daily: 2026-11-13 08:05 ok: daily pushed main';
+const waiting = ['would ingest: a', 'would ingest: b', 'would ingest: c'];
+
+test('an ingest held at the quota gate is an expected skip with the gate reason, not Needs you', () => {
+  const stop = 'ingest: stopped at the quota gate before raw/a.md; the rest waits for the next run';
+  const j = job({ vault: { ...vault(rawFolder()), dryRun: node('say.cjs', ...waiting), run: node('say.cjs', ...triage, gate, stop, afterStop) } });
+  assert.equal(j.run().code, 0);
+  const latest = j.latest();
+  assert.doesNotMatch(latest, /Needs you|ingested none|need you/);
+  assert.match(latest, /vault: ingest stopped on purpose, 3 raw file\(s\) wait for the next run\. quota-gate: claude: wait, the week is ahead of pace \(80 of 100 used\)\. ingest: stopped at the quota gate before raw\/a\.md/);
+  const full = fs.readFileSync(path.join(j.dir, 'reports', 'vault-run-latest.log'), 'utf8');
+  assert.match(full, /triage: 2048 file\(s\) kept for ingest\nquota-gate: claude: wait[^\n]*\ningest: stopped at the quota gate[^\n]*\ndaily: 2026-11-13 08:05 ok: daily pushed main/);
+});
+
+test('an ingest that ends at its time budget is an expected skip', () => {
+  const stop = 'ingest: stopped at the time budget before raw/a.md; the rest waits for the next run';
+  const j = job({ vault: { ...vault(rawFolder()), dryRun: node('say.cjs', ...waiting), run: node('say.cjs', ...triage, stop, afterStop) } });
+  assert.equal(j.run().code, 0);
+  assert.doesNotMatch(j.latest(), /Needs you|ingested none|need you/);
+  assert.match(j.latest(), /vault: ingest stopped on purpose, 3 raw file\(s\) wait for the next run\. ingest: stopped at the time budget before raw\/a\.md/);
+});
+
+test('a stop line after some files were ingested keeps the changed report and counts what waits', () => {
+  const said = ['ingest (new)  f0', gate, 'ingest: stopped at the quota gate before raw/b.md; the rest waits for the next run'];
+  const j = job({ vault: { ...vault(rawFolder()), dryRun: node('say.cjs', ...waiting), run: node('say.cjs', ...said) } });
+  assert.equal(j.run().code, 0);
+  assert.match(j.notified()[0], /vault: ingested 1 new raw file\(s\) with the vault's own agent; it stopped at the quota gate and 2 more wait for the next run/);
+});
+
+test('zero files ingested without any stop line is still Needs you, with the full output kept', () => {
+  const j = job({ vault: { ...vault(rawFolder()), dryRun: node('say.cjs', ...waiting), run: node('say.cjs', ...triage, afterStop) } });
+  assert.equal(j.run().code, 0);
+  assert.match(j.notified()[0], /Needs you:\n- vault: the run command ended without an error[^\n]*Last line: daily: 2026-11-13 08:05 ok: daily pushed main/);
+  assert.match(fs.readFileSync(path.join(j.dir, 'reports', 'vault-run-latest.log'), 'utf8'), /triage: 12 file/);
 });
 
 // Answers the daily-sync questions the way an unattended run does: given answers first, then

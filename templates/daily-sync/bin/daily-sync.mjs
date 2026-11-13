@@ -487,12 +487,23 @@ function vault(v) {
   const out = r.out + r.err;
   const runs = (out.match(/^ingest(?:ing:| \()/gm) || []).length;
   modelCalls.ingest += runs;
+  // The whole run output stays next to the reports: the report quotes one line, this has the rest.
+  const runLog = path.join(FILES.reports, 'vault-run-latest.log');
+  try {
+    fs.mkdirSync(FILES.reports, { recursive: true });
+    fs.writeFileSync(runLog, out);
+  } catch (err) {
+    log(`note vault run output: ${err.message}`);
+  }
   if (r.code === 'timeout') {
     return add('failed', 'vault:ingest', `vault: ingest was stopped at its ${timeoutSec / 60}-minute limit after ${runs} file(s), so anything the run command does after the ingest (such as a commit or push) did not run; lower vault.limit or raise vault.timeoutMin. Last line: ${clip(lastLine(out))}`);
   }
   if (r.code !== 0) return add('failed', 'vault:ingest', `vault: ingest failed (${exitText(r)}): ${clip(lastLine(out))}`);
   const atDeadline = /^ingest: stopped at the deadline/m.test(out);
-  const left = atDeadline ? `; it stopped at its time limit and ${pending - runs} more wait for the next run` : more;
+  // A stop the ingest chose itself: the vault's quota gate held it, or its time budget ended.
+  const stop = out.match(/^ingest: stopped at the (quota gate|time budget)\b.*$/m);
+  const stopWhy = stop && stop[1];
+  const left = atDeadline ? `; it stopped at its time limit and ${pending - runs} more wait for the next run` : stopWhy ? `; it stopped at the ${stopWhy} and ${pending - runs} more wait for the next run` : more;
   // Two failure formats: `<x> failed on: <file>` (bin/ingest.mjs) and `ingest: FAILED <file>: <reason>` (the vault's bash bin/ingest, on stderr).
   const failedOn = [...out.matchAll(/^(?:\S+ failed on:\s*(.+)|ingest: FAILED (.+?): .*)$/gm)].map((m) => (m[1] || m[2]).trim());
   // A failure may print no "ingesting:" line of its own, so a failed file still counts as an attempt.
@@ -504,8 +515,15 @@ function vault(v) {
   }
   // The run command ended well but read no file, though files waited: its time went to something
   // before the ingest (a long sort, a wait). That needs a look, it is not a change.
+  if (attempts === 0 && batch > 0 && stop) {
+    // An expected skip, not a problem: quote the stop line and, before it, the gate's reason.
+    const before = out.slice(0, stop.index).split('\n').reverse().find((l) => /^quota-gate: /.test(l));
+    const why = [before, stop[0]].filter(Boolean).map((l) => clip(l.trim(), 200)).join('. ');
+    notes.push(`vault: ingest stopped on purpose, ${pending} raw file(s) wait for the next run. ${why}. Full run output: ${tilde(runLog)}`);
+    return;
+  }
   if (attempts === 0 && batch > 0) {
-    return add('attention', 'vault:ingest-none', `vault: the run command ended without an error after ${Math.round((Date.now() - ranFrom) / 60000)} minute(s) but ingested none of the ${pending} waiting raw file(s); see what it spent its time on. Last line: ${clip(lastLine(out))}`);
+    return add('attention', 'vault:ingest-none', `vault: the run command ended without an error after ${Math.round((Date.now() - ranFrom) / 60000)} minute(s) but ingested none of the ${pending} waiting raw file(s); see what it spent its time on (full output: ${tilde(runLog)}). Last line: ${clip(lastLine(out))}`);
   }
   add('changed', 'vault:ingest', `vault: ingested ${failedOn.length ? `${ok} of ${attempts}` : runs} new raw file(s) with the vault's own agent${left}`);
   for (const f of failedOn) {
