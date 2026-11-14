@@ -29,7 +29,7 @@ packages their publishers ship.
 | `preferences` | inside WSL | the rules file sits with Claude Code and Firstmate |
 | `second-brain` | both, with a bridge | the vault lives in Linux; Obsidian on Windows opens it by its `\\wsl.localhost` path |
 | `clickup` | inside WSL | clickup-axi and its token stay in WSL |
-| `extras` | both, with a bridge | docling, llama.cpp and Lavish Library in WSL; OpenWhispr on Windows (`wsl` module) |
+| `extras` | both, with a bridge | docling, markitdown, llama.cpp and Lavish Library in WSL; OpenWhispr on Windows (`wsl` module) |
 | `daily-sync` | inside WSL | systemd user timer, cron when systemd stays off |
 | `voice-mode` | not under WSL | see [Voice and audio](#voice-and-audio) |
 | `ledger` | inside WSL | systemd user service, cron `@reboot` when systemd stays off |

@@ -21,7 +21,7 @@ import { PATCH_MARKER, PRISTINE_SHA256, earlierOfficeNamesHelper, mergePixelSett
 import { PR_MERGE_RULES, registerContextReminder, reminderTokens } from '../modules/claude-code/module.mjs';
 import backpass from '../modules/backpass/module.mjs';
 import { cloneRootDirs, listCloneRoots } from '../templates/backpass/bin/backpass-gate.mjs';
-import { findOpenWhisprAppImage, lavishUnits, openGuardSeconds } from '../modules/extras/module.mjs';
+import { MARKITDOWN_SPEC, findOpenWhisprAppImage, installMarkitdown, lavishUnits, openGuardSeconds } from '../modules/extras/module.mjs';
 import firstmate, { isLinkedWorktree, stowTokens } from '../modules/firstmate/module.mjs';
 import openrouter, { MODEL_CHOICES, withEnv } from '../modules/openrouter/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
@@ -1376,4 +1376,22 @@ test('the stow gate is off by default and a dry run registers it on PreToolUse w
   assert.ok(r.stdout.includes(`would write ${path.join(home, '.claude', 'hooks', 'stow-gate.mjs')}`), r.stdout);
   const example = fs.readFileSync(path.join(repoRoot, 'answers.example.env'), 'utf8');
   assert.match(example, /^CLAUDE_STOW_GATE=no$/m);
+});
+
+test('markitdown installs one pinned, Office-only spec through uv or pipx, with a version check', async () => {
+  assert.equal(MARKITDOWN_SPEC, 'markitdown[docx,pptx,xlsx]==0.1.9');
+  for (const extra of ['pdf', 'audio', 'az-doc-intel', 'az-content-understanding', 'all']) assert.ok(!MARKITDOWN_SPEC.includes(extra));
+  const ctx = context(tempHome(), { dryRun: true });
+  ctx.platform.simulated = true;
+  let spec;
+  const orig = ctx.ensureTool.bind(ctx);
+  ctx.ensureTool = (s) => { spec = s; return orig(s); };
+  await installMarkitdown(ctx);
+  assert.equal(spec.name, 'markitdown');
+  assert.match(spec.check.cmd, /^markitdown --version$/);
+  assert.ok(spec.check.expect.test('markitdown 0.1.9'));
+  const ran = [];
+  await spec.install.default({ dryRun: false, platform: { simulated: false }, has: (n) => n === 'uv', run: (c) => ran.push(c) });
+  assert.deepEqual(ran, [`uv tool install '${MARKITDOWN_SPEC}'`]);
+  assert.throws(() => spec.install.default({ dryRun: false, platform: {}, has: () => false, run() {} }), Skip);
 });
