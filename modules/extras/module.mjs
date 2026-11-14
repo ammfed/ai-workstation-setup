@@ -7,6 +7,8 @@ import { versionCheck, warnPathOrder } from '../agent-clis/tools.mjs';
 // selected unless you pick it.
 //   docling: docs "pip install docling" (github.com/docling-project/docling); installed
 //     as an isolated CLI with uv or pipx when one is available.
+//   markitdown: PyPI "markitdown" (github.com/microsoft/markitdown); Office extras only,
+//     installed as an isolated CLI with uv or pipx. Offline rules: see docs/markitdown-offline.md.
 //   OpenWhispr: docs quickstart downloads a release (github.com/OpenWhispr/openwhispr);
 //     the same app is packaged as a Homebrew cask and a winget package.
 //   llama.cpp: docs/install.md (github.com/ggml-org/llama.cpp): Homebrew or winget.
@@ -165,6 +167,26 @@ async function installOpenGuard(ctx) {
   ctx.info('repeats it dropped are logged in ~/.local/state/xdg-open-guard.log; delete ~/.local/bin/xdg-open to remove it');
 }
 
+// Pinned version with the Word, PowerPoint and Excel extras only. No pdf, audio,
+// az-doc-intel or az-content-understanding extra and no plugin: they reach outside services.
+export const MARKITDOWN_SPEC = 'markitdown[docx,pptx,xlsx]==0.1.9';
+
+export function installMarkitdown(ctx) {
+  return ctx.ensureTool({
+    name: 'markitdown',
+    install: {
+      default: (c) => {
+        if (c.dryRun && c.platform.simulated) return c.run(`uv tool install '${MARKITDOWN_SPEC}'   (or pipx install '${MARKITDOWN_SPEC}')`);
+        if (c.has('uv')) return c.run(`uv tool install '${MARKITDOWN_SPEC}'`);
+        if (c.has('pipx')) return c.run(`pipx install '${MARKITDOWN_SPEC}'`);
+        throw new Skip(`needs uv or pipx for an isolated install; or run \`pip install '${MARKITDOWN_SPEC}'\` yourself`);
+      },
+    },
+    pathHints: ['~/.local/bin'],
+    check: versionCheck('markitdown'),
+  });
+}
+
 const EXTRAS = [
   {
     value: 'docling',
@@ -185,6 +207,11 @@ const EXTRAS = [
         check: { ...versionCheck('docling'), timeoutMs: 180_000 },
       });
     },
+  },
+  {
+    value: 'markitdown',
+    label: 'markitdown - a light, offline converter from Word, PowerPoint and Excel files to markdown (no PDF, no outside services)',
+    install: installMarkitdown,
   },
   {
     value: 'openwhispr',
@@ -251,7 +278,7 @@ const EXTRAS = [
 export default {
   name: 'extras',
   title: 'Extra tools',
-  description: 'Optional: docling document converter, OpenWhispr voice dictation, llama.cpp local models, Lavish Library',
+  description: 'Optional: docling and markitdown document converters, OpenWhispr voice dictation, llama.cpp local models, Lavish Library',
   order: 90,
   group: 'tools',
   summary: 'extra desktop tools you pick',
