@@ -130,7 +130,7 @@ export const RULE_HOMES = [
   row('When several review pages are in progress', PAGES, ['hold the links until all open work is done', 'check the pages against each other']),
 
   // Working with a fleet
-  row('Dispatch: give each worker a brief', WORKERS, ['Give each worker a brief that names the goal', 'separate workers in separate worktrees']),
+  row('Dispatch: give each worker a brief', WORKERS, ['Give each worker a brief that names the goal', 'separate workers in separate worktrees', 'Every brief names the phase skill']),
   row('Supervise: workers report a status line', STATUS, ['Workers report a status line only at phase changes', 'Read the live state (status files, session lists)']),
   row('Before calling any work in progress', STATUS, ['check its live state first', 'After each merge, check the queue', 'Raise any wait longer than 30 minutes']),
   row("When the user must type in an agent's window", WORKERS),

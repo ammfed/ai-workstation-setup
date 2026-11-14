@@ -458,6 +458,8 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
   // running-workers
   add('running-workers', 'Briefing and landing', [
     get('PREFS_FLEET_WORKFLOW') && 'Give each worker a brief that names the goal, the branch, where it reports and what done means.',
+    get('PREFS_FLEET_WORKFLOW') &&
+      "Every brief names the phase skill or skills the work needs, taken from the workflow-playbook's phase table, and tells the worker to load them before starting. A worker loads a phase skill only when its brief names it.",
     get('PREFS_FLEET_WORKFLOW') && 'Work that can run in parallel goes to separate workers in separate worktrees.',
     get('PREFS_FLEET_WORKFLOW') &&
       "When the user must type in an agent's window, name the window by the labels the user sees on screen (for example the workspace and tab names), never by internal ids, and give the exact words to type.",

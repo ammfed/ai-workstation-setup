@@ -395,9 +395,10 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
    Why: quota is limited, planning at the wrong effort quietly lowers the quality of everything built on it, and a model table kept in two places drifts apart.
 2. **One complete brief.**
    - Each worker gets one brief: the owner's exact words, the whole goal, every earlier report and version (not a chosen subset), the current rulings, the tools ruled out, and the finish line.
+   - Name the phase skill or skills the work needs, taken from the phase table at the top (its Owner column), and tell the worker to load them before it starts.
    - Never drip steps.
 
-   Why: step-by-step prompts make a builder loop on details and miss the main idea, and a partial inventory hides earlier work.
+   Why: step-by-step prompts make a builder loop on details and miss the main idea, and a partial inventory hides earlier work. A worker also loads a phase skill only when its brief names it: an audit found build, prototype and bug workers almost never loaded theirs unprompted.
 3. **Standing lines in every build brief.**
    - Each build item (phase 7) names the approved prototype page it builds.
    - A spec with several items builds on one integration branch. An item starts when its blockers have merged into that branch.
