@@ -41,7 +41,7 @@ import { Records, TOOLS, runTool } from './records.mjs';
 import { Chooser, TEXT_KINDS, activeApp, buildCatalog, describe, documentFolders, isKde, perform, quickPick, screenHelper } from './desk.mjs';
 import { prepare, samePlan } from './control.mjs';
 import { Browser, asksAbout, isYes, pageCatalog, performPage } from './browser.mjs';
-import { Mic, Speaker, audioTools, has, play, resample, rms, startEchoCancel, tone, wavToPcm } from './audio.mjs';
+import { Mic, Speaker, audioProblem, audioTools, has, play, resample, rms, startEchoCancel, tone, wavToPcm } from './audio.mjs';
 import { PROVIDERS, createProvider, synthesize } from './providers.mjs';
 import { orbRunner, startOrb, toLevel } from './orb.mjs';
 import { briefingChanges, briefingStamp, buildBriefing, redact } from './briefing.mjs';
@@ -948,6 +948,7 @@ export class Live {
     }
     if (this.stopping) return;
     this.mic = new Mic({ rate: this.session.provider.inputRate, device: this.ec?.input || c.audio.input });
+    this.mic.on('error', (err) => this.audioFailed('microphone', err));
     this.mic.on('data', (pcm) => {
       this.micLevel = rms(pcm);
       if (this.halfDuplex && this.session.speaker.busy(400)) return;
@@ -1042,7 +1043,11 @@ export class Live {
       this.waiting.delete(a.id);
       this.log({ event: 'handoff-gave-up', id: a.id });
     };
-    session.speaker = speaker || new Speaker({ rate: session.provider.outputRate, device: this.ec?.output || c.audio.output });
+    if (speaker) session.speaker = speaker;
+    else {
+      session.speaker = new Speaker({ rate: session.provider.outputRate, device: this.ec?.output || c.audio.output });
+      session.speaker.on('error', (err) => this.audioFailed('speaker', err));
+    }
     if (resume) session.provider.resumeHandle = resume;
     this.session = session;
     await session.connect();
@@ -1193,6 +1198,17 @@ export class Live {
   }
 }
 
+/** The microphone or speaker process could not start or stopped: say so plainly and end the conversation. */
+Live.prototype.audioFailed = function audioFailed(what, err) {
+  if (this.stopping) return;
+  const why = audioProblem(what, err);
+  this.log({ event: 'audio-failed', what, error: err?.message || String(err) });
+  process.stderr.write(`voice-mode: ${why}\n`);
+  this.lastAction = { label: why.slice(0, 60), at: Date.now() };
+  this.exitCode = 1;
+  this.stop();
+};
+
 Live.prototype.finishRehearsal = function finishRehearsal() {
   // The turn still open (the user was cut off, or the reply had not ended) counts too, with the
   // words heard so far when the provider had not finished the sentence (Gemini).
@@ -1309,7 +1325,13 @@ async function bench(config, args, log) {
       // The same instructions a conversation starts with.
       briefing: config.briefing.enabled && (config.briefing.parts || []).length ? buildBriefing(config).text : '',
     });
-    if (args.play) session.speaker = new Speaker({ rate: session.provider.outputRate, device: config.audio.output });
+    if (args.play) {
+      session.speaker = new Speaker({ rate: session.provider.outputRate, device: config.audio.output });
+      session.speaker.on('error', (err) => {
+        console.error(`voice-mode bench: ${audioProblem('speaker', err)}`);
+        process.exit(1);
+      });
+    }
     await session.connect();
     const rate = session.provider.inputRate;
     const pcm = args.clip ? readClip(args.clip, rate) : syntheticClip(rate);

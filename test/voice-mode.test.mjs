@@ -3080,7 +3080,11 @@ test('rehearsal: the live conversation gets only the rules, the material and the
   const r = { instructions: rehearsal.rehearsalInstructions(rehearsal.readContext(rc)), notes: new rehearsal.RehearsalNotes(rc) };
   const logs = [];
   const live = new Live(rc, (x) => logs.push(x), { rehearsal: r });
+  // A stand-in speaker, carried into each session, so no audio player is ever started.
+  const speaker = { write() {}, cut() {}, close() {}, endReply() {}, busy: () => false, playedMs: () => 0, level: () => 0 };
+  live.session = { speaker, provider: {}, finishTurn() {}, turns: [], transcript: [] };
   await live.connectOnce();
+  assert.equal(live.session.speaker, speaker);
   const p = live.session.provider;
   assert.equal(p.instructions, r.instructions);
   assert.deepEqual(p.tools.map((t) => t.name), ['save_notes']);
@@ -3213,6 +3217,39 @@ test('cli: rehearse --text stopped by a signal still writes the notes of what wa
   const file = out.match(/Notes: (.*)\n/)?.[1];
   assert.ok(file, out);
   assert.match(fs.readFileSync(file, 'utf8'), /You: Hello everyone\n\nVoice: Go on\.\n$/);
+});
+
+
+test('live: a missing audio player is said plainly and ends the conversation, with no crash', async () => {
+  const empty = fs.mkdtempSync(path.join(tmp, 'no-audio-'));
+  const logs = [];
+  const live = new Live(config({ briefing: { enabled: false }, actions: { enabled: false } }), (x) => logs.push(x));
+  let stopped = 0;
+  live.stop = () => stopped++;
+  const said = [];
+  const write = process.stderr.write;
+  const saved = process.env.PATH;
+  process.stderr.write = (t) => (said.push(String(t)), true);
+  try {
+    // No player on PATH: the real speaker process cannot start.
+    process.env.PATH = empty;
+    await live.connectOnce();
+    process.env.PATH = saved;
+    for (let i = 0; i < 100 && !stopped; i++) await new Promise((r) => setTimeout(r, 20));
+  } finally {
+    process.env.PATH = saved;
+    process.stderr.write = write;
+    live.stopping = true;
+    live.session?.provider.close();
+  }
+  const player = process.platform === 'darwin' ? 'play' : 'pacat';
+  assert.equal(stopped, 1);
+  assert.equal(live.exitCode, 1);
+  assert.deepEqual(said, [`voice-mode: \`${player}\` was not found, so the speaker cannot work; install it (see docs/voice-mode.md) and start again\n`]);
+  assert.ok(logs.some((l) => l.event === 'audio-failed' && l.what === 'speaker'));
+  // A second failure while stopping says nothing more.
+  live.audioFailed('microphone', new Error('gone'));
+  assert.equal(said.length, 1);
 });
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
