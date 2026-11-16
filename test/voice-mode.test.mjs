@@ -25,6 +25,7 @@ const { startOrb, toLevel } = await import(path.join(bin, 'orb.mjs'));
 const { redact, transcriptTail, sections, buildBriefing, briefingChanges, briefingStamp, plain } = await import(path.join(bin, 'briefing.mjs'));
 const { noteText, savePending, saveReply, waitingReplies, markSpoken, handoffDir, Deliveries } = await import(path.join(bin, 'handoff.mjs'));
 const { parseCommand, qtKey } = await import(path.join(repoRoot, 'modules', 'voice-mode', 'module.mjs'));
+const rehearsal = await import(path.join(bin, 'rehearsal.mjs'));
 const { Browser, pageCatalog, performPage, riskOf, sensitiveField, isYes, isDownload, asksAbout } = await import(path.join(bin, 'browser.mjs'));
 
 // Resolved, because macOS's temp folder is a symlink and opened paths are resolved ones.
@@ -2949,6 +2950,269 @@ test('round 4: the voice is told about named buttons, reading the window, and st
   assert.match(text, /reads the window in front when asked what it says/);
   assert.match(text, /stops at the first step that fails or waits for a yes: say which step stopped and that the rest was not done/);
   assert.match(text, /presses a named button that sends, deletes, buys, confirms or signs out, only after a yes/);
+});
+
+
+// ------------------------------------------------------------------ rehearsal
+
+
+function rehearsalSetup(material = '# My talk\n\nPoint: practise makes it better.\n') {
+  const dir = fs.mkdtempSync(path.join(tmp, 'rehearse-'));
+  const file = path.join(dir, 'talk.md');
+  fs.writeFileSync(file, material);
+  const c = config({ lookout: { enabled: true }, notes: { enabled: true, vault: tmp }, browser: { enabled: true }, briefing: { parts: [{ name: 'Memory', path: path.join(data, 'learnings.md') }] }, rehearsal: { contextFile: file, notesDir: path.join(dir, 'notes'), closing: 'Saved. A review page will follow.' } });
+  return { dir, file, c, rc: rehearsal.rehearsalConfig(c) };
+}
+
+test('rehearsal: everything that could send other material is off; only the rules and the material are the instructions', () => {
+  const { c, rc } = rehearsalSetup();
+  assert.deepEqual([rc.sources, rc.queue.command, rc.briefing.enabled, rc.notes.enabled, rc.lookout.enabled, rc.actions.enabled, rc.browser.enabled], [[], [], false, false, false, false, false]);
+  assert.equal(rc.providers.fake.silenceMs, 2000, 'a longer pause before it answers');
+  assert.equal(c.actions.enabled, true, 'the user config itself is unchanged');
+  const instructions = rehearsal.rehearsalInstructions(rehearsal.readContext(rc));
+  assert.ok(instructions.startsWith(rehearsal.RULES));
+  assert.match(instructions, /<<<\n# My talk\n\nPoint: practise makes it better\.\n>>>$/);
+  // The live session gets those instructions and the one notes tool, nothing else.
+  const s = new Session(rc, { script: [], instructions, tools: [rehearsal.SAVE_NOTES_TOOL], onTool: () => ({}) });
+  assert.equal(s.provider.instructions, instructions);
+  assert.deepEqual(s.provider.tools.map((t) => t.name), ['save_notes']);
+  assert.equal(s.chooser.ready, false, 'no decision model');
+  s.close();
+});
+
+test('rehearsal: the material must be set, readable, not empty and not too long; keys in it are redacted', () => {
+  const { rc, file } = rehearsalSetup();
+  assert.throws(() => rehearsal.readContext(merge(rc, { rehearsal: { contextFile: '' } })), /no rehearsal material: set "rehearsal"/);
+  assert.throws(() => rehearsal.readContext(merge(rc, { rehearsal: { contextFile: `${file}.missing` } })), /cannot read the rehearsal material .*ENOENT/);
+  fs.writeFileSync(file, '  \n');
+  assert.throws(() => rehearsal.readContext(rc), /is empty/);
+  fs.writeFileSync(file, 'x'.repeat(61));
+  assert.throws(() => rehearsal.readContext(merge(rc, { rehearsal: { maxChars: 60 } })), /has 61 characters; shorten it to 60/);
+  // Built from pieces so no key-shaped literal sits in the repo for secret scanners to flag.
+  fs.writeFileSync(file, ['Demo key: sk', '-', 'proj-abcdefghijklmnopqrstuvwxyz0123456789\n'].join(''));
+  assert.doesNotMatch(rehearsal.readContext(rc), /abcdefghijklmnop/);
+});
+
+test('rehearsal: a spoken plain command opens nothing; save_notes writes the summary and the transcript', async () => {
+  const { rc } = rehearsalSetup();
+  const notes = new rehearsal.RehearsalNotes(rc, { now: new Date(2026, 10, 15, 9, 5) });
+  const performed = [];
+  const results = [];
+  const script = [
+    { text: 'open firefox and press enter', reply: 'Go on.' },
+    { text: 'I am done, save the notes', tools: [{ name: 'save_notes', args: { said: 'The opening.', worked: ['the hook'], open_points: ['too long', ''] } }], reply: 'Saved. A review page will follow.' },
+  ];
+  const s = new Session(rc, { script, performImpl: async (item) => performed.push(item.name), instructions: 'x', tools: [rehearsal.SAVE_NOTES_TOOL], onTool: (call) => rehearsal.rehearsalTool(notes, call) });
+  s.provider.cfg.wordMs = 60;
+  s.provider.cfg.silenceMs = 300;
+  s.provider.toolResult = ((orig) => (call, result) => (results.push(result), orig.call(s.provider, call, result)))(s.provider.toolResult);
+  await s.connect();
+  await streamClip(s, clip(s.provider.inputRate), { timeoutMs: 8000 });
+  await streamClip(s, clip(s.provider.inputRate), { timeoutMs: 8000 });
+  s.close();
+  assert.deepEqual(performed, [], 'no desktop action in a rehearsal');
+  assert.deepEqual(results, [{ saved: true, say: 'Saved. A review page will follow.' }]);
+  assert.equal(path.basename(notes.file), 'rehearsal-2026-11-15-0905.md');
+  notes.write(s.turns);
+  const text = fs.readFileSync(notes.file, 'utf8');
+  assert.match(text, /## What was said\n\nThe opening\.\n\n## What worked\n\n- the hook\n\n## Open points\n\n- too long\n\n## Transcript\n\nYou: open firefox and press enter\n\nVoice: Go on\.\n\nYou: I am done, save the notes\n\nVoice: Saved\. A review page will follow\.\n$/);
+  assert.equal(fs.statSync(notes.file).mode & 0o777, 0o600);
+  // Two more rehearsals started in the same minute, before either wrote, each get their own file.
+  const a = new rehearsal.RehearsalNotes(rc, { now: new Date(2026, 10, 15, 9, 5) });
+  const b = new rehearsal.RehearsalNotes(rc, { now: new Date(2026, 10, 15, 9, 5) });
+  a.write([{ text: 'a' }]);
+  b.write([{ text: 'b' }]);
+  assert.deepEqual([path.basename(a.file), path.basename(b.file)], ['rehearsal-2026-11-15-0905-2.md', 'rehearsal-2026-11-15-0905-3.md']);
+  assert.match(fs.readFileSync(a.file, 'utf8'), /You: a\n$/);
+});
+
+test('rehearsal: ended before notes were asked for, the transcript is still written', () => {
+  const { rc } = rehearsalSetup();
+  const notes = new rehearsal.RehearsalNotes(rc);
+  notes.write([{ text: 'Hello everyone', reply: '' }]);
+  const text = fs.readFileSync(notes.file, 'utf8');
+  assert.match(text, /did not write a summary/);
+  assert.match(text, /## Transcript\n\nYou: Hello everyone\n$/);
+});
+
+test('rehearsal --text: typed lines through the same tool and notes; a reply that goes on after the tool result is kept whole', async () => {
+  const { rc } = rehearsalSetup();
+  const { Readable, PassThrough } = await import('node:stream');
+  // Gemini Live, its socket replaced: the typed words go out as the user's turn.
+  const p = new GeminiLive(DEFAULTS.providers.gemini, { instructions: 'x', tools: [rehearsal.SAVE_NOTES_TOOL], key: 'k' });
+  const sent = [];
+  p.connect = async () => {};
+  p.close = () => {};
+  p.send = (m) => {
+    sent.push(m);
+    const said = m.clientContent?.turns[0].parts[0].text;
+    const reply = (t) => p.onMessage({ serverContent: { outputTranscription: { text: t } } });
+    setImmediate(() => {
+      if (said === 'Hello everyone, today we play.') {
+        reply('Go on.');
+        p.onMessage({ serverContent: { turnComplete: true } });
+      } else if (said) {
+        p.onMessage({ toolCall: { functionCalls: [{ id: 'g1', name: 'save_notes', args: { said: 'An opening.', worked: ['energy'], open_points: ['the close'] } }] } });
+        // The end of the part before the call comes after the result here: it is not the end of the reply.
+        setTimeout(() => p.onMessage({ serverContent: { turnComplete: true } }), 5);
+        setTimeout(() => (reply('Saved. A review page will follow.'), p.onMessage({ serverContent: { turnComplete: true } })), 40);
+      }
+    });
+  };
+  const out = new PassThrough();
+  let printed = '';
+  out.on('data', (d) => (printed += d));
+  const notes = new rehearsal.RehearsalNotes(rc);
+  const file = await rehearsal.rehearseText({ provider: p, notes, input: Readable.from(['Hello everyone, today we play.\n', '\n', 'I am done, save the notes.\n', '/end\n', 'never sent\n']), output: out, afterToolMs: 2000 });
+  assert.deepEqual(sent.filter((m) => m.clientContent).map((m) => m.clientContent), [
+    { turns: [{ role: 'user', parts: [{ text: 'Hello everyone, today we play.' }] }], turnComplete: true },
+    { turns: [{ role: 'user', parts: [{ text: 'I am done, save the notes.' }] }], turnComplete: true },
+  ]);
+  assert.deepEqual(sent.find((m) => m.toolResponse).toolResponse.functionResponses[0].response.output, { saved: true, say: 'Saved. A review page will follow.' });
+  assert.match(printed, /You: Hello everyone, today we play\.\nVoice: Go on\.\n\nYou: I am done, save the notes\.\nVoice: Saved\. A review page will follow\. {3}\[called save_notes\]\n/);
+  assert.match(fs.readFileSync(file, 'utf8'), /## What worked\n\n- energy\n[\s\S]*Voice: Saved\. A review page will follow\.\n$/);
+});
+
+test('rehearsal: the live conversation gets only the rules, the material and the notes tool, says no queued answers, and saves notes when it stops', async () => {
+  const { dir, rc: shared } = rehearsalSetup();
+  // A reply queue of its own, so only this test's answer waits in it.
+  const rc = merge(shared, { handoff: { dir: path.join(dir, 'handoff') } });
+  const r = { instructions: rehearsal.rehearsalInstructions(rehearsal.readContext(rc)), notes: new rehearsal.RehearsalNotes(rc) };
+  const logs = [];
+  const live = new Live(rc, (x) => logs.push(x), { rehearsal: r });
+  await live.connectOnce();
+  const p = live.session.provider;
+  assert.equal(p.instructions, r.instructions);
+  assert.deepEqual(p.tools.map((t) => t.name), ['save_notes']);
+  assert.equal(live.catalog.size, 0);
+  assert.equal(live.browser, null);
+  assert.equal(live.briefing, undefined, 'no briefing was built');
+  // A queued answer from the working session is not said in a rehearsal; the same tick says it in a normal conversation.
+  savePending(rc, { id: 'vq-dddddd', request: 'is the build green', at: Date.now() });
+  saveReply(rc, 'vq-dddddd', 'yes, it is green');
+  const said = [];
+  const fakeSession = { provider: { say: (t) => (said.push(t), true) }, speaker: { busy: () => false }, quiet: () => true, speakAnswer: (e) => (said.push(e.text), true) };
+  const real = live.session;
+  live.session = fakeSession;
+  live.mic = {};
+  live.tick();
+  assert.deepEqual(said, []);
+  const normal = new Live(config({ handoff: rc.handoff }), () => {});
+  normal.session = fakeSession;
+  normal.mic = {};
+  normal.tick();
+  assert.deepEqual(said, ['yes, it is green']);
+  live.session = real;
+  // A reconnect keeps what was said.
+  live.session.transcript.push({ text: 'first part', reply: 'Go on.' });
+  const first = live.session;
+  await live.connectOnce();
+  first.close();
+  assert.deepEqual(live.session.transcript.map((t) => t.text), ['first part']);
+  live.stopping = true;
+  live.session.close();
+  const err = process.stderr.write;
+  process.stderr.write = () => true;
+  try {
+    live.finishRehearsal();
+  } finally {
+    process.stderr.write = err;
+  }
+  assert.ok(logs.some((l) => l.event === 'rehearsal-notes' && l.file === r.notes.file));
+  assert.match(fs.readFileSync(r.notes.file, 'utf8'), /You: first part\n\nVoice: Go on\.\n$/);
+});
+
+test('cli: rehearse needs its material; --text goes with rehearse only', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const dir = fs.mkdtempSync(path.join(tmp, 'cli-rehearse-'));
+  const cfg = path.join(dir, 'config.json');
+  const write = (over) => fs.writeFileSync(cfg, JSON.stringify({ provider: 'fake', orb: { enabled: false }, audio: { earcons: false, echoCancel: false }, logDir: path.join(dir, 'logs'), ...over }));
+  const env = { HOME: dir, XDG_RUNTIME_DIR: dir, VOICE_MODE_CONFIG: cfg, PATH: path.dirname(process.execPath) };
+  const run = (args, input) => spawnSync(process.execPath, [path.join(bin, 'voice-mode.mjs'), ...args], { env, encoding: 'utf8', timeout: 15000, input });
+  write({});
+  let r = run(['rehearse']);
+  assert.deepEqual([r.status, /voice-mode rehearse: no rehearsal material: set "rehearsal"/.test(r.stderr)], [2, true]);
+  r = run(['start', '--text']);
+  assert.deepEqual([r.status, r.stderr.trim()], [2, 'voice-mode: --text goes with rehearse only (see voice-mode help)']);
+  // Typed, with the offline provider: the replies are printed and the notes are written.
+  fs.writeFileSync(path.join(dir, 'talk.md'), 'A talk.\n');
+  write({ rehearsal: { contextFile: path.join(dir, 'talk.md'), notesDir: path.join(dir, 'notes') }, providers: { fake: { replyDelayMs: 5, script: [{ reply: 'Go on.' }] } } });
+  r = run(['rehearse', '--text'], 'Hello everyone\n');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /You: Hello everyone\nVoice: Go on\.\n\nNotes: .*rehearsal-[\d-]+\.md\n$/);
+  const file = r.stdout.match(/Notes: (.*)\n$/)[1];
+  assert.equal(path.dirname(file), path.join(dir, 'notes'));
+  assert.match(fs.readFileSync(file, 'utf8'), /You: Hello everyone\n\nVoice: Go on\.\n$/);
+});
+
+
+test('rehearsal: on Gemini, the reply that goes on after save_notes is in the transcript, and the saved file has the turns so far', async () => {
+  const { rc } = rehearsalSetup();
+  const notes = new rehearsal.RehearsalNotes(rc);
+  const p = new GeminiLive(DEFAULTS.providers.gemini, { instructions: 'x', tools: [rehearsal.SAVE_NOTES_TOOL], key: 'k' });
+  p.send = () => {};
+  const s = new Session(rc, { provider: p, instructions: 'x', tools: [rehearsal.SAVE_NOTES_TOOL], onTool: (call) => rehearsal.rehearsalTool(Object.assign(notes, { turns: s.transcript }), call) });
+  p.onMessage({ serverContent: { inputTranscription: { text: 'Hello everyone' } } });
+  p.onMessage({ serverContent: { outputTranscription: { text: 'Go on.' } } });
+  p.onMessage({ serverContent: { turnComplete: true } });
+  p.onMessage({ serverContent: { inputTranscription: { text: 'I am done, save the notes' } } });
+  p.onMessage({ toolCall: { functionCalls: [{ id: 'g1', name: 'save_notes', args: { said: 'A start.', worked: [], open_points: [] } }] } });
+  await new Promise((r) => setImmediate(r));
+  // The answer went out before Gemini ended the part before the call: that end comes first, then the words.
+  p.onMessage({ serverContent: { turnComplete: true } });
+  p.onMessage({ serverContent: { outputTranscription: { text: 'The notes are saved.' } } });
+  p.onMessage({ serverContent: { turnComplete: true } });
+  assert.deepEqual(s.transcript.map((t) => [t.text, t.reply]), [['Hello everyone', 'Go on.'], ['I am done, save the notes', 'The notes are saved.']]);
+  assert.match(fs.readFileSync(notes.file, 'utf8'), /You: Hello everyone\n\nVoice: Go on\.\n/, 'the save wrote the turns heard so far');
+  notes.write();
+  assert.match(fs.readFileSync(notes.file, 'utf8'), /You: I am done, save the notes\n\nVoice: The notes are saved\.\n$/);
+});
+
+test('rehearsal: stopped with nothing heard (a failed connect), no notes file is written', () => {
+  const { rc } = rehearsalSetup();
+  const r = { instructions: 'x', notes: new rehearsal.RehearsalNotes(rc) };
+  const logs = [];
+  const live = new Live(rc, (x) => logs.push(x), { rehearsal: r });
+  live.finishRehearsal();
+  assert.equal(fs.existsSync(rc.rehearsal.notesDir), false);
+  assert.deepEqual(logs.at(-1), { event: 'rehearsal-notes', file: null });
+});
+
+test('rehearsal --text: a line the voice will not take yet is marked, not lost; an error keeps what was said', async () => {
+  const { rc } = rehearsalSetup();
+  const { Readable, PassThrough } = await import('node:stream');
+  const busy = new FakeProvider({ replyDelayMs: 5 }, { script: [{ reply: 'Go on.' }] });
+  let calls = 0;
+  const take = busy.text.bind(busy);
+  busy.text = (t) => (++calls === 1 ? take(t) : false);
+  const notes = new rehearsal.RehearsalNotes(rc);
+  const file = await rehearsal.rehearseText({ provider: busy, notes, input: Readable.from(['first\n', 'second\n']), output: new PassThrough(), busyMs: 300 });
+  assert.ok(calls > 2, 'it tried again');
+  assert.match(fs.readFileSync(file, 'utf8'), /You: first\n\nVoice: Go on\.\n\nYou: second \(not sent: the voice was still answering\)\n$/);
+  // A provider with no typed input: the error comes out, and the turn said so far is in the notes.
+  const none = new FakeProvider();
+  none.text = undefined;
+  const notes2 = new rehearsal.RehearsalNotes(rc);
+  await assert.rejects(rehearsal.rehearseText({ provider: none, notes: notes2, input: Readable.from(['hello\n']), output: new PassThrough() }), /cannot take typed words/);
+  assert.match(fs.readFileSync(notes2.file, 'utf8'), /You: hello\n$/);
+});
+
+test('cli: rehearse --text stopped by a signal still writes the notes of what was said', { skip: process.platform === 'win32' }, async () => {
+  const dir = fs.mkdtempSync(path.join(tmp, 'cli-signal-'));
+  const cfg = path.join(dir, 'config.json');
+  fs.writeFileSync(path.join(dir, 'talk.md'), 'A talk.\n');
+  fs.writeFileSync(cfg, JSON.stringify({ provider: 'fake', logDir: path.join(dir, 'logs'), rehearsal: { contextFile: path.join(dir, 'talk.md'), notesDir: path.join(dir, 'notes') }, providers: { fake: { replyDelayMs: 5, script: [{ reply: 'Go on.' }] } } }));
+  const child = spawn(process.execPath, [path.join(bin, 'voice-mode.mjs'), 'rehearse', '--text'], { env: { HOME: dir, XDG_RUNTIME_DIR: dir, VOICE_MODE_CONFIG: cfg, PATH: path.dirname(process.execPath) } });
+  let out = '';
+  child.stdout.on('data', (d) => (out += d));
+  child.stdin.write('Hello everyone\n');
+  for (let i = 0; i < 100 && !/Voice: Go on/.test(out); i++) await new Promise((r) => setTimeout(r, 50));
+  child.kill('SIGINT');
+  const code = await new Promise((r) => child.on('exit', r));
+  assert.equal(code, 0);
+  const file = out.match(/Notes: (.*)\n/)?.[1];
+  assert.ok(file, out);
+  assert.match(fs.readFileSync(file, 'utf8'), /You: Hello everyone\n\nVoice: Go on\.\n$/);
 });
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
