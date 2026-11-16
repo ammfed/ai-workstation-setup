@@ -8,6 +8,7 @@
 //   p.interrupt(playedMs)           the user cut in: stop the reply, forget what was not heard
 //   p.toolResult(call, result, { quiet? })  answer a 'tool-call' (quiet: no reply needed)
 //   p.note?.(text)                  optional: context the model reads without replying
+//   p.text?.(text)                  optional: typed words in the user's place (a text rehearsal)
 //   p.close()
 //
 // Events: 'user-speech-start', 'user-speech-end', 'user-text' (textSoFar, final),
@@ -273,6 +274,14 @@ export class OpenAIRealtime extends Socketed {
     return true;
   }
 
+  /** The user's own words, typed instead of spoken. */
+  text(text) {
+    if (this.responseActive) return false;
+    this.send({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] } });
+    this.send({ type: 'response.create' });
+    return true;
+  }
+
   interrupt(playedMs) {
     this.abandonTools();
     if (this.responseActive) this.send({ type: 'response.cancel' });
@@ -415,6 +424,12 @@ export class GeminiLive extends Socketed {
     return true;
   }
 
+  /** The user's own words, typed instead of spoken. */
+  text(text) {
+    this.send({ clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true } });
+    return true;
+  }
+
   /** A quiet result of an async call is taken in silently; otherwise the model speaks once it is free. */
   toolResult(call, result, { quiet = false } = {}) {
     const async = !this.waitingFor.delete(call.id);
@@ -459,6 +474,14 @@ export class FakeProvider extends EventEmitter {
     if (this.replyTimer || this.speaking) return false;
     this.said = [...(this.said || []), text];
     this.replyTimer = setTimeout(() => this.streamReply({ reply: 'answer' }), this.cfg.replyDelayMs);
+    return true;
+  }
+
+  /** Typed words: the next script turn answers them, as if they were heard. */
+  text(text) {
+    if (this.replyTimer || this.speaking) return false;
+    this.typed = [...(this.typed || []), text];
+    this.respond(this.script.shift() || { text, reply: 'fake reply' });
     return true;
   }
 

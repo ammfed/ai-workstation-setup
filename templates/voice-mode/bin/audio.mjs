@@ -91,6 +91,12 @@ export function play(pcm, { rate, device = '' }) {
   });
 }
 
+/** A plain sentence for an audio process that could not start or stopped: `what` is 'microphone' or 'speaker'. */
+export function audioProblem(what, err) {
+  if (err?.code === 'ENOENT') return `\`${err.path || (what === 'speaker' ? audioTools()[1] : audioTools()[0])}\` was not found, so the ${what} cannot work; install it (see docs/voice-mode.md) and start again`;
+  return `the ${what} stopped working (${err?.message || err}); start again`;
+}
+
 export function audioTools() {
   return process.platform === 'darwin' ? ['rec', 'play'] : ['parecord', 'pacat'];
 }

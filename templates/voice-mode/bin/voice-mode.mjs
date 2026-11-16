@@ -3,6 +3,8 @@
 //
 //   voice-mode start               talk, in this terminal: the mic is open until you stop it
 //   voice-mode toggle              the hotkey: start a conversation in the background, or end it
+//   voice-mode rehearse [--text]   practise a talk out loud with the material in rehearsal.contextFile;
+//                                  notes are saved at the end (--text: typed lines, no audio)
 //   voice-mode reply <id> "<answer>"
 //                                  answer a hand-off; the voice speaks it (now, or at the next start)
 //   voice-mode briefing            print the live briefing the voice gets (after redaction)
@@ -39,7 +41,7 @@ import { Records, TOOLS, runTool } from './records.mjs';
 import { Chooser, TEXT_KINDS, activeApp, buildCatalog, describe, documentFolders, isKde, perform, quickPick, screenHelper } from './desk.mjs';
 import { prepare, samePlan } from './control.mjs';
 import { Browser, asksAbout, isYes, pageCatalog, performPage } from './browser.mjs';
-import { Mic, Speaker, audioTools, has, play, resample, rms, startEchoCancel, tone, wavToPcm } from './audio.mjs';
+import { Mic, Speaker, audioProblem, audioTools, has, play, resample, rms, startEchoCancel, tone, wavToPcm } from './audio.mjs';
 import { PROVIDERS, createProvider, synthesize } from './providers.mjs';
 import { orbRunner, startOrb, toLevel } from './orb.mjs';
 import { briefingChanges, briefingStamp, buildBriefing, redact } from './briefing.mjs';
@@ -48,6 +50,7 @@ import { Lookout, readBoard, stateFile as lookoutStateFile } from './lookout.mjs
 import { agyMayRead, askNotes, busyReason, disabledFile, vaultState, BUSY_ANSWER } from './notes.mjs';
 import { gather, summary } from './pc.mjs';
 import { readTasks } from './tasks.mjs';
+import { RehearsalNotes, SAVE_NOTES_TOOL, readContext, rehearsalConfig, rehearsalInstructions, rehearsalTool, rehearseText } from './rehearsal.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 
@@ -277,7 +280,7 @@ export function instructionsFor(config, records, briefing = '') {
  * same session runs from a clip (bench, tests) as from the laptop's audio devices.
  */
 export class Session {
-  constructor(config, { provider, records, catalog, chooser, speaker, log, performImpl = perform, script, briefing = '', browser = null, screen, frontApp } = {}) {
+  constructor(config, { provider, records, catalog, chooser, speaker, log, performImpl = perform, script, briefing = '', browser = null, screen, frontApp, instructions, tools: only, onTool } = {}) {
     this.config = config;
     this.log = log || (() => {});
     this.records = records || new Records(config);
@@ -299,12 +302,14 @@ export class Session {
     this.confirm = null;
     this.handoff = (config.queue.command || []).length > 0;
     this.notes = !!config.notes?.enabled;
-    const tools = [...TOOLS, ...(this.handoff ? [HANDOFF_TOOL] : []), ...(this.notes ? [NOTES_TOOL] : []), ...(this.chooser.ready ? [DESKTOP_TOOL] : [])];
+    // A rehearsal brings its own instructions and tools (rehearsal.mjs), answered by onTool.
+    this.onTool = onTool;
+    const tools = only || [...TOOLS, ...(this.handoff ? [HANDOFF_TOOL] : []), ...(this.notes ? [NOTES_TOOL] : []), ...(this.chooser.ready ? [DESKTOP_TOOL] : [])];
     const keyName = PROVIDERS[config.provider].keyName;
     this.provider =
       provider ||
       createProvider(config, {
-        instructions: instructionsFor(config, this.records, briefing),
+        instructions: instructions ?? instructionsFor(config, this.records, briefing),
         tools,
         key: keyName ? readKey(config.keysFile, keyName) : '',
         script,
@@ -312,6 +317,9 @@ export class Session {
     this.speaker = speaker || null;
     this.turn = null;
     this.turns = [];
+    // The turns themselves, still open to words that arrive after a turn was logged (a reply that
+    // goes on after a tool's answer): what a rehearsal's notes are written from.
+    this.transcript = [];
     this.listening = false;
     this.onset = null;
     this.lastLoud = 0;
@@ -736,7 +744,8 @@ export class Session {
     const started = performance.now();
     let result;
     try {
-      if (call.name === 'desktop_action') result = await this.desktopResult(call.args);
+      if (this.onTool) result = (await this.onTool(call)) ?? { error: `unknown tool ${call.name}` };
+      else if (call.name === 'desktop_action') result = await this.desktopResult(call.args);
       else if (call.name === 'hand_off') result = await this.handOff(call.args);
       else if (call.name === 'ask_notes') result = await this.askNotes(call.args);
       else result = await runTool(this.records, call.name, call.args);
@@ -889,6 +898,7 @@ export class Session {
       chooser_calls: this.chooser.calls,
     };
     this.turns.push({ ...rec, text: t.text, reply: t.reply });
+    this.transcript.push(t);
     this.log(this.config.logTranscripts ? { ...rec, text: t.text, reply: t.reply } : rec);
     this.speaker?.endReply?.();
   }
@@ -902,9 +912,11 @@ export class Session {
 // ------------------------------------------------------------------ live daemon
 
 export class Live {
-  constructor(config, log) {
+  /** rehearsal: { instructions, notes } for `voice-mode rehearse` (rehearsal.mjs); the config is already rehearsalConfig(). */
+  constructor(config, log, { rehearsal = null } = {}) {
     this.config = config;
     this.log = log;
+    this.rehearsal = rehearsal;
     this.stopping = false;
     this.micLevel = 0;
     // Hand-offs from this conversation whose answers have not been heard yet, by id.
@@ -936,6 +948,7 @@ export class Live {
     }
     if (this.stopping) return;
     this.mic = new Mic({ rate: this.session.provider.inputRate, device: this.ec?.input || c.audio.input });
+    this.mic.on('error', (err) => this.audioFailed('microphone', err));
     this.mic.on('data', (pcm) => {
       this.micLevel = rms(pcm);
       if (this.halfDuplex && this.session.speaker.busy(400)) return;
@@ -954,13 +967,7 @@ export class Live {
     // in the first quiet moment; the briefing is refreshed when its sources change.
     // The lookout reads the board while the conversation runs and queues its lines to be said.
     this.lookout = c.lookout.enabled ? new Lookout(c, { log: this.log }) : null;
-    this.watch = setInterval(() => {
-      this.watchBoard();
-      this.deliverAnswers();
-      this.stillComing();
-      this.refreshBriefing();
-      this.sendBriefingChanges();
-    }, 250);
+    this.watch = setInterval(() => this.tick(), 250);
     this.server = net.createServer((sock) => {
       sock.setEncoding('utf8');
       sock.on('data', (d) => {
@@ -1007,7 +1014,22 @@ export class Live {
       this.browser = openBrowser(c, this.log);
     }
     this.refreshBriefing(true);
-    const session = new Session(c, { log: this.log, records: this.records, catalog: this.catalog, briefing: this.briefing, browser: this.browser });
+    const r = this.rehearsal;
+    const session = new Session(c, {
+      log: this.log,
+      records: this.records,
+      catalog: this.catalog,
+      briefing: this.briefing,
+      browser: this.browser,
+      // A save mid-rehearsal writes what was heard so far too.
+      ...(r ? { instructions: r.instructions, tools: [SAVE_NOTES_TOOL], onTool: (call) => rehearsalTool(Object.assign(r.notes, { turns: session.transcript }), call) } : {}),
+    });
+    // What was said carries over a reconnect, for the rehearsal notes.
+    if (this.session) {
+      this.session.finishTurn();
+      session.turns = this.session.turns;
+      session.transcript = this.session.transcript;
+    }
     // What the decision model just did shows on the orb for a few seconds.
     session.onAction = (done) => (this.lastAction = { label: done[0].toUpperCase() + done.slice(1), at: Date.now() });
     // A hand-off's answer leaves the queue once heard; one not heard is tried again.
@@ -1021,7 +1043,11 @@ export class Live {
       this.waiting.delete(a.id);
       this.log({ event: 'handoff-gave-up', id: a.id });
     };
-    session.speaker = speaker || new Speaker({ rate: session.provider.outputRate, device: this.ec?.output || c.audio.output });
+    if (speaker) session.speaker = speaker;
+    else {
+      session.speaker = new Speaker({ rate: session.provider.outputRate, device: this.ec?.output || c.audio.output });
+      session.speaker.on('error', (err) => this.audioFailed('speaker', err));
+    }
     if (resume) session.provider.resumeHandle = resume;
     this.session = session;
     await session.connect();
@@ -1031,6 +1057,16 @@ export class Live {
       this.log({ event: 'disconnected', code: e?.code, reason: e?.reason, resume: !!session.provider.resumeHandle });
       this.connect(Infinity).catch((err) => this.log({ event: 'reconnect-failed', error: err.message }));
     });
+  }
+
+  /** Every quarter second. A rehearsal hears nothing but the user: no answers, messages, lookout lines or briefing. */
+  tick() {
+    if (this.rehearsal) return;
+    this.watchBoard();
+    this.deliverAnswers();
+    this.stillComing();
+    this.refreshBriefing();
+    this.sendBriefingChanges();
   }
 
   /** Rebuild the briefing when a source changed or `refreshMin` passed; push it to the provider. */
@@ -1151,6 +1187,7 @@ export class Live {
     this.cue(440);
     // Answers still coming are spoken at the next start.
     this.log({ event: 'stopped', ...(this.answersComing() ? { answers_waiting: this.waiting.size } : {}) });
+    if (this.rehearsal) this.finishRehearsal();
     // Let the closing tone play, then let go of the provider and the echo canceller.
     setTimeout(() => {
       this.session?.close();
@@ -1160,6 +1197,37 @@ export class Live {
     }, 250);
   }
 }
+
+/** The microphone or speaker process could not start or stopped: say so plainly and end the conversation. */
+Live.prototype.audioFailed = function audioFailed(what, err) {
+  if (this.stopping) return;
+  const why = audioProblem(what, err);
+  this.log({ event: 'audio-failed', what, error: err?.message || String(err) });
+  process.stderr.write(`voice-mode: ${why}\n`);
+  this.lastAction = { label: why.slice(0, 60), at: Date.now() };
+  this.exitCode = 1;
+  this.stop();
+};
+
+Live.prototype.finishRehearsal = function finishRehearsal() {
+  // The turn still open (the user was cut off, or the reply had not ended) counts too, with the
+  // words heard so far when the provider had not finished the sentence (Gemini).
+  const s = this.session;
+  if (s?.turn && !s.turn.text && s.provider.userText) s.turn.text = s.provider.userText;
+  s?.finishTurn();
+  const notes = this.rehearsal.notes;
+  notes.turns = s?.transcript || [];
+  // Nothing heard (a connect that failed, say): no notes file.
+  if (notes.empty) return this.log({ event: 'rehearsal-notes', file: null });
+  try {
+    const file = notes.write();
+    this.log({ event: 'rehearsal-notes', file });
+    process.stderr.write(`voice-mode: rehearsal notes saved to ${file}\n`);
+  } catch (err) {
+    this.log({ event: 'rehearsal-notes-failed', error: err.message });
+    process.stderr.write(`voice-mode: could not save the rehearsal notes: ${err.message}\n`);
+  }
+};
 
 function send(cmd) {
   return new Promise((resolve) => {
@@ -1257,7 +1325,13 @@ async function bench(config, args, log) {
       // The same instructions a conversation starts with.
       briefing: config.briefing.enabled && (config.briefing.parts || []).length ? buildBriefing(config).text : '',
     });
-    if (args.play) session.speaker = new Speaker({ rate: session.provider.outputRate, device: config.audio.output });
+    if (args.play) {
+      session.speaker = new Speaker({ rate: session.provider.outputRate, device: config.audio.output });
+      session.speaker.on('error', (err) => {
+        console.error(`voice-mode bench: ${audioProblem('speaker', err)}`);
+        process.exit(1);
+      });
+    }
     await session.connect();
     const rate = session.provider.inputRate;
     const pcm = args.clip ? readClip(args.clip, rate) : syntheticClip(rate);
@@ -1325,6 +1399,15 @@ function check(config) {
   if (config.browser.enabled) {
     const up = spawnSync(process.execPath, ['-e', `fetch(${JSON.stringify(`${config.browser.endpoint.replace(/\/+$/, '')}/json/version`)}).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))`], { timeout: 4000 });
     add(up.status === 0, `browser at ${config.browser.endpoint} (voice-mode page lists what its current page offers)`);
+  }
+  if (config.rehearsal.contextFile) {
+    let why = '';
+    try {
+      why = `${readContext(config).length} characters`;
+    } catch (err) {
+      why = err.message;
+    }
+    add(/characters$/.test(why), `rehearsal material ${config.rehearsal.contextFile} (${why}); notes go to ${config.rehearsal.notesDir}`);
   }
   console.log(rows.join('\n'));
   return rows.some((r) => r.startsWith('MISS')) ? 1 : 0;
@@ -1522,7 +1605,7 @@ function parseArgs(argv) {
   return out;
 }
 
-const FLAGS = ['clip', 'runs', 'play', 'open', 'verbose', 'say', 'config', 'dry-run', 'help'];
+const FLAGS = ['clip', 'runs', 'play', 'open', 'verbose', 'say', 'config', 'dry-run', 'help', 'text'];
 
 /** The usage at the top of this file. */
 function usage() {
@@ -1551,23 +1634,64 @@ async function main(argv) {
     console.error(`voice-mode: ${err.message}`);
     return 2;
   }
+  if (args.text && cmd !== 'rehearse') {
+    console.error('voice-mode: --text goes with rehearse only (see voice-mode help)');
+    return 2;
+  }
+  // A rehearsal: the same conversation with only the material, its own rules and a notes file.
+  let rehearsal = null;
+  if (cmd === 'rehearse') {
+    try {
+      rehearsal = { instructions: rehearsalInstructions(readContext(config)) };
+    } catch (err) {
+      console.error(`voice-mode rehearse: ${err.message}`);
+      return 2;
+    }
+    config = rehearsalConfig(config);
+    rehearsal.notes = new RehearsalNotes(config);
+  }
   switch (cmd) {
+    case 'rehearse':
     case 'start': {
       // A press that ends the conversation can come while it is still starting.
       let live = null;
       process.on('exit', () => releaseLock());
-      for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => (live ? live.stop() : process.exit(0)));
+      // Typed (rehearse --text): a signal still writes the notes of what was said.
+      const typedEnd = () => {
+        const n = rehearsal.notes;
+        if (!n.empty) console.log(`Notes: ${n.write()}`);
+        process.exit(0);
+      };
+      for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => (live ? live.stop() : rehearsal && args.text ? typedEnd() : process.exit(0)));
       const keyName = PROVIDERS[config.provider].keyName;
       if (keyName && !readKey(config.keysFile, keyName)) {
         console.error(`voice-mode: ${keyName} is empty in ${config.keysFile}; add it there, or set "provider" in ${config.file}`);
         return 2;
+      }
+      // Typed: no microphone, speaker or lock; the reply's words are printed.
+      if (rehearsal && args.text) {
+        fs.mkdirSync(config.logDir, { recursive: true });
+        const log = makeLogger(config, { file: path.join(config.logDir, 'voice-mode.log'), extra: { from: 'rehearse-text' } });
+        const provider = createProvider(config, { instructions: rehearsal.instructions, tools: [SAVE_NOTES_TOOL], key: keyName ? readKey(config.keysFile, keyName) : '' });
+        try {
+          const file = await rehearseText({ provider, notes: rehearsal.notes, log });
+          console.log(file ? `Notes: ${file}` : 'Nothing was said, so no notes were written.');
+          return 0;
+        } catch (err) {
+          provider.close();
+          console.error(`voice-mode rehearse: ${err.message}`);
+          // What was said before the error is kept (rehearseText wrote it).
+          if (!rehearsal.notes.empty) console.log(`Notes: ${rehearsal.notes.file}`);
+          return 1;
+        }
       }
       // Strictly one session: the lock is taken before anything slow happens.
       if (!acquireLock()) {
         console.error(`voice-mode is already running (pid ${lockHolder() ?? '?'}); \`voice-mode toggle\` talks to it`);
         return 2;
       }
-      live = new Live(config, makeLogger(config));
+      live = new Live(config, makeLogger(config), { rehearsal });
+      if (rehearsal) console.error(`voice-mode: rehearsing with ${config.rehearsal.contextFile}; talk, and say when you are done (Ctrl+C ends it)`);
       try {
         await live.start();
       } catch (err) {
@@ -1698,7 +1822,7 @@ async function main(argv) {
     case 'latency':
       return latency(config);
     default:
-      console.error(`voice-mode: unknown command "${cmd}" (start, toggle, stop, status, reply, briefing, do, say, pc, tasks, check, pick, page, bench, latency, help)`);
+      console.error(`voice-mode: unknown command "${cmd}" (start, rehearse, toggle, stop, status, reply, briefing, do, say, pc, tasks, check, pick, page, bench, latency, help)`);
       return 2;
   }
 }

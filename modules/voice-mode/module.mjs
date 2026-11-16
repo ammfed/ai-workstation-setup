@@ -10,7 +10,7 @@ import { keyFile as openrouterKeyFile } from '../openrouter/module.mjs';
 // templates/voice-mode/bin, with the system's own audio tools. See docs/voice-mode.md.
 
 const NAME = 'voice-mode';
-const SCRIPTS = ['voice-mode.mjs', 'config.mjs', 'providers.mjs', 'records.mjs', 'desk.mjs', 'control.mjs', 'audio.mjs', 'orb.mjs', 'orb.qml', 'briefing.mjs', 'handoff.mjs', 'browser.mjs', 'lookout.mjs', 'notes.mjs', 'pc.mjs', 'tasks.mjs', 'screen.mjs'];
+const SCRIPTS = ['voice-mode.mjs', 'config.mjs', 'providers.mjs', 'records.mjs', 'desk.mjs', 'control.mjs', 'audio.mjs', 'orb.mjs', 'orb.qml', 'briefing.mjs', 'handoff.mjs', 'browser.mjs', 'lookout.mjs', 'notes.mjs', 'pc.mjs', 'tasks.mjs', 'screen.mjs', 'rehearsal.mjs'];
 // The orb runs on Qt 6's own `qml` tool with KDE's layer-shell module (overlay above every window).
 const ORB_PKGS = { apt: 'qml-qt6 qml6-module-qtquick-window qml6-module-qtquick-shapes qml6-module-org-kde-layershell', pacman: 'qt6-declarative layer-shell-qt' };
 const ORB_RUNNERS = ['/usr/lib/qt6/bin/qml', 'qml6', 'qml-qt6'];
@@ -132,6 +132,8 @@ function buildConfig(ctx) {
     ...(tasks.length ? { tasks: { command: tasks } } : {}),
     // The ledger's board, else its one-shot command by full path (a hotkey's PATH may lack ~/.local/bin).
     ...(ctx.get('VOICE_LOOKOUT') ? { lookout: { enabled: true, command: [path.join(ctx.home, '.local', 'bin', 'ledger'), 'board', '--json'] } } : {}),
+    // The material `voice-mode rehearse` knows; the only file a rehearsal sends to the voice provider.
+    ...(ctx.get('VOICE_REHEARSAL_CONTEXT') ? { rehearsal: { contextFile: ctx.get('VOICE_REHEARSAL_CONTEXT') } } : {}),
     ...(ctx.get('VOICE_NOTES') ? { notes: { enabled: true, vault: ctx.get('VOICE_NOTES_VAULT'), rawDir: ctx.get('VOICE_NOTES_RAW_DIR') } } : {}),
     // Name patterns of files and folders never to be read, offered or opened: yours to fill in, here only.
     exclude: [],
@@ -269,6 +271,7 @@ export default {
       default: '',
     },
     { key: 'VOICE_PERSONA_FILE', type: 'text', path: true, message: 'A text file with your own persona for the voice (empty: a neutral default)', default: '' },
+    { key: 'VOICE_REHEARSAL_CONTEXT', type: 'text', path: true, message: 'A file with the talk or workshop material to rehearse out loud (voice-mode rehearse; empty: set it later)', default: '' },
     { key: 'VOICE_HOTKEY', type: 'text', message: 'Global hotkey that starts a conversation and ends it (KDE Plasma sets it for you; elsewhere you are told the command to bind)', default: 'Ctrl+2' },
     {
       key: 'VOICE_TYPING',

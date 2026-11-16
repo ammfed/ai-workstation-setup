@@ -14,6 +14,7 @@ file run by Qt 6's `qml` tool) shows the conversation while it runs.
 ```sh
 voice-mode toggle           # the hotkey: start a conversation, or end the one running
 voice-mode start            # the same conversation, in this terminal (Ctrl+C ends it)
+voice-mode rehearse         # practise a talk out loud with a listening partner; notes saved at the end
 voice-mode check            # what is configured and what is missing (never prints keys)
 voice-mode do "<request>"   # for your assistant: one desktop action from the same safe list
 voice-mode say "<text>"     # for your assistant: say these words aloud, as they are
@@ -80,6 +81,7 @@ points at another one). Everything not in the file takes the defaults in `bin/co
 | `actions` | `enabled`, `chooser` (`model`, `keyName`, `keyFile`, `threshold` 0.9 mid-sentence, `finalThreshold` 0.5 once you stop, `askThreshold` 0.5 for a browser button that is only asked about, `closeThreshold` 0.8 to close an app, `timeoutMs` 3000 per call mid-sentence, `finalTimeoutMs` 6000 for the call once you stop), `apps` (extra `{ id, name, desktop \| mac \| command }`), `discoverApps` (installed desktop apps on Linux), `sites` (`{ id, name, url }`, http and https only), `documents` (its folders can be opened), `files`, `decisionLog` (default on: one line per decision in `logs/decisions.log`), `control` (default on: the PC control below), `handsFree` (default on: keys, the mouse, windows, tabs and files; see Hands-free control), `notes.folder`, `searchUrl` (`{q}` is replaced by the words), `dryRun`. |
 | `browser` | `enabled` (off by default), `endpoint` (`http://127.0.0.1:9222`: the DevTools address of a Chrome started for the assistant; loopback only), `ignore` (URL prefixes of tabs it never reads, switches to or closes), `maxItems` (60 links, buttons and fields per page), `confirmSec` (30: how long a held button waits for a yes). See Browser control. |
 | `audio` | `duplex`: `full` (default: talk over a reply to cut in) or `half` (the mic is muted while a reply plays), `echoCancel` (default on; it wraps the `input` and `output` devices, or the default ones), `input` and `output` device names, `earcons` (a short tone when a conversation starts and ends). |
+| `rehearsal` | `contextFile` (the material `voice-mode rehearse` knows; empty until you set it), `notesDir` (`rehearsals/` next to the config), `silenceMs` (2000: how long a pause is before it answers), `maxChars` (60000: a longer file is refused, never cut), `closing` (what it says once the notes are saved). See Rehearsing a talk. |
 | `listen.exitAfterMin` | End the conversation after this many minutes without speech (default 10). |
 | `orb` | `enabled`, `size` (pixels), `corner` (`bottom-right`, `bottom-left`, `top-right`, `top-left`), `margin` (pixels from that corner), `colors` for `idle`, `listening`, `thinking`, `speaking` and `action`, `runner` (the Qt 6 `qml` tool, found by itself when empty). |
 | `logDir`, `logTranscripts` | Run log and `metrics.jsonl`. Transcripts go to the run log only when `logTranscripts` is true, and never to the metrics file. |
@@ -653,6 +655,43 @@ Measured on 2026-09-25 on a Linux desktop, over a few thousand local notes, with
 - Launching itself (`kstart`, `gtk-launch`, `xdg-open`, `open`) takes about 10 ms to hand
   off. The window appears when the app has started, which the numbers above do not include.
 - Not included: your microphone and speaker buffers (about 20 and 40 ms as configured).
+
+## Rehearsing a talk
+
+`voice-mode rehearse` turns the voice into a rehearsal partner. You present out loud; it listens
+and does not interrupt. When you pause after a part (two seconds, `rehearsal.silenceMs`) or ask
+it something, it gives one short reaction, one question someone in the audience might ask, and
+one suggestion, and more only when you ask. It also brainstorms on request, one or two ideas at
+a time, and says so when you skip a part or change the main point. When you say you are done,
+it saves notes and tells you so (`rehearsal.closing`).
+
+It knows one thing: the material in `rehearsal.contextFile`, a plain text or Markdown file you
+write (the talk's point, its parts, the examples, what is still open). Put it next to the config,
+outside any repository:
+
+```json
+"rehearsal": { "contextFile": "~/.config/ai-workstation-setup/voice/my-talk.md" }
+```
+
+**What a rehearsal sends.** Only the rehearsal rules, that file (redacted like the briefing) and
+the conversation itself go to the realtime provider in `provider`. Everything else a normal
+conversation carries is off for the run: no record sources, no briefing, no hand-off and no
+answers or messages from your assistant's session, no notes vault, no lookout, and no desktop or
+browser actions, so your words do not go to the decision model either. Write nothing into the
+material file that you would not send to that provider.
+
+**The notes.** Each rehearsal writes one Markdown file in `rehearsal.notesDir`
+(`rehearsal-<date>-<time>.md`, mode 600): what you covered, what worked and the open points (as
+the voice summed them up when you said you were done), then the transcript of what was heard
+and said. A rehearsal ended with the hotkey, Ctrl+C or the idle timeout before you asked for notes still
+writes the transcript; one where nothing was heard writes no file. The file's path is printed
+when the rehearsal ends.
+
+**Without a microphone.** `voice-mode rehearse --text` runs the same rules, material, provider and
+notes with typed lines instead of speech: each line goes to the provider as your words, and
+the reply's words are printed. A line `/end` or the end of input finishes it and writes the
+notes. It is the way to check a rehearsal setup without talking, and a script can pipe a
+practice run into it.
 
 ## Checking it without talking
 

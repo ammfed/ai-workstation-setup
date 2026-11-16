@@ -123,6 +123,11 @@ export const DEFAULTS = {
   // Gemini Live takes up to its whole 131,072-token context as instructions, but every turn
   // bills the whole context again: see docs/voice-mode.md before raising maxChars.
   briefing: { enabled: true, refreshMin: 3, maxChars: 120000, parts: [] },
+  // Rehearsal mode (rehearsal.mjs, `voice-mode rehearse`): practise a talk out loud. contextFile:
+  // the material the voice knows (the only thing besides the conversation it sends); notesDir:
+  // where the notes of each rehearsal go; silenceMs: how long a pause is before it answers;
+  // closing: what it tells you once the notes are saved.
+  rehearsal: { contextFile: '', notesDir: path.join(CONFIG_DIR, 'rehearsals'), silenceMs: 2000, maxChars: 60000, closing: 'The notes are saved.' },
   logDir: path.join(CONFIG_DIR, 'logs'),
   // Also write what was said and answered to the run log (never to the metrics file).
   logTranscripts: false,
@@ -238,6 +243,8 @@ export function loadConfig(file = process.env.VOICE_MODE_CONFIG || path.join(CON
   config.exclude = (config.exclude || []).map(String).filter(Boolean);
   config.notes.vault = expandHome(config.notes.vault);
   config.notes.rawDir = expandHome(config.notes.rawDir);
+  config.rehearsal.contextFile = expandHome(config.rehearsal.contextFile);
+  config.rehearsal.notesDir = expandHome(config.rehearsal.notesDir);
   if (config.personaFile) config.persona = fs.readFileSync(expandHome(config.personaFile), 'utf8').trim();
   if (!config.providers[config.provider]) throw new Error(`unknown provider "${config.provider}" (openai, gemini or fake)`);
   return config;
