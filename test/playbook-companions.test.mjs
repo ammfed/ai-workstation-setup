@@ -10,7 +10,7 @@ const playbook = path.join(repoRoot, 'templates', 'skills', 'workflow-playbook')
 test('the installer copies each playbook companion file, and the playbook points to it', () => {
   const module = fs.readFileSync(path.join(repoRoot, 'modules', 'skills', 'module.mjs'), 'utf8');
   const skill = fs.readFileSync(path.join(playbook, 'SKILL.md'), 'utf8');
-  for (const file of ['checkpoints.md', 'video.md', 'slides.md', 'building.md']) {
+  for (const file of ['checkpoints.md', 'video.md', 'slides.md', 'building.md', 'film.md']) {
     assert.ok(fs.existsSync(path.join(playbook, file)), `${file} is in the template`);
     assert.ok(module.includes(`['skills/workflow-playbook/${file}', '${file}']`), `the installer copies ${file}`);
     assert.ok(skill.includes(`\`${file}\``), `the playbook points to ${file}`);
@@ -40,4 +40,16 @@ test('the opt-in government build style ships with the playbook, loads only on a
     assert.match(text, /The newest dated rule wins\./);
     assert.match(text, /strike the old text through with `~~` and keep it/);
   }
+});
+
+test('the shot-prompts skill ships with the playbook, which points to it, and claims no licence', () => {
+  const module = fs.readFileSync(path.join(repoRoot, 'modules', 'skills', 'module.mjs'), 'utf8');
+  const skill = fs.readFileSync(path.join(playbook, 'SKILL.md'), 'utf8');
+  const film = fs.readFileSync(path.join(playbook, 'film.md'), 'utf8');
+  const shots = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'shot-prompts', 'SKILL.md'), 'utf8');
+  assert.ok(module.includes("writeBundledSkill(ctx, 'shot-prompts')"), 'the playbook choice installs shot-prompts');
+  assert.match(shots, /^---\nname: shot-prompts\ndescription: .+\n---\n/);
+  assert.doesNotMatch(shots.split('\n').slice(0, 8).join('\n'), /license|adapted-from/);
+  assert.match(skill, /\| shot-prompts \|/);
+  assert.ok(skill.includes('`film.md`') && film.includes('`shot-prompts`'));
 });
