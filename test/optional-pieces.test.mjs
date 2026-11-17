@@ -614,7 +614,9 @@ test('the playbook names every skill the installer offers, once: as a phase owne
     const places = [named(name, owners), noPhase.includes(name), name === supervisor].filter(Boolean).length;
     assert.equal(places, 1, `${name} is named exactly once: as a phase owner, as the supervisor or as a skill that owns no phase`);
   }
-  for (const name of noPhase) assert.ok(offered.includes(name), `${name} in the playbook is a skill the installer offers`);
+  // shot-prompts ships with the playbook, so it is installed with it and never offered on its own.
+  const bundled = ['shot-prompts'];
+  for (const name of noPhase) assert.ok(offered.includes(name) || bundled.includes(name), `${name} in the playbook is a skill the installer offers`);
 });
 
 test('the playbook gives every phase one /kun check, in phase order', () => {

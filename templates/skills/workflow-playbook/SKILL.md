@@ -75,6 +75,7 @@ Why: one supervisor that checks every phase against the same method catches drif
 | motion-designer | A video plan or review that needs motion decisions: timing, easing, staging and follow-through, used beside the video tool (video.md, stage 1, rule 4) |
 | diagnosing-bugs | A bug or a slowdown whose cause is unknown: find and prove the cause before the fix (the bug path below) |
 | retro (owner starts it) | After a session that went badly or slowly: look back at it and change the agent's environment (signposts, automated checks, rules). It reads writing-for-agents first |
+| shot-prompts | Writing or repairing a prompt for an AI video model (film.md, stage 5) |
 | writing-for-agents | Writing or editing a skill, an `AGENTS.md` or a `CLAUDE.md` |
 | stow | Before compacting or a long break: save what the session learned into the files where it belongs (rule 9.3) |
 
@@ -465,6 +466,7 @@ Why: writing down the steps and prompts makes a direction that took many rounds 
 ## 11. Making a video
 
 - When the work is a video of any kind, read `video.md` in this skill's folder. It says which of its twelve stages the kind of video needs and where AI generation fits.
+- When every shot is generated and generation carries the story (a cinematic film from designed characters and places), read `film.md` in this skill's folder instead. It runs from the voice-over to the edit and uses the `shot-prompts` skill for every video prompt.
 - Its rules add to this playbook. The phases, gates, review pages and wording rules here still apply.
 
 Why: a video has its own stages and risks, so one companion file keeps them out of the general rules.

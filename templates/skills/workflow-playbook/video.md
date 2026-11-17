@@ -43,7 +43,7 @@ Pick by the kind of work, never by a guess of how long it takes. A video that mi
 | Motion graphics (titles, data, an animated logo) | 1 to 5, 8, 9, 11, 12. 6, 7 and 10 when it has generated pieces or a voice | Backgrounds, textures, music | Everything on screen is drawn or animated |
 | Explainer or tutorial | All twelve | A voice-over, illustrations, a presenter | It teaches one idea in a set order, usually voice-led |
 | Talking-head video (a real person on camera) | All twelve. Stage 4 is a shot list | Clean-up of the sound, captions. A presenter avatar only with the person's written consent | A named person speaks to camera |
-| Fully generated | All twelve. 6 and 7 carry most of the work | Every picture, shot, voice and track | Nothing is filmed or drawn by hand |
+| Fully generated | All twelve. 6 and 7 carry most of the work. A cinematic film follows `film.md` instead | Every picture, shot, voice and track | Nothing is filmed or drawn by hand |
 | A small change to a finished video (a trim, a caption, a figure) | 1, 9, 11, 12 | A regenerated piece for a named fault | The video is already approved |
 
 ## 1. Brief and delivery facts
