@@ -474,6 +474,7 @@ Why: a video has its own stages and risks, so one companion file keeps them out 
 ## 12. Making a presentation
 
 - When the work is a presentation, read `slides.md` in this skill's folder. It maps the stages of a deck onto these phases and gates.
+- When the deck must hold a room and motion carries its look (a kick-off, launch, workshop or keynote), also read `motion-look.md` at the look stage. It runs motion concepts, then one idea per slide, before any content.
 
 Why: a deck has risks of its own, such as the back row, the show app and a stage that is not under the owner's control.
 
