@@ -12,6 +12,7 @@ const BUNDLED_EXTRAS = {
     ['skills/workflow-playbook/checkpoints.md', 'checkpoints.md'],
     ['skills/workflow-playbook/video.md', 'video.md'],
     ['skills/workflow-playbook/slides.md', 'slides.md'],
+    ['skills/workflow-playbook/motion-look.md', 'motion-look.md'],
     ['skills/workflow-playbook/building.md', 'building.md'],
     ['skills/workflow-playbook/film.md', 'film.md'],
   ],

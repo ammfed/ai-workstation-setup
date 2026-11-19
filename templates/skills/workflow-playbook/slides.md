@@ -174,6 +174,10 @@ Pick by the kind of work, never by a guess of how long it takes. A deck that mix
    - If it is still unclear, ask in one line.
 
    Why: restyling the page instead of the deck loses a whole round.
+5. **Run a motion-led look when the deck must hold a room.**
+   - For a kick-off, launch, workshop or keynote where motion carries the look, read `motion-look.md` in this skill's folder and follow its order: motion concepts, one idea per slide, scale, then content.
+
+   Why: a look that is only the brand applied correctly is rejected as boring, and the content built on it is redone.
 
 ## 5. Storyline and slide plan
 
@@ -186,6 +190,7 @@ Pick by the kind of work, never by a guess of how long it takes. A deck that mix
 2. **Study visual patterns before the first draft.**
    - Pick one visual form per slide from its message: a path for a roadmap, a single large number for a headline figure, layers for alignment, a comparison for a choice.
    - No two slides in a row share a layout. Cards in a grid are the exception, not the default.
+   - One trick is not a deck: each slide gets its own visual idea inside the look, and a signature picture appears once.
    - Write which pattern each slide uses and why.
 
    Why: a first draft of repeated card grids is thrown away as boring.
@@ -352,3 +357,5 @@ These run through every stage. Add them to the map at the brief.
 | A page kept as the master while the owner finished the deck in the app | Two export repairs replaced by the owner's own file | 1.3 |
 | A raster logo upscaled on a poster | A pixelated logo, made again | 11.1 |
 | Small text sized on a laptop | A round to enlarge text and fix a roadmap | 4.3 |
+| A stage deck's look that only applied the brand | Every look and the deck on it rejected as boring | 4.5, `motion-look.md` |
+| One signature picture repeated on every slide | A round of new ideas per slide | 5.2 |

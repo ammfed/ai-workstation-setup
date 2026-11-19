@@ -10,7 +10,7 @@ const playbook = path.join(repoRoot, 'templates', 'skills', 'workflow-playbook')
 test('the installer copies each playbook companion file, and the playbook points to it', () => {
   const module = fs.readFileSync(path.join(repoRoot, 'modules', 'skills', 'module.mjs'), 'utf8');
   const skill = fs.readFileSync(path.join(playbook, 'SKILL.md'), 'utf8');
-  for (const file of ['checkpoints.md', 'video.md', 'slides.md', 'building.md', 'film.md']) {
+  for (const file of ['checkpoints.md', 'video.md', 'slides.md', 'building.md', 'film.md', 'motion-look.md']) {
     assert.ok(fs.existsSync(path.join(playbook, file)), `${file} is in the template`);
     assert.ok(module.includes(`['skills/workflow-playbook/${file}', '${file}']`), `the installer copies ${file}`);
     assert.ok(skill.includes(`\`${file}\``), `the playbook points to ${file}`);
@@ -52,4 +52,13 @@ test('the shot-prompts skill ships with the playbook, which points to it, and cl
   assert.doesNotMatch(shots.split('\n').slice(0, 8).join('\n'), /license|adapted-from/);
   assert.match(skill, /\| shot-prompts \|/);
   assert.ok(skill.includes('`film.md`') && film.includes('`shot-prompts`'));
+});
+
+test('the motion-led look is reached from the slides look stage and runs the look before content', () => {
+  const slides = fs.readFileSync(path.join(playbook, 'slides.md'), 'utf8');
+  const look = fs.readFileSync(path.join(playbook, 'motion-look.md'), 'utf8');
+  assert.match(slides, /5\. \*\*Run a motion-led look when the deck must hold a room\.\*\*\n   - [^\n]*read `motion-look\.md` in this skill's folder/);
+  assert.match(look, /This file extends stage 4 \(Look round\) of `slides\.md`\./);
+  assert.match(look, /Content and slide order wait until the look is approved\./);
+  assert.match(look, /\| Trap \| What it cost \| The rule that prevents it \|/);
 });
