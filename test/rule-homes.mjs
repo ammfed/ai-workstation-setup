@@ -24,6 +24,7 @@ export const RULE_HOMES = [
   row('Give the result, not a commentary', 'core'),
   row('Do not use em dashes.', 'core'),
   row('Anything that goes to other people', WFO, ['is written as the user, in their professional voice', 'Leave out agent and tooling labels']),
+  row('When a fact is confirmed, write the fact itself', WFO),
   row('When writing in another language', WFO),
   row('Writing for other people leads with the real point', WFO, ['Lead with the real point.', 'Give each strong claim its reason or evidence', 'No corporate filler']),
   row('Before building a deck or document', WFO, ['agree its one-sentence point', 'draft it as plain paragraphs']),
@@ -169,10 +170,11 @@ export const RULE_HOMES = [
   row('State the case against a risky choice once', 'core'),
 
   // AI and model use
-  row('Use Opus 5.5 at medium effort by default', MODELS),
-  row('Give the hard work to Fable 5.2', MODELS),
-  row('Give polish of a prototype', MODELS),
-    row('Re-run weak work one step up', MODELS),
+  row('Pick the model and effort for each task when it starts', MODELS),
+  row('Use Opus 5.5 at high effort for slides and decks', MODELS),
+  row('Use Opus 5.5 at medium effort for routine work', MODELS),
+  row('Re-run weak work one step up', MODELS),
+  row('Run Fable only when the user names it for a task', MODELS),
   row('Give small, clear tasks', MODELS),
   row('Run research that runs many steps as one orchestrator', MODELS),
   row('Give reading, lookup and summary sub-tasks', MODELS),
@@ -184,6 +186,7 @@ export const RULE_HOMES = [
   row('Use a stronger model or a higher effort than these rules pick', MODELS),
   row('Treat subscription limits as scarce', MODELS, ['Treat subscription limits as scarce', 'Pause heavy work near a limit']),
   row('Hand retrieval-heavy work', MODELS),
+  row('When a rule changes, change every copy of it in the same pass', MODELS),
 
   // Research
   row('Do web research in a separate, visible browser', MODELS),
