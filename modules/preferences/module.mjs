@@ -275,7 +275,7 @@ export default {
       message: 'Models: effort and model routing',
       default: 'capable',
       choices: [
-        { value: 'capable', label: 'capable - Opus at medium effort for most work, Fable at low for a new frontend look, a bug hunt with an unknown cause, security audits, hard-to-undo plans and long research, a faster model at medium effort for small tasks' },
+        { value: 'capable', label: 'capable - effort picked per task: Opus at high effort for slides, games, look and front-end design, plans, specs, architecture, judging and unknown-cause bug hunts, Opus at medium for routine work, a faster model at medium effort for small tasks, Fable only when you name it' },
         { value: 'economical', label: 'economical - low effort by default, more for planning, design and hard reasoning, the strongest model for building' },
         { value: 'balanced', label: 'balanced - medium effort by default, high for planning, design, hard reasoning and building' },
         { value: 'none', label: 'none - no rule' },

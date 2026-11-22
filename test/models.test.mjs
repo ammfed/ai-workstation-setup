@@ -35,10 +35,11 @@ function withNoMistakes(ctx, version) {
   return ctx;
 }
 
-test('Claude Code settings default Opus 5.5 to medium effort, and the question stays', () => {
+test('Claude Code sessions start Opus 5.5 at medium effort, pin no Fable level, and the question stays', () => {
   const q = question(claudeCode, 'CLAUDE_MODEL_EFFORTS');
-  assert.equal(q.default, 'claude-opus-5-5=medium, claude-fable-5-2=low');
-  assert.deepEqual(parseModelEfforts(q.default), { 'claude-opus-5-5': 'medium', 'claude-fable-5-2': 'low' });
+  assert.equal(q.default, 'claude-opus-5-5=medium');
+  assert.deepEqual(parseModelEfforts(q.default), { 'claude-opus-5-5': 'medium' });
+  assert.doesNotMatch(q.default, /fable/, 'Fable runs only when the user names it');
   assert.deepEqual(parseModelEfforts(''), {});
 });
 
@@ -48,7 +49,7 @@ test('Claude Code starts on Opus at medium effort, and a saved keep still wins',
     for (const key of ['CLAUDE_MODEL', 'CLAUDE_EFFORT', 'CLAUDE_MODEL_EFFORTS']) await ctx.ask(question(claudeCode, key));
     return ['CLAUDE_MODEL', 'CLAUDE_EFFORT', 'CLAUDE_MODEL_EFFORTS'].map((key) => ctx.get(key));
   };
-  assert.deepEqual(await ask({}), ['opus', 'medium', 'claude-opus-5-5=medium, claude-fable-5-2=low']);
+  assert.deepEqual(await ask({}), ['opus', 'medium', 'claude-opus-5-5=medium']);
   assert.deepEqual(await ask({ CLAUDE_MODEL: 'keep', CLAUDE_EFFORT: 'keep', CLAUDE_MODEL_EFFORTS: '' }), ['keep', 'keep', '']);
   assert.match(question(claudeCode, 'CLAUDE_EFFORT').message, /older models; Opus 5\.5 has its own level/);
 });
@@ -242,33 +243,34 @@ test('the no-mistakes config lives in NM_HOME when set, else ~/.no-mistakes', ()
   }
 });
 
-test('the example dispatch profiles: Opus medium default, Fable 5.2 low for hard work, Opus medium for scouts, plans, audits and polish, Sonnet medium for small tasks', () => {
+test('the example dispatch profiles: Opus medium default and for routine work, Opus high for design and judgment work, Sonnet medium for small tasks, no Fable', () => {
   assert.equal(question(firstmate, 'FIRSTMATE_DISPATCH').default, 'capable');
   const capable = dispatchProfiles('capable', 'claude');
   assert.deepEqual(capable.default, [{ harness: 'claude', model: 'claude-opus-5-5', effort: 'medium' }]);
   assert.equal(capable.rules.length, 3);
   const rule = (re) => capable.rules.find((r) => re.test(r.when));
-  const hard = rule(/^Hard work/);
-  assert.deepEqual(hard.use, [{ harness: 'claude', model: 'claude-fable-5-2', effort: 'low' }]);
-  for (const re of [/look is not yet settled/, /bug hunt whose cause is not yet known/, /security audit/, /plan that is hard to undo/, /research that runs many steps/]) assert.match(hard.when, re);
-  assert.match(hard.why, /Re-run a weak result once at medium, then once at high/);
-  assert.doesNotMatch(hard.why, /usage credits|runs low/);
-  assert.match(hard.why, /Haiku 5\.5 subagents at medium effort run direct fetch-and-report tasks in parallel/);
-  assert.match(hard.why, /weak fetcher re-runs once on Sonnet 5\.5 at medium/);
-  assert.match(hard.why, /Fix or build on Opus 5\.5 at medium once the cause is proven/);
-  assert.match(hard.why, /agy with gemini-3\.8-flash-medium \(claude-sonnet-4-6 on a Gemini quota error\) runs bulk sweeps/);
-  assert.match(hard.why, /claude-sonnet-4-6 on a Gemini quota error/);
-  assert.match(hard.why, /Sonnet 5\.5 at medium drafts/);
-  const medium = rule(/a scout report, an ordinary audit, a plan/);
+  const high = rule(/^Design and judgment work/);
+  assert.deepEqual(high.use, [{ harness: 'claude', model: 'claude-opus-5-5', effort: 'high' }]);
+  for (const re of [/slides or a deck/, /a game/, /any look or front-end design work/, /whether or not the look is settled/, /a plan, a spec, an architecture decision/, /judging the quality of other work/, /security audit/, /bug hunt whose cause is not yet known/, /research that runs many steps/]) assert.match(high.when, re);
+  assert.match(high.why, /At medium effort this work comes out weaker/);
+  assert.doesNotMatch(high.why, /usage credits|runs low/);
+  assert.match(high.why, /one Opus 5\.5 orchestrator that plans, splits and judges the work at high effort/);
+  assert.match(high.why, /Haiku 5\.5 subagents at medium effort run direct fetch-and-report tasks in parallel/);
+  assert.match(high.why, /weak fetcher re-runs once on Sonnet 5\.5 at medium/);
+  assert.match(high.why, /Fix or build on Opus 5\.5 at medium once the cause is proven/);
+  assert.match(high.why, /agy with gemini-3\.8-flash-medium \(claude-sonnet-4-6 on a Gemini quota error\) runs bulk sweeps/);
+  assert.match(high.why, /Sonnet 5\.5 at medium drafts/);
+  const medium = rule(/^Routine work/);
   assert.deepEqual(medium.use, [{ harness: 'claude', model: 'claude-opus-5-5', effort: 'medium' }]);
-  assert.match(medium.when, /polish of a settled frontend look \(spacing, copy, states, small layout fixes, usability fixes\)/);
-  assert.match(medium.when, /slides and documents/);
-  assert.match(medium.why, /re-runs once on Fable 5\.2 at low/);
+  for (const re of [/supervision/, /building or fixing to a settled spec/, /a scout report, an ordinary audit, documents, pages/, /polish of a settled frontend look \(spacing, copy, states, small layout fixes, usability fixes\)/]) assert.match(medium.when, re);
+  assert.doesNotMatch(medium.when, /slides|a plan|a spec,/);
+  assert.match(medium.why, /A weak result re-runs once at high effort/);
   const small = rule(/small, well-defined task/);
   assert.deepEqual(small.use, [{ harness: 'claude', model: 'claude-sonnet-5-5', effort: 'medium' }]);
   assert.match(small.why, /re-run on Opus 5\.5 at medium effort/);
-  // No rule sets high, extra-high or max.
-  assert.deepEqual([...new Set(capable.rules.flatMap((r) => r.use.map((u) => u.effort)))].sort(), ['low', 'medium']);
+  // No profile uses Fable, and none sets extra-high or max.
+  assert.doesNotMatch(JSON.stringify(capable), /fable/i);
+  assert.deepEqual([...new Set(capable.rules.flatMap((r) => r.use.map((u) => u.effort)))].sort(), ['high', 'medium']);
   assert.deepEqual(dispatchProfiles('capable', 'codex').default, [{ harness: 'codex', effort: 'medium' }]);
 });
 
@@ -339,23 +341,36 @@ test('the model map lists the installer defaults and sends small tasks to Sonnet
   assert.match(map, /\| backpass \| `BACKPASS_MODEL` \| `claude-opus-5-5`/);
   assert.match(map, /version bump, config value\) \| Sonnet 5\.5 \| medium \|/);
   assert.doesNotMatch(map, /\| (xhigh|max) \|/);
+  assert.match(map, /\| claude-code \| `CLAUDE_MODEL_EFFORTS` \| `claude-opus-5-5=medium` \|/);
+  assert.match(map, /\| Slides and decks \| Opus 5\.5 \| high \|/);
+  assert.match(map, /\| Plans, specs and architecture \| Opus 5\.5 \| high \|/);
+  assert.match(map, /\| A code bug hunt whose cause is unknown \| Opus 5\.5 \| high \|/);
+  assert.match(map, /\| Code review \(no-mistakes\) \| Opus 5\.5 \| medium \|/);
+  // Fable takes no work by rule: its only row is the one for a task the user names it for.
+  for (const row of map.split('\n').filter((l) => /^\| /.test(l) && /\| Fable/.test(l))) assert.match(row, /^\| Any task you name Fable for \|/);
+  assert.doesNotMatch(map, /Fable 5\.2 at low|Fable 5\.2 \| low/);
 });
 
 test('the workflow-playbook skill points to the model rules and waits at a review page the way the shipped preferences do', () => {
   const skill = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
   const routing = skill.slice(skill.indexOf('**Match the model to the job.**'), skill.indexOf('2. **One complete brief.**'));
   assert.match(routing, /Follow the models-and-research skill for the model and effort of each job\./);
-  assert.match(routing, /Without it: the default strong model at medium effort for most work, the strongest model at low effort for a code bug hunt whose cause is unknown and for a new look/);
+  assert.match(routing, /Pick the model and effort for each job when it starts\. Never pin one model and effort for all work\./);
+  assert.match(routing, /Without it: the default strong model at high effort for slides, games, any look or front-end design work, plans, specs, architecture, judging the quality of other work and a code bug hunt whose cause is unknown; the same model at medium effort for routine work/);
+  assert.doesNotMatch(routing, /strongest model at low effort/);
   assert.doesNotMatch(routing, /\| Job \|/, 'the model table lives in the models-and-research skill only');
   assert.doesNotMatch(skill, /highest effort/);
   assert.match(routing, /above these only when the owner names it/);
 
   const rules = renderPreferenceSkills((k) => ({ PREFS_MODEL_ROUTING: 'capable' })[k])['models-and-research'];
-  assert.match(rules, /polish of a prototype whose look is already settled[^\n]*medium effort/);
+  assert.match(rules, /Opus 5\.5 at medium effort for routine work[^\n]*polish of a look that is already settled/);
   assert.match(rules, /small, clear tasks[^\n]*Sonnet 5\.5 at medium effort, and re-run it on Opus 5\.5 at medium effort after a failed check/);
-  assert.match(rules, /Fable 5\.2 at low effort[^\n]*new frontend look/);
-  assert.match(rules, /Fable 5\.2 at low effort[^\n]*code bug hunt whose cause is unknown/);
-  assert.match(rules, /Never use extra-high or max by rule/);
+  assert.match(rules, /Opus 5\.5 at high effort[^\n]*any look or front-end design work/);
+  assert.match(rules, /Opus 5\.5 at high effort[^\n]*code bug hunt whose cause is unknown/);
+  assert.match(rules, /Never use extra-high or max effort unless the user names it/);
+  assert.doesNotMatch(rules, /Give the hard work to Fable|Fable 5\.2 at low/);
+  assert.match(skill, /Change every copy of a rule at once/);
+  assert.match(skill, /Confirmed facts get no placeholders/);
 
   const wait = skill.slice(skill.indexOf('2. **Never leave the next step empty'), skill.indexOf('3. **End every reply'));
   assert.match(wait, /stands by quietly for that answer: it does not prepare the next stage/);

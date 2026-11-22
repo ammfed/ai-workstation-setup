@@ -278,23 +278,37 @@ test('planning effort is checked, and the agent decides process questions from t
   assert.doesNotMatch(await render({ PREFS_AUTONOMY: 'ask' }), /read the primary source/);
 });
 
-test('the capable model rules: Opus 5.5 medium for most work, Fable 5.2 low for hard work, a research orchestrator with Haiku fetchers, small tasks on Sonnet 5.5 medium', async () => {
+test('the capable model rules: effort picked per task, Opus 5.5 high for design, plans and judging, medium for routine work, Fable only when named', async () => {
   const models = sectionOf((await renderHomes())['models-and-research'], 'Models and effort');
-  assert.match(models, /Use Opus 5\.5 at medium effort by default, for building and for everything else\./);
-  assert.match(models, /Give the hard work to Fable 5\.2 at low effort: the design of a new frontend look that is not yet settled \(screens, look, layout, clickable journeys\), a code bug hunt whose cause is unknown, a security audit, a plan that is hard to undo, and research that runs many steps/);
-  assert.match(models, /Give polish of a prototype whose look is already settled \(spacing, copy, states, small layout fixes, fixes from a usability check\), scouts, ordinary audits, plans, specs, slides and documents to Opus 5\.5 at medium effort\./);
-  assert.match(models, /Re-run weak work one step up: weak Opus 5\.5 work on Fable 5\.2 at low, weak Fable 5\.2 work at medium, then once more at high\. Never use extra-high or max by rule, only when the user names it\./);
+  assert.match(models, /Pick the model and effort for each task when it starts, from the rows below\. Never pin one model and effort for all work\./);
+  assert.match(models, /Use Opus 5\.5 at high effort for slides and decks, games, any look or front-end design work \(screens, look, layout, clickable journeys, whether or not the look is settled\), plans, specs, architecture, judging the quality of other work, a security audit, and a code bug hunt whose cause is unknown\./);
+  assert.match(models, /Use Opus 5\.5 at medium effort for routine work: supervision, building or fixing to a settled spec, scouts, ordinary audits, documents, pages, and polish of a look that is already settled \(spacing, copy, states, small layout fixes, fixes from a usability check\)\. Pull request reviews \(no-mistakes\) also run on Opus 5\.5 at medium\./);
+  assert.match(models, /Re-run weak work one step up: weak Sonnet 5\.5 work on Opus 5\.5 at medium, weak Opus 5\.5 medium work once at high\./);
+  assert.match(models, /Run Fable only when the user names it for a task\. Never use extra-high or max effort unless the user names it\./);
   assert.doesNotMatch(models, /usage credits|runs low/);
   assert.match(models, /to Sonnet 5\.5 at medium effort, and re-run it on Opus 5\.5 at medium effort after a failed check\./);
-  assert.match(models, /Run research that runs many steps as one orchestrator on Fable 5\.2 at low effort that plans, splits and checks the work\. It sends direct fetch-and-report tasks to Haiku 5\.5 subagents at medium effort \(for example the reader subagent\), which run in parallel and report back to it, bulk sweeps to the bulk research CLI, and drafting to Sonnet 5\.5 at medium\. A weak fetcher re-runs once on Sonnet 5\.5 at medium\. Many cheap fetchers give wider coverage at low cost/);
+  assert.match(models, /Run research that runs many steps as one orchestrator on Opus 5\.5 that plans, splits and judges the work at high effort\. It sends direct fetch-and-report tasks to Haiku 5\.5 subagents at medium effort \(for example the reader subagent\), which run in parallel and report back to it, bulk sweeps to the bulk research CLI, and drafting to Sonnet 5\.5 at medium\. A weak fetcher re-runs once on Sonnet 5\.5 at medium\. Many cheap fetchers give wider coverage at low cost/);
   assert.match(models, /Give reading, lookup and summary sub-tasks to Haiku 5\.5 at medium effort \(for example the reader subagent\), low for a one-fact lookup\./);
   assert.doesNotMatch(models, /Run research on the most capable model at high effort/);
+  // Fable never gets work by rule: the only line that names it says it runs only when the user names it.
+  for (const line of models.split('\n').filter((l) => /Fable/.test(l))) assert.match(line, /^- Run Fable only when the user names it for a task\./);
+  assert.doesNotMatch(models, /hard work to Fable|Fable 5\.2 at low|on Fable/);
+  // Plans, specs, slides and documents no longer share one medium row.
+  assert.doesNotMatch(models, /plans, specs, slides and documents to Opus 5\.5 at medium/);
   // No rule starts any work at extra-high or max.
   for (const line of models.split('\n').filter((l) => /extra-high|\bmax\b/.test(l))) assert.match(line, /Never use extra-high or max/);
   assert.match(models, /Before planning, investigation or design work starts/);
   const other = await render({ PREFS_MODEL_ROUTING: 'balanced' });
-  assert.doesNotMatch(other, /Fable 5\.2/);
+  assert.doesNotMatch(other, /Fable/);
   assert.doesNotMatch(other, /Run research on the most capable model/);
+  assert.match(other, /Pick the model and effort for each task when it starts/);
+  assert.doesNotMatch(await render({ PREFS_MODEL_ROUTING: 'none' }), /Pick the model and effort for each task/);
+});
+
+test('a rule change reaches every copy, and a confirmed fact is never a placeholder', async () => {
+  const homes = await renderHomes();
+  assert.match(homes['models-and-research'], /When a rule changes, change every copy of it in the same pass: each preference file, any dispatch or routing config, the installed skill and the template copy\. A copy left behind keeps giving the old rule\./);
+  assert.match(homes['writing-for-others'], /When a fact is confirmed, write the fact itself, never a placeholder for it\./);
 });
 
 test('a fleet checks live state, keeps work moving, and names windows by their labels; a deadline never skips a check', async () => {

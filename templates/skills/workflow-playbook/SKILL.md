@@ -383,12 +383,18 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
    - Quote the owner's words as spoken.
 
    Why: a misheard name that reaches a page or a rule spreads to every later stage.
+4. **Confirmed facts get no placeholders.**
+   - When a fact is confirmed (a name, a date, a figure, a link), write the fact itself into the page, deck or document.
+   - Keep a placeholder only for a fact that is still open, and list it as open.
+
+   Why: a placeholder for a known fact looks unfinished to the owner and can ship by mistake.
 
 ## 7. Models and briefs
 
 1. **Match the model to the job.**
    - Follow the models-and-research skill for the model and effort of each job.
-   - Without it: the default strong model at medium effort for most work, the strongest model at low effort for a code bug hunt whose cause is unknown and for a new look, and a faster model for small, clear tasks and bulk reading.
+   - Pick the model and effort for each job when it starts. Never pin one model and effort for all work.
+   - Without it: the default strong model at high effort for slides, games, any look or front-end design work, plans, specs, architecture, judging the quality of other work and a code bug hunt whose cause is unknown; the same model at medium effort for routine work (building or fixing to a settled spec, scouts, ordinary audits, documents, pages, polish of a settled look and pull request reviews); and a faster model for small, clear tasks and bulk reading.
    - Give each helper one task, and check its work yourself.
    - Use a model above these only when the owner names it for a task. Never set extra-high or max effort by rule.
    - A coordinator running at a lower effort than these rules pick never writes the plan itself. It hands planning to a worker at the right effort and checks the effort that actually started.
@@ -454,6 +460,11 @@ This section is phase 10. It keeps the way of working, and this playbook, curren
    - Save the session's lessons and the owner's rulings (rule 8.1) with the stow skill when it is installed, then compact.
 
    Why: compacting in the middle of a step loses the half-done work, and compacting before a save loses what the owner taught.
+4. **Change every copy of a rule at once.**
+   - When a rule changes, change every copy of it in the same pass: each preference file, any dispatch or routing config, the installed skill and the template repository copy.
+   - Search for the old wording afterwards, and confirm that no copy still carries it.
+
+   Why: a copy left behind keeps giving the old rule, and the agents that read it go on working the old way.
 
 ## 10. From a weak prototype to an aligned rules list
 

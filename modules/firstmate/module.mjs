@@ -43,20 +43,19 @@ const BACKENDS = {
 export function dispatchProfiles(kind, harness) {
   const profile = (model, effort) => ({ harness, ...(harness === 'claude' ? { model } : {}), effort });
   if (kind === 'capable') {
-    // A starting example after docs/model-map.md; change it to suit your own work. Fable 5.2 at
-    // low takes the hard work that used Opus 5.5 at high: on the vendor's published runs it
-    // matches Opus 5.5 at its highest effort on hard reasoning for under a tenth of the cost per task.
+    // A starting example after docs/model-map.md; change it to suit your own work. Each task
+    // gets its model and effort when it starts. Fable is left out: it runs only when you name it.
     return {
       rules: [
         {
-          when: "Hard work: a prototype's user-facing frontend whose look is not yet settled (new screens, a new visual look, layout, characters, or new clickable user journeys), a code bug hunt whose cause is not yet known, a security audit, a plan that is hard to undo, or research that runs many steps to a decision or a finished write-up.",
-          use: [profile('claude-fable-5-2', 'low')],
-          why: 'Fable 5.2 at low matches Opus 5.5 at its highest effort on hard reasoning in the vendor runs, for under a tenth of its cost per task. Re-run a weak result once at medium, then once at high. Fix or build on Opus 5.5 at medium once the cause is proven or the plan is settled. Research runs as one Fable 5.2 low orchestrator that plans, splits and checks the work: Haiku 5.5 subagents at medium effort run direct fetch-and-report tasks in parallel and report back, agy with gemini-3.8-flash-medium (claude-sonnet-4-6 on a Gemini quota error) runs bulk sweeps, Sonnet 5.5 at medium drafts, and a weak fetcher re-runs once on Sonnet 5.5 at medium. Many cheap fetchers give wider coverage at low cost.',
+          when: 'Design and judgment work: slides or a deck, a game, any look or front-end design work (screens, a visual look, layout, characters, clickable user journeys, whether or not the look is settled), a plan, a spec, an architecture decision, judging the quality of other work, a security audit, a code bug hunt whose cause is not yet known, or research that runs many steps to a decision or a finished write-up.',
+          use: [profile('claude-opus-5-5', 'high')],
+          why: 'At medium effort this work comes out weaker and drops earlier instructions. Fix or build on Opus 5.5 at medium once the cause is proven or the plan is settled. Research runs as one Opus 5.5 orchestrator that plans, splits and judges the work at high effort: Haiku 5.5 subagents at medium effort run direct fetch-and-report tasks in parallel and report back, agy with gemini-3.8-flash-medium (claude-sonnet-4-6 on a Gemini quota error) runs bulk sweeps, Sonnet 5.5 at medium drafts, and a weak fetcher re-runs once on Sonnet 5.5 at medium. Many cheap fetchers give wider coverage at low cost.',
         },
         {
-          when: 'The task is a scout report, an ordinary audit, a plan, a spec, an architecture decision, polish of a settled frontend look (spacing, copy, states, small layout fixes, usability fixes), or slides and documents.',
+          when: 'Routine work: supervision, building or fixing to a settled spec, a scout report, an ordinary audit, documents, pages, or polish of a settled frontend look (spacing, copy, states, small layout fixes, usability fixes).',
           use: [profile('claude-opus-5-5', 'medium')],
-          why: 'Opus 5.5 starts at medium effort. A weak result re-runs once on Fable 5.2 at low.',
+          why: 'Opus 5.5 at medium effort handles routine work. A weak result re-runs once at high effort.',
         },
         {
           when: 'A small, well-defined task with a clear outcome and little ambiguity: a bug fix with a clear repro, a docs or copy edit, a version bump, a config tweak, or another narrow mechanical change.',
@@ -226,7 +225,7 @@ export default {
       message: 'Crew dispatch profiles (config/crew-dispatch.json)',
       default: 'capable',
       choices: [
-        { value: 'capable', label: 'capable - Opus at medium effort for most work, Fable at low for a new frontend look, a bug hunt with an unknown cause, security audits, hard-to-undo plans and long research, small clear tasks on Sonnet at medium (docs/model-map.md)' },
+        { value: 'capable', label: 'capable - effort picked per task: Opus at high effort for slides, games, look and front-end design, plans, specs, architecture, judging and unknown-cause bug hunts, Opus at medium for routine work, small clear tasks on Sonnet at medium, Fable only when you name it (docs/model-map.md)' },
         { value: 'starter', label: 'starter - strong model for builds, more effort for planning, light default' },
         { value: 'none', label: 'none - every worker uses the crew harness' },
       ],

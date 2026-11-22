@@ -319,6 +319,7 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
     get('PREFS_OUTWARD_AS_USER') &&
       'Anything that goes to other people (documents, emails, pull request text, published pages) is written as the user, in their professional voice.',
     get('PREFS_OUTWARD_AS_USER') && 'Leave out agent and tooling labels, internal ids, source-type tags and speaker notes.',
+    habits && 'When a fact is confirmed, write the fact itself, never a placeholder for it.',
     get('PREFS_NATURAL_TRANSLATION') &&
       'When writing in another language, write it the way a native speaker in that field would, with the terms they actually use. Never translate literally from English.',
     get('PREFS_WRITING_PRINCIPLES') && 'Lead with the real point.',
@@ -523,16 +524,19 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
 
   // models-and-research
   add('models-and-research', 'Models and effort', [
-    routing === 'capable' && 'Use Opus 5.5 at medium effort by default, for building and for everything else.',
+    routing !== 'none' &&
+      'Pick the model and effort for each task when it starts, from the rows below. Never pin one model and effort for all work.',
     routing === 'capable' &&
-      'Give the hard work to Fable 5.2 at low effort: the design of a new frontend look that is not yet settled (screens, look, layout, clickable journeys), a code bug hunt whose cause is unknown, a security audit, a plan that is hard to undo, and research that runs many steps to a decision or a finished write-up. On the vendor\'s published runs, Fable 5.2 at low already matches Opus 5.5 at its highest effort on hard reasoning, for under a tenth of its cost per task.',
+      'Use Opus 5.5 at high effort for slides and decks, games, any look or front-end design work (screens, look, layout, clickable journeys, whether or not the look is settled), plans, specs, architecture, judging the quality of other work, a security audit, and a code bug hunt whose cause is unknown. At medium effort this work comes out weaker and drops earlier instructions.',
     routing === 'capable' &&
-      'Give polish of a prototype whose look is already settled (spacing, copy, states, small layout fixes, fixes from a usability check), scouts, ordinary audits, plans, specs, slides and documents to Opus 5.5 at medium effort.',
+      'Use Opus 5.5 at medium effort for routine work: supervision, building or fixing to a settled spec, scouts, ordinary audits, documents, pages, and polish of a look that is already settled (spacing, copy, states, small layout fixes, fixes from a usability check). Pull request reviews (no-mistakes) also run on Opus 5.5 at medium.',
     routing === 'capable' &&
-      'Re-run weak work one step up: weak Opus 5.5 work on Fable 5.2 at low, weak Fable 5.2 work at medium, then once more at high. Never use extra-high or max by rule, only when the user names it. Fix or build on Opus 5.5 at medium once the cause is proven or the plan is settled.',
+      'Re-run weak work one step up: weak Sonnet 5.5 work on Opus 5.5 at medium, weak Opus 5.5 medium work once at high. Fix or build on Opus 5.5 at medium once the cause is proven or the plan is settled.',
+    routing === 'capable' &&
+      'Run Fable only when the user names it for a task. Never use extra-high or max effort unless the user names it.',
     routing === 'capable' && 'Give small, clear tasks (a bug with a clear repro, a docs or copy edit, a version bump, a config tweak) to Sonnet 5.5 at medium effort, and re-run it on Opus 5.5 at medium effort after a failed check.',
     routing === 'capable' &&
-      'Run research that runs many steps as one orchestrator on Fable 5.2 at low effort that plans, splits and checks the work. It sends direct fetch-and-report tasks to Haiku 5.5 subagents at medium effort (for example the reader subagent), which run in parallel and report back to it, bulk sweeps to the bulk research CLI, and drafting to Sonnet 5.5 at medium. A weak fetcher re-runs once on Sonnet 5.5 at medium. Many cheap fetchers give wider coverage at low cost, and the orchestrator keeps the judgment.',
+      'Run research that runs many steps as one orchestrator on Opus 5.5 that plans, splits and judges the work at high effort. It sends direct fetch-and-report tasks to Haiku 5.5 subagents at medium effort (for example the reader subagent), which run in parallel and report back to it, bulk sweeps to the bulk research CLI, and drafting to Sonnet 5.5 at medium. A weak fetcher re-runs once on Sonnet 5.5 at medium. Many cheap fetchers give wider coverage at low cost, and the orchestrator keeps the judgment.',
     routing === 'capable' && 'Give reading, lookup and summary sub-tasks to Haiku 5.5 at medium effort (for example the reader subagent), low for a one-fact lookup.',
     routing === 'capable' && 'Before planning, investigation or design work starts, check the effort level the agent doing it actually runs at.',
     routing === 'capable' && 'An agent on a lower effort than these rules pick hands that work to a worker at that effort and only reviews and relays the result.',
@@ -543,6 +547,8 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
     routing !== 'none' && 'Use a stronger model or a higher effort than these rules pick only when the user names it for a task.',
     get('PREFS_QUOTA') && 'Treat subscription limits as scarce. Check them with `quota-axi` before heavy or parallel work, and take the cheapest path that still answers.',
     get('PREFS_QUOTA') && 'Pause heavy work near a limit and say so.',
+    habits &&
+      'When a rule changes, change every copy of it in the same pass: each preference file, any dispatch or routing config, the installed skill and the template copy. A copy left behind keeps giving the old rule.',
     delegateRule(get),
   ]);
   add('models-and-research', 'Briefing helpers', [
