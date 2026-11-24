@@ -194,8 +194,6 @@ export const PREFERENCE_SKILLS = {
   },
 };
 
-// Every rule, placed in its home: 'core' or one of PREFERENCE_SKILLS. Each home keeps its
-// sections in the order they are added; empty sections and empty homes are left out.
 // The made-up example rows of the status progress chart: the same 10-cell scale for every
 // project, the counted figure, and the current step or state in words.
 const STATUS_CHART = [
@@ -204,6 +202,8 @@ const STATUS_CHART = [
   'Onboarding    ░░░░░░░░░░  on hold',
 ];
 
+// Every rule, placed in its home: 'core' or one of PREFERENCE_SKILLS. Each home keeps its
+// sections in the order they are added; empty sections and empty homes are left out.
 function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPath } = {}) {
   const homes = {};
   const add = (home, title, lines) => {
