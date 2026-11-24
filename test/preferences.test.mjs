@@ -18,7 +18,7 @@ import { Context, detectPlatform } from '../lib/context.mjs';
 import firstmate from '../modules/firstmate/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
 import { parsePrivateRules } from '../modules/preferences/private-rules.mjs';
-import { BRIEF_BLOCK_END, BRIEF_BLOCK_START, OWNERSHIP_SENTENCE, PREFERENCE_SKILLS, mergeBriefBlock, renderBriefInclude, renderCaptain, renderCaptainShared, renderPreferenceSkills, renderPreferences } from '../modules/preferences/render.mjs';
+import { BRIEF_BLOCK_END, BRIEF_BLOCK_START, OWNERSHIP_SENTENCE, PREFERENCE_SKILLS, briefCopies, mergeBriefBlock, renderBriefInclude, renderCaptain, renderCaptainShared, renderPreferenceSkills, renderPreferences } from '../modules/preferences/render.mjs';
 import { ALL_ON, RULE_HOMES } from './rule-homes.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -228,7 +228,11 @@ test('the route and its build rules are off by default and each writes its own B
   assert.match(building, /a small clear change goes Plan, Build, Ship/);
   assert.match(building, /Build product code test-first at the seams the spec names/);
   assert.match(building, /Prototypes, docs and config are not test-first\./);
-  assert.match(building, /read GLOSSARY\.md and docs\/adr\/ if they exist/);
+  assert.doesNotMatch(building, /GLOSSARY/);
+  const start = sectionOf(homes.core, 'Before you start');
+  assert.match(start, /Every project and every onboarding has a `GLOSSARY\.md` from its first day, before any build/);
+  assert.match(start, /"How the parties relate" section \(who answers to, pays, signs for or receives from whom\), an "Open questions" section/);
+  assert.match(start, /decision record \(ADR\) in `docs\/adr\/` beside the glossary, using the domain-modeling skill's ADR-FORMAT\.md/);
   assert.match(sectionOf(homes['review-pages'], 'Building the page'), /at laptop width and at phone width \(390 px\)/);
   assert.doesNotMatch(await render({ PREFS_TEST_FIRST: 'yes' }), /six steps|GLOSSARY|phone width/);
 });
@@ -888,9 +892,25 @@ test('a home file without markers that holds a copy of the generated sections ge
   assert.ok(merged.startsWith('## Our own rule\n\n- Keep this.\n'), merged);
   assert.equal(merged, `## Our own rule\n\n- Keep this.\n\n${BRIEF_BLOCK_START}\n\n${brief.trimEnd()}\n\n${BRIEF_BLOCK_END}\n`);
   assert.equal(mergeBriefBlock(merged, brief), merged);
-  // A heading of the home's own that only starts like a generated one stays.
-  const own = '## Helper models (our quota rule)\n\n- Ours.\n';
-  assert.ok(mergeBriefBlock(own, brief).startsWith(own), mergeBriefBlock(own, brief));
+  // A heading that only shares the first words with a generated one is a topic of its own and stays.
+  const other = '## Helper models for drafting\n\n- Ours.\n';
+  assert.ok(mergeBriefBlock(other, brief).startsWith(other), mergeBriefBlock(other, brief));
+  assert.deepEqual(briefCopies(other, brief), []);
+});
+
+test('a hand-written section on a generated topic goes, so a worker brief carries one helper rule, not two that disagree', () => {
+  const brief = '## Helper models\n\n- Hand bulk reads to `agy --model gemini-3.8-flash-medium`.\n';
+  const own = '## House style\n\n- Keep this.\n\n## Helper models (our quota rule, 2026-10-11)\n\n1. Use `agy --model gemini-3.8-flash-medium`.\n2. Use the reader.\n\n';
+  const stale = '## Helper models\n\n- Hand bulk reads to `agy --model gemini-3.8-flash-high`.\n';
+  // A home with its own variant above the block, and a stale unmarked copy of the main home's file below it.
+  const current = `${own}${BRIEF_BLOCK_START}\n\n${stale}\n${BRIEF_BLOCK_END}\n\n${stale}`;
+  assert.deepEqual(briefCopies(current, brief), ['## Helper models (our quota rule, 2026-10-11)', '## Helper models']);
+  const merged = mergeBriefBlock(current, brief);
+  assert.equal(merged.match(/^## Helper models/gm).length, 1, merged);
+  assert.doesNotMatch(merged, /flash-high|our quota rule|Use the reader/);
+  assert.equal(merged, `## House style\n\n- Keep this.\n\n${BRIEF_BLOCK_START}\n\n${brief.trimEnd()}\n\n${BRIEF_BLOCK_END}\n`);
+  assert.equal(mergeBriefBlock(merged, brief), merged);
+  assert.deepEqual(briefCopies(merged, brief), []);
 });
 
 test('every local second-mate home in the registry gets the worker lines as a block around its own lines', { skip: process.platform === 'win32' }, async () => {

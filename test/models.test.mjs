@@ -298,6 +298,20 @@ test('agy research runs on gemini-3.8-flash-medium by default', async () => {
   assert.match(models((key) => other.get(key)), /to `other-cli`/);
 });
 
+test('a saved gemini-3.8-flash-high, the old default, follows the models rule to medium; a model of your own stays', async () => {
+  const ask = async (saved) => {
+    const ctx = context(os.tmpdir(), { answers: { PREFS_DELEGATE_RETRIEVAL: 'agy', PREFS_DELEGATE_MODEL: saved }, dryRun: true });
+    for (const q of preferences.questions) {
+      if (q.when && !q.when(ctx)) continue;
+      await ctx.ask(q);
+    }
+    return ctx.get('PREFS_DELEGATE_MODEL');
+  };
+  assert.equal(await ask('gemini-3.8-flash-high'), 'gemini-3.8-flash-medium');
+  assert.equal(await ask('gemini-3.8-flash-medium'), 'gemini-3.8-flash-medium');
+  assert.equal(await ask('my-own-model'), 'my-own-model');
+});
+
 test('second mates run on Opus 5.5 at medium with the capable profiles on Claude, else the harness default', async () => {
   assert.equal(secondmateDefault('capable', 'claude'), 'claude claude-opus-5-5 medium');
   assert.equal(secondmateDefault('capable', 'codex'), 'default');

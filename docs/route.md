@@ -109,9 +109,10 @@ The `preferences` module offers these as optional rules (see
 - `PREFS_ROUTE`: follow this route for software projects, each step with its skill.
 - `PREFS_TEST_FIRST`: build product code test-first at the seams the spec names.
   Prototypes, docs and config are not test-first.
-- `PREFS_GLOSSARY_ADR`: read `GLOSSARY.md` and `docs/adr/` before building, and add new
-  terms and decision records with the change that introduces them. Start the files only
-  when a term or a hard-to-reverse decision comes up.
+- `PREFS_GLOSSARY_ADR`: every project and every onboarding has a `GLOSSARY.md` from its
+  first day, with how the parties relate, open questions and the source of each fact. A
+  decision that is hard to reverse, surprising and a real trade-off goes in `docs/adr/`
+  beside it.
 - `PREFS_PROTOTYPE_CHECK`: before you see a prototype, the agent opens it at your target
   screen size first, then at laptop width, and at phone width (390 px) when `PREFS_PAGE_PHONE`
   is yes. It checks that font sizes and column positions stay the same on every tab, and fixes

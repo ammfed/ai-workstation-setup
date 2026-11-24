@@ -45,13 +45,16 @@ into the clone and leaves every other setting alone.
 | `FIRSTMATE_WATCH_UPDATES` | `config/watched-tools.json` | Firstmate announces new releases of itself, quota-axi and lavish-axi. |
 | `FIRSTMATE_STOW_REMINDER` | `.claude/settings.local.json` in the clone and in each second-mate home | On by default. Once the session's context passes `FIRSTMATE_STOW_REMINDER_TOKENS`, its next prompt carries one reminder to run `/stow` (save its state) before anything else; it fires again only after the context drops back below 90% of that. The default `auto` reminds at seven eighths of that home's auto-compact window (175000 for a 200000 window, 350000 for 400000), so a home that compacts earlier is reminded earlier. Workers start in their own worktrees and get the claude-code module's general reminder instead. It reuses that module's context-reminder hook script. |
 | `FIRSTMATE_SESSION_NAMES` | `~/.claude/settings.json` and `~/.claude/hooks/firstmate-session-name.mjs` | On by default. Firstmate starts every worker and second mate with the same line, so Claude Code would title each session "Firstmate operational input" in the terminal title, the herdr panel and remote sessions. This hook names a session after its task instead, from the status file the launch brief names (`ai-workstation-mate` becomes "AI workstation mate"). It acts only on that first launch line, and never renames a session that already has a name (`--name`, `/rename`). `no` removes the hook. |
+| `FIRSTMATE_WEEKLY_ITEM` | `data/backlog.md` in the main home and in each second-mate home | On by default. Adds one standing item, `weekly-improvement`, through tasks-axi: once a week, look back at the work, pick the one or two changes to the setup that would have helped most, and add each as its own item for you to approve. It is a backlog item, not a timer: tasks-axi holds it until next Monday, and after each pass Firstmate holds it again for the week after instead of closing it. A backlog that already has the item, open or closed, is left alone, so a re-run adds no second one. Needs tasks-axi on PATH. |
 
 The preferences module adds two more with the `firstmate` target. `config/brief-include.md`,
 which Firstmate appends to every worker brief (its docs/configuration.md, "Home brief
 include"), carries the standing worker rules that apply ([what it holds](working-preferences.md)).
 The same rules go into each local second-mate home's `config/brief-include.md` as a marked
-block, keeping that home's own lines. In a home file that has no block yet, a section with the
-same heading as a generated one (as in a copy of the main home's file) gives way to the block.
+block, keeping that home's own lines. The block is the one copy of each generated section: a
+section of the home's own on the same topic (the same heading, alone or with a note in brackets,
+such as a copy of the main home's file or a hand-written "Helper models (ours)") gives way to it,
+so a worker never reads two helper rules that disagree.
 `data/captain-shared.md` gets that file's Everywhere and Second mates lines,
 only when there are any ([Your private rules](working-preferences.md#your-private-rules)).
 

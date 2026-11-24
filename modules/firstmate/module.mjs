@@ -115,6 +115,47 @@ function watchedTools(dir, clis) {
   };
 }
 
+// One standing backlog item per home for a weekly look back at the work. No timer, schedule or
+// service runs it: tasks-axi holds it until next Monday (a "future" hold, which only gates
+// dispatch), and after each pass Firstmate holds it again for the week after instead of closing it.
+export const WEEKLY_ITEM = {
+  id: 'weekly-improvement',
+  title: 'Weekly improvement pass: look back at the week and pick what to change in the setup (recurring, weekly)',
+  body:
+    'Standing item. Never close it. Once a week, look back at the work of the past week: finished and stalled tasks, reports, retros and repeated questions. ' +
+    'Pick the one or two changes to the setup (rules, skills, checks, briefs) that would have helped most, and add each as its own backlog item for the user to approve. ' +
+    'Then hold this item again until next Monday with a future hold. No timer runs it; the hold date brings it back.',
+  reason: 'weekly improvement pass, held until the next week starts',
+};
+
+/** True when a backlog already has the weekly item, open or closed, so a re-run adds nothing. */
+export function hasWeeklyItem(backlog) {
+  return new RegExp(`^- \\[[ xX]\\] ${WEEKLY_ITEM.id} `, 'm').test(String(backlog || ''));
+}
+
+/** The next Monday after `date` (UTC), as YYYY-MM-DD: the first day the item comes up. */
+export function nextMonday(date) {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  d.setUTCDate(d.getUTCDate() + (((8 - d.getUTCDay()) % 7) || 7));
+  return d.toISOString().slice(0, 10);
+}
+
+// The item goes in through tasks-axi, the tool that owns the backlog format (it also makes a
+// missing data/backlog.md). A closed or removed-by-hand item is the person's call: one that
+// is closed stays closed, and FIRSTMATE_WEEKLY_ITEM=no stops the installer adding it again.
+function addWeeklyItem(ctx, home, today = new Date()) {
+  const file = path.join(home, 'data', 'backlog.md');
+  if (hasWeeklyItem(fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '')) {
+    ctx.ok(`${file} already has the ${WEEKLY_ITEM.id} item`);
+    return false;
+  }
+  if (!ctx.dryRun && !ctx.has('tasks-axi')) throw new Skip('tasks-axi is not on PATH (the agent-clis module installs it); re-run after installing it');
+  const q = (s) => `'${s.replace(/'/g, "'\\''")}'`;
+  ctx.run(`tasks-axi add ${WEEKLY_ITEM.id} ${q(WEEKLY_ITEM.title)} --kind task --queue --body ${q(WEEKLY_ITEM.body)} --file ${q(file)}`);
+  ctx.run(`tasks-axi hold ${WEEKLY_ITEM.id} --reason ${q(WEEKLY_ITEM.reason)} --kind future --until ${nextMonday(today)} --file ${q(file)}`);
+  return true;
+}
+
 const STOW_TEXT = 'Context is large. Run /stow now, before anything else, then continue.';
 
 export function stowTokens(text) {
@@ -287,6 +328,12 @@ export default {
       message: 'Watch for updates to firstmate, quota-axi and lavish-axi (config/watched-tools.json)?',
       default: true,
     },
+    {
+      key: 'FIRSTMATE_WEEKLY_ITEM',
+      type: 'confirm',
+      message: 'Keep one standing weekly improvement item in each home backlog (a backlog item held until each Monday, no timer)?',
+      default: true,
+    },
   ],
 
   async install(ctx) {
@@ -417,6 +464,10 @@ export default {
       });
     } else {
       await ctx.step('session names', () => removeHook(ctx, 'UserPromptSubmit', 'firstmate-session-name.mjs'));
+    }
+    if (ctx.get('FIRSTMATE_WEEKLY_ITEM')) {
+      await ctx.step('weekly improvement item', () => addWeeklyItem(ctx, opsHome));
+      for (const mate of mates) await mateStep('weekly improvement item', mate, () => addWeeklyItem(ctx, mate));
     }
     ctx.todo(`start firstmate: cd "${dir}" && claude   (or your harness; its AGENTS.md takes over)`);
     ctx.info('second mates (one persistent home per domain): see docs/firstmate.md');

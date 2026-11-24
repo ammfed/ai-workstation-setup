@@ -4,7 +4,7 @@ import { Skip } from '../../lib/context.mjs';
 import { claudeDir } from '../../lib/claude.mjs';
 import { PRIVATE_HEADINGS, PRIVATE_RULES_DEFAULT, parsePrivateRules } from './private-rules.mjs';
 import { localSecondmateHomes } from '../firstmate/module.mjs';
-import { mergeBriefBlock, renderBriefInclude, renderCaptain, renderCaptainShared, renderPreferenceSkills, renderPreferences } from './render.mjs';
+import { briefCopies, mergeBriefBlock, renderBriefInclude, renderCaptain, renderCaptainShared, renderPreferenceSkills, renderPreferences } from './render.mjs';
 
 // Writes how you want your agents to work (status format, tone, decisions, review
 // pages, building, ideas, away mode, merges, research, quota) as a short rules file every session
@@ -104,6 +104,9 @@ const TARGETS = {
     unsupported: { windows: 'firstmate runs in WSL; .\\install.ps1 --modules wsl sets it up there with this target' },
   },
 };
+
+// Defaults PREFS_DELEGATE_MODEL shipped before; a saved one is moved to the current default.
+const FORMER_DELEGATE_MODELS = ['gemini-3.8-flash-high'];
 
 export default {
   name: 'preferences',
@@ -254,7 +257,7 @@ export default {
     yes('PREFS_ROUTE', 'Building: take software projects through six steps (plan, decide, prototype, breakdown, build, ship), each with its skill (docs/route.md)?', { default: false }),
     yes('PREFS_KUN', 'Building: at the start of real work, run /kun once and follow its route for that kind of work (skipped for small clear tasks)?'),
     yes('PREFS_TEST_FIRST', 'Building: build product code test-first at the seams the spec names (not prototypes, docs or config)?', { default: false }),
-    yes('PREFS_GLOSSARY_ADR', 'Building: read GLOSSARY.md and docs/adr before building, and add new terms and decision records with the change?', { default: false }),
+    yes('PREFS_GLOSSARY_ADR', 'Building: give every project a GLOSSARY.md from its first day, and record hard-to-reverse decisions in docs/adr?', { default: false }),
     yes('PREFS_PROTOTYPE_CHECK', 'Building: check every prototype at your target screen size, then at laptop width (and phone width when review pages are checked on a phone), keep font sizes and column positions the same on every tab, and fix broken layout, unclear labels and dead ends before you see it?', { default: false }),
     yes('PREFS_PRINCIPLE_CHECKS', 'Building: tell every Firstmate worker to run the principle checker (installed with workflow-playbook) before reporting done on anything with a screen, and to have a fresh reviewer check a page before it reaches you?', {
       when: (ctx) => ctx.get('PREFS_TARGETS').includes('firstmate'),
@@ -294,6 +297,14 @@ export default {
       message: 'Models: the model that CLI uses for this work (empty: its own default)',
       default: (ctx) => (String(ctx.get('PREFS_DELEGATE_RETRIEVAL')).trim() === 'agy' ? 'gemini-3.8-flash-medium' : ''),
       when: (ctx) => Boolean(String(ctx.get('PREFS_DELEGATE_RETRIEVAL') || '').trim()),
+      // A saved answer that is only the old shipped default follows the current models rule
+      // (docs/model-map.md); a model the person typed in themselves stays.
+      refresh: (ctx, saved) => {
+        if (!FORMER_DELEGATE_MODELS.includes(saved)) return saved;
+        const now = 'gemini-3.8-flash-medium';
+        ctx.info(`PREFS_DELEGATE_MODEL: ${saved} was the old default; the models rule now uses ${now}`);
+        return now;
+      },
     },
     {
       key: 'PREFS_DELEGATE_FALLBACK_MODEL',
@@ -401,6 +412,9 @@ export default {
           if (!fs.existsSync(path.join(mate, '.fm-secondmate-home'))) throw new Skip(`${mate} is not a second-mate home (no .fm-secondmate-home)`);
           const file = path.join(mate, 'config', 'brief-include.md');
           const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+          for (const heading of briefCopies(current, brief)) {
+            ctx.info(`${file}: "${heading.slice(3)}" repeats a generated section, so the generated one replaces it (a backup is kept)`);
+          }
           return ctx.writeFile(file, mergeBriefBlock(current, brief), { onConflict: 'replace' });
         });
       }
