@@ -148,7 +148,7 @@ export const RULE_HOMES = [
   row('Short paths:', WORKERS),
   row('At the start of real work', 'core'),
   row('Build product code test-first', WORKERS),
-  row('Before building, read GLOSSARY.md', WORKERS),
+  row('Before building, read GLOSSARY.md', 'core', ['Every project and every onboarding has a `GLOSSARY.md` from its first day']),
   row('Before the user sees a prototype', PAGES),
   row('When a model is named for a task', WORKERS),
   row('In a brief for a long task, name the only stops you want', WORKERS),

@@ -22,7 +22,7 @@ import { PR_MERGE_RULES, registerContextReminder, reminderTokens } from '../modu
 import backpass from '../modules/backpass/module.mjs';
 import { cloneRootDirs, listCloneRoots } from '../templates/backpass/bin/backpass-gate.mjs';
 import { MARKITDOWN_SPEC, findOpenWhisprAppImage, installMarkitdown, lavishUnits, openGuardSeconds } from '../modules/extras/module.mjs';
-import firstmate, { isLinkedWorktree, stowTokens } from '../modules/firstmate/module.mjs';
+import firstmate, { WEEKLY_ITEM, hasWeeklyItem, isLinkedWorktree, nextMonday, stowTokens } from '../modules/firstmate/module.mjs';
 import openrouter, { MODEL_CHOICES, withEnv } from '../modules/openrouter/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
 import { renderBriefInclude } from '../modules/preferences/render.mjs';
@@ -1004,6 +1004,58 @@ test('without an operational home the firstmate run removes an older export and 
   for (const q of firstmate.questions) if (!q.when || q.when(ctx)) await ctx.ask(q);
   await capture(() => firstmate.install(ctx));
   assert.equal(fs.readFileSync(rc, 'utf8'), 'export FM_HOME=/mine\n');
+});
+
+test('the weekly improvement item comes up from the next Monday, and a backlog that has it, open or closed, is left alone', () => {
+  assert.equal(nextMonday(new Date('2026-11-24T10:00:00Z')), '2026-11-30');
+  assert.equal(nextMonday(new Date('2026-11-29T23:00:00Z')), '2026-11-30');
+  assert.equal(nextMonday(new Date('2026-11-30T08:00:00Z')), '2026-12-07');
+  assert.equal(hasWeeklyItem(''), false);
+  assert.equal(hasWeeklyItem('## Queued\n- [ ] weekly-improvement-2 - Something else (kind: task)\n'), false);
+  assert.equal(hasWeeklyItem(`## Queued\n- [ ] ${WEEKLY_ITEM.id} - x (kind: task) (hold-kind: future)\n`), true);
+  assert.equal(hasWeeklyItem(`## Done\n- [x] ${WEEKLY_ITEM.id} - x (kind: task)\n`), true);
+  // No timer: the item is a backlog row, and nothing in it schedules a run.
+  assert.doesNotMatch(JSON.stringify(WEEKLY_ITEM), /cron|systemd|launchd|schedule/i);
+});
+
+test('each home backlog gets one weekly improvement item through tasks-axi, held until next Monday, and a re-run adds none', { skip: !unix }, async () => {
+  const f = firstmateFixture();
+  const run = async (extra = {}) => {
+    const ctx = new Context({
+      platform: { ...detectPlatform(), os: 'linux', shell: 'bash', home: f.home },
+      dryRun: false,
+      interactive: false,
+      answers: new Map(Object.entries({ FIRSTMATE_DIR: f.dir, FIRSTMATE_HOME: f.ops, FIRSTMATE_DISPATCH: 'none', FIRSTMATE_STOW_REMINDER: 'no', FIRSTMATE_WATCH_UPDATES: 'no', ...extra })),
+      prompter: null,
+      repoRoot,
+    });
+    ctx.beginModule('firstmate');
+    ctx.ensureTool = async () => {};
+    const commands = [];
+    ctx.run = (cmd) => commands.push(cmd);
+    ctx.has = (bin) => bin === 'tasks-axi';
+    for (const q of firstmate.questions) if (!q.when || q.when(ctx)) await ctx.ask(q);
+    await capture(() => firstmate.install(ctx));
+    assert.deepEqual(ctx.record.failures, []);
+    return commands.filter((c) => c.startsWith('tasks-axi '));
+  };
+  const first = await run();
+  // The main home and both second-mate homes, each an add then a dated future hold on its own backlog.
+  assert.equal(first.length, 6, first.join('\n'));
+  for (const home of [f.ops, f.standalone, f.linked]) {
+    const file = `'${path.join(home, 'data', 'backlog.md')}'`;
+    const mine = first.filter((c) => c.endsWith(`--file ${file}`));
+    assert.match(mine[0], new RegExp(`^tasks-axi add ${WEEKLY_ITEM.id} '.*\\(recurring, weekly\\)' --kind task --queue --body '`));
+    assert.match(mine[1], new RegExp(`^tasks-axi hold ${WEEKLY_ITEM.id} --reason '[^()]+' --kind future --until \\d{4}-\\d{2}-\\d{2} `));
+  }
+  // A home whose backlog already has it gets nothing; FIRSTMATE_WEEKLY_ITEM=no adds none anywhere.
+  for (const home of [f.ops, f.standalone, f.linked]) {
+    fs.mkdirSync(path.join(home, 'data'), { recursive: true });
+    fs.writeFileSync(path.join(home, 'data', 'backlog.md'), `## Queued\n- [ ] ${WEEKLY_ITEM.id} - x (kind: task)\n`);
+  }
+  assert.deepEqual(await run(), []);
+  fs.rmSync(path.join(f.standalone, 'data', 'backlog.md'));
+  assert.deepEqual(await run({ FIRSTMATE_WEEKLY_ITEM: 'no' }), []);
 });
 
 // The openrouter module with invented answers; a temporary folder stands in for the Firstmate home.

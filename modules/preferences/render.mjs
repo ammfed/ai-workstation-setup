@@ -42,7 +42,12 @@ export const OWNERSHIP_SENTENCE = "This codebase is yours: what it's for and how
 const NO_GO_AHEAD =
   'retrying a call that is safe to repeat, fixing a bug your change exposes, merging repeated code in code you own, adding or fixing tests, and updating docs your change made wrong';
 const GLOSSARY_RULE =
-  'Before building, read GLOSSARY.md and docs/adr/ if they exist. Add new terms and decision records in the same change that introduces them. Start these files in any project, but only when a term or a hard-to-reverse decision comes up.';
+  'Every project and every onboarding has a `GLOSSARY.md` from its first day, before any build, even when the work is only collecting emails, meetings or notes. ' +
+  "Create it with the domain-modeling skill (its GLOSSARY-FORMAT.md), in the repo or, for a project with no repo, in the project's working folder. " +
+  'Read it before real work and use its terms, and add each new term as it appears in the material. ' +
+  'Beyond the format\'s term list, keep a "How the parties relate" section (who answers to, pays, signs for or receives from whom), an "Open questions" section for what the material leaves unclear, the source of each fact, and the material\'s own word when it is in another language. ' +
+  'When the user asks about a term or a relationship, answer from the glossary and link to the file; if the answer was missing or wrong there, write it back in the same turn, so the answer never lives only in a chat. ' +
+  "Record a decision that is hard to reverse, surprising and a real trade-off as a decision record (ADR) in `docs/adr/` beside the glossary, using the domain-modeling skill's ADR-FORMAT.md, and read the decision records in an area before changing it.";
 
 function delegateRule(get) {
   const cli = get('PREFS_DELEGATE_RETRIEVAL');
@@ -119,23 +124,52 @@ export function renderBriefInclude(get, { checkerPath, privateRules, tastePreset
 
 // A second-mate home's config/brief-include.md keeps its own lines, so the generated lines go in
 // a marked block: a re-run replaces only the block, and a file without one gets it at the end.
-// A file without one may be a copy of the main home's file (a new home can start from it), so
-// its sections with the same heading as a generated one go, and the block is their one copy.
+// The block is the one copy of each generated section. A section of the home's own on the same
+// topic goes, whether a copy of the main home's file (no markers) or a hand-written variant: its
+// heading is a generated one, alone or followed by a note in brackets ("## Helper models (ours)").
+// Two copies of one rule drift apart, and a worker then follows whichever it read last.
 export const BRIEF_BLOCK_START = '<!-- ai-workstation-setup: start of generated lines. A re-run replaces this block; keep your own lines outside it. -->';
 export const BRIEF_BLOCK_END = '<!-- ai-workstation-setup: end of generated lines -->';
+
+function blockBounds(text) {
+  const start = text.indexOf('<!-- ai-workstation-setup: start');
+  const end = text.indexOf(BRIEF_BLOCK_END);
+  if (start === -1 && end === -1) return null;
+  if (start === -1 || end < start) throw new Error('the generated-lines block has a missing or misplaced marker; fix the markers by hand');
+  return { start, end: end + BRIEF_BLOCK_END.length };
+}
+
+// Splits text outside the block into the sections it keeps and the headings of those that go.
+function withoutCopies(text, brief) {
+  const generated = brief.split('\n').filter((l) => l.startsWith('## '));
+  const copy = (heading) => generated.some((g) => heading === g || heading.startsWith(`${g} (`));
+  const parts = text.split(/^(?=## )/m);
+  const dropped = parts.map((part) => part.split('\n')[0]).filter(copy);
+  return { kept: parts.filter((part) => !copy(part.split('\n')[0])).join(''), dropped };
+}
+
+/** Headings of the home's own sections that a merge with `brief` removes as copies. */
+export function briefCopies(current, brief) {
+  const text = String(current || '');
+  const at = blockBounds(text);
+  const outside = at ? [text.slice(0, at.start), text.slice(at.end)] : [text];
+  return outside.flatMap((part) => withoutCopies(part, brief).dropped);
+}
+
 export function mergeBriefBlock(current, brief) {
   const block = `${BRIEF_BLOCK_START}\n\n${brief.trimEnd()}\n\n${BRIEF_BLOCK_END}\n`;
   const text = String(current || '');
-  const start = text.indexOf('<!-- ai-workstation-setup: start');
-  const end = text.indexOf(BRIEF_BLOCK_END);
-  if (start === -1 && end === -1) {
-    const generated = new Set(brief.split('\n').filter((l) => l.startsWith('## ')));
-    const own = text.split(/^(?=## )/m).filter((part) => !generated.has(part.split('\n')[0])).join('').trimEnd();
+  const at = blockBounds(text);
+  if (!at) {
+    const own = withoutCopies(text, brief).kept.trimEnd();
     return own ? `${own}\n\n${block}` : block;
   }
-  if (start === -1 || end < start) throw new Error('the generated-lines block has a missing or misplaced marker; fix the markers by hand');
-  const after = text.slice(end + BRIEF_BLOCK_END.length).replace(/^\n/, '');
-  return `${text.slice(0, start)}${block}${after}`;
+  const before = withoutCopies(text.slice(0, at.start), brief);
+  const after = withoutCopies(text.slice(at.end).replace(/^\n/, ''), brief);
+  // Text with nothing removed keeps its own spacing, so a re-run changes only the block.
+  const head = before.dropped.length ? (before.kept.trimEnd() ? `${before.kept.trimEnd()}\n\n` : '') : text.slice(0, at.start);
+  const tail = after.dropped.length ? (after.kept.trim() ? `\n${after.kept.trimEnd()}\n` : '') : after.kept;
+  return `${head}${block}${tail}`;
 }
 
 // Firstmate's data/captain-shared.md in the main home, which every second mate reads (read-only
@@ -312,7 +346,7 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
     'Say plainly when something was reasoned about rather than tested.',
   ]);
 
-  add('core', 'Before you start', [get('PREFS_KUN') && KUN_RULE]);
+  add('core', 'Before you start', [get('PREFS_KUN') && KUN_RULE, get('PREFS_GLOSSARY_ADR') && GLOSSARY_RULE]);
 
   // writing-for-others
   add('writing-for-others', 'Writing as the user', [
@@ -497,7 +531,6 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
     get('PREFS_ROUTE') &&
       'Short paths: a small clear change goes Plan, Build, Ship. A bug goes Plan, find the cause (diagnosing-bugs), Build with the reproduction as the regression test, Ship. Documents, review pages, research and one-off tasks do not take the route.',
     get('PREFS_TEST_FIRST') && TEST_FIRST_RULE,
-    get('PREFS_GLOSSARY_ADR') && GLOSSARY_RULE,
     get('PREFS_MODEL_GUIDE') && "When a model is named for a task, read that vendor's official prompting guide first and brief the model the way it says.",
     get('PREFS_MODEL_GUIDE') &&
       'In a brief for a long task, name the only stops you want (nothing can move without the user, or a blocker that was put there on purpose) and ask the worker to work through ordinary errors, timeouts and failing tools, so it does not stop early with a list of what remains.',
