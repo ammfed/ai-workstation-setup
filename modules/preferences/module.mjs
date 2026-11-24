@@ -173,7 +173,7 @@ export default {
       message: 'Reporting: how status replies open',
       default: 'needs-you',
       choices: [
-        { value: 'needs-you', label: 'needs-you - headline counts, then what needs you, what is at risk, a To do, Doing and Done table, and one line of links' },
+        { value: 'needs-you', label: 'needs-you - headline counts, a progress bar per project, action items (yours first), what is at risk, and one line of links' },
         { value: 'actions', label: 'actions - a very short list of action items, then where the full report is' },
         { value: 'board', label: 'board - one table with TODO, DOING and DONE as three side-by-side columns, then what is left grouped by who acts, your block labelled YOU' },
         { value: 'brief', label: 'brief - the answer in a sentence or two, then brief action items' },

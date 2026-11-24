@@ -228,6 +228,14 @@ export const PREFERENCE_SKILLS = {
   },
 };
 
+// The made-up example rows of the status progress chart: the same 10-cell scale for every
+// project, the counted figure, and the current step or state in words.
+const STATUS_CHART = [
+  'Website       ██████░░░░  6 of 10 steps · building screens',
+  'Data import   ██░░░░░░░░  2 of 9 · waiting on your answers',
+  'Onboarding    ░░░░░░░░░░  on hold',
+];
+
 // Every rule, placed in its home: 'core' or one of PREFERENCE_SKILLS. Each home keeps its
 // sections in the order they are added; empty sections and empty homes are left out.
 function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPath } = {}) {
@@ -373,14 +381,20 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
 
   // status-and-away
   add('status-and-away', 'Status replies', [
-    status === 'needs-you' && 'Open every status reply with one line of headline counts (for example "3 need you, 5 finished, 1 at risk").',
     status === 'needs-you' &&
-      'Then NEEDS YOU: only what the user alone can do, ranked by impact, one line each with a rough time cost and one link. Fold older open review pages into one line.',
-    status === 'needs-you' && 'Then AT RISK: anything stuck or slipping, with what it costs the user.',
+      'Every status, progress, catch-up or "where are we" reply uses one shape, for any project or set of projects. Keep it visual and minimal, so a reader gets the whole picture in ten seconds.',
+    status === 'needs-you' && 'Open with a headline: one line of counts (for example "3 need you, 5 finished, 1 at risk").',
     status === 'needs-you' &&
-      'Then always a table with To do, Doing and Done as three columns side by side, one row per project, short cells. Done holds only what finished since the last status.',
-    status === 'needs-you' && 'End with one Links line: the full link of each Done item.',
-    status === 'needs-you' && 'Leave out any empty part except the table, and leave out how the work was done and work that did not change.',
+      `Then a progress chart: one plain bar per project (or per stage when only one project is asked about), all on the same 10-cell scale, with the exact figure and the current step in words:\n\n  \`\`\`\n  ${STATUS_CHART.join('\n  ')}\n  \`\`\``,
+    status === 'needs-you' && 'When a project has no counted total, leave its bar empty. The chart has no dates, no clock times and no radar or gauge charts.',
+    status === 'needs-you' &&
+      'Then action items: a short plain list, never a table. The user\'s own items come first, ranked by impact. Each line gives the action, a rough time cost, one link, and its dependency written as "after X" or "unblocks Y" when there is one. Fold older open review pages into one line.',
+    status === 'needs-you' && 'Then AT RISK, only when something is stuck or slipping, with what it costs the user.',
+    status === 'needs-you' && 'End with one Links line: the full link of each item finished since the last status.',
+    status === 'needs-you' && 'Leave out any empty part, how the work was done, and work that did not change.',
+    status === 'needs-you' &&
+      'When the user asks for "ultra brief", cut every line to its shortest form, and drop AT RISK and the Links line unless they hold something.',
+    status === 'needs-you' && 'When the user asks for detail, add a table with To do, Doing and Done as columns, one row per project, short cells.',
     status === 'board' &&
       'Open every status reply with the current work as one table whose three columns sit side by side: TODO, DOING, DONE. Each column lists its own items, one short line each. Never three stacked lists or three separate rows.',
     status === 'actions' &&
@@ -390,7 +404,10 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
     status === 'board' && 'Use small text bars and boxes where they carry meaning, and nothing decorative.',
     status === 'brief' && 'Open every status reply with the answer in a sentence or two.',
     status === 'brief' && 'Then give brief action items, grouped by who acts: the user first, then the agent.',
-    status !== 'none' && 'Show progress as counts like "3 of 5". A word always carries the state, never colour alone.',
+    status !== 'none' &&
+      'Show progress as counts like "3 of 5": done items over a named total (steps, cards, files, checks), never an estimated percentage. When no total exists, write "not yet known" or the raw count. A word always carries the state (on hold, waiting on you, blocked, done), never colour or a bar alone.',
+    status !== 'none' &&
+      'When the user asks for status "on every reply" for a topic or list, end every later reply with a one-line version of its progress (its chart row when the status has a chart: bar, figure, current step), until the user says stop or puts that topic on hold. A hold stops the line.',
     get('PREFS_DAILY_CHECK') && 'Once a day, at the top of the first status, run a nothing-forgotten check.',
     get('PREFS_DAILY_CHECK') &&
       `Show anything real it finds: review-page answers not yet collected, anything waiting on the user for more than ${days} days without being brought back, and standing rules with no evidence that they ran.`,

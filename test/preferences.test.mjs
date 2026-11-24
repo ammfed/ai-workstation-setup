@@ -76,20 +76,35 @@ test('grilling asks through the question tool, one question at a time, when the 
   assert.doesNotMatch(await decisions({ PREFS_GRILL: 'off' }), line);
 });
 
-test('the default status leads with what needs the user, then what is at risk, the table and the links', async () => {
+test('the default status is a headline, a progress chart, action items, what is at risk and the links', async () => {
   assert.equal((await answer()).get('PREFS_STATUS'), 'needs-you');
   const status = sectionOf((await renderHomes())['status-and-away'], 'Status replies');
-  const parts = ['one line of headline counts', 'Then NEEDS YOU: only what the user alone can do', 'Then AT RISK:', 'Then always a table with To do, Doing and Done', 'End with one Links line'];
+  const parts = ['Open with a headline: one line of counts', 'Then a progress chart', 'Then action items', 'Then AT RISK', 'End with one Links line'];
   let at = -1;
   for (const part of parts) {
     const i = status.indexOf(part);
     assert.ok(i > at, `"${part}" missing or out of order`);
     at = i;
   }
-  assert.match(status, /Leave out any empty part except the table/);
-  assert.match(status, /Show progress as counts like "3 of 5"/);
-  assert.doesNotMatch(status, /TODO, DOING, DONE|labelled YOU/, 'the older board shape is not mixed in');
-  assert.doesNotMatch((await renderHomes({ PREFS_STATUS: 'board' }))['status-and-away'], /NEEDS YOU/);
+  // The chart rows share one 10-cell scale, give a counted figure and a word for the state.
+  const rows = status.split('\n').filter((l) => /[█░]/.test(l));
+  assert.equal(rows.length, 3);
+  for (const row of rows) assert.equal(row.match(/[█░]+/)[0].length, 10, row);
+  assert.match(rows[0], /6 of 10 steps · building screens/);
+  assert.match(rows[2], /░{10}  on hold/);
+  assert.match(status, /never an estimated percentage/);
+  assert.match(status, /"after X" or "unblocks Y"/);
+  assert.match(status, /"ultra brief"/);
+  assert.match(status, /When the user asks for detail, add a table with To do, Doing and Done/);
+  assert.match(status, /status "on every reply" for a topic or list/);
+  assert.doesNotMatch(status, /NEEDS YOU|Then always a table|TODO, DOING, DONE|labelled YOU/, 'the older shapes are not mixed in');
+  for (const other of ['board', 'actions', 'brief']) {
+    const text = sectionOf((await renderHomes({ PREFS_STATUS: other }))['status-and-away'], 'Status replies');
+    assert.doesNotMatch(text, /progress chart|ultra brief/, other);
+    assert.match(text, /never an estimated percentage/, other);
+    assert.match(text, /on every reply/, other);
+  }
+  assert.doesNotMatch(await render({ PREFS_STATUS: 'none' }), /Show progress as counts|on every reply/);
 });
 
 test('the board status is still a choice, with a YOU block and never ME', async () => {
