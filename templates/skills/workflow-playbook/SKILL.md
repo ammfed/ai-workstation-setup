@@ -134,7 +134,7 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
 6. **Some items are always on the list.** Breakdown (phase 6) adds these items whenever they apply, before any other build item:
    - **System design first.** The first build item settles the contracts, the data model and the hard-to-reverse decisions. Front end and back end work start only after it.
    - **An evaluation item for any AI part.** Test how well the AI part does its job on real examples before any pilot.
-   - **A handover item.** When real people will run or use it, an item names who runs it and how they learn it, blocked by the last build item.
+   - **A handover item.** When real people will run or use it, an item names who runs it and how they learn it, and the day the measure from the last requirements round (rule 3.2) is checked again, blocked by the last build item.
    - Finished items stay on the list, marked done, never deleted.
    - Dates belong to the owner. Agents never set or move a date; they only flag one that has passed.
    - Plans show the order of the work, never days, hours or estimates. This is about plans only. The journey showcase in rule 1.5 records hours already spent, so it stays.
@@ -214,8 +214,9 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
    - Beside the first round, a research worker checks whether it already exists: products and tools that already do it, and people in the organisation who already own or run something like it.
    - The answer goes into the next round as one card: build, reuse or stop.
    - The first requirements round always carries three fixed cards: where will it run, who must approve it (security, IT, the data owner), and which real data may be used and in what form. Each approval becomes a held item that day.
+   - The last requirements round always carries one fixed card: how will the client know it worked. The answer is one measure, its value today, and who reports it.
 
-   Why: research and building that start before the requirements are clear serve a guess, not a need, and the cheapest project is the one someone already runs. An approval found only at breakdown holds up a finished build, while one asked for at the first round waits beside the work.
+   Why: research and building that start before the requirements are clear serve a guess, not a need, and the cheapest project is the one someone already runs. An approval found only at breakdown holds up a finished build, while one asked for at the first round waits beside the work. Without a measure and its value today, nobody can show the client that the work helped.
 3. **All research counts.**
    - Fold in every study, trial and lesson, and name the source of each item.
    - List what was not used and why.
