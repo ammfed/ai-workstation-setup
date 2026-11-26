@@ -85,7 +85,9 @@ export const RULE_HOMES = [
   row('Before describing a question as still open', 'core', undefined, { PREFS_DECISIONS: 'tool' }),
   row('Before calling a review page open', PAGES, [
     'Before calling a review page open',
-    'run `timeout 15 lavish-axi poll <file>` before calling it open',
+    'review-pages.mjs` before calling any review page open',
+    'its list leaves out ended pages',
+    'Poll only the pages you made.',
     'A poll consumes the answer it returns',
     'Never reopen a page the user ended',
     'does not mean answers were lost',

@@ -261,7 +261,7 @@ const STATUS_CHART = [
 
 // Every rule, placed in its home: 'core' or one of PREFERENCE_SKILLS. Each home keeps its
 // sections in the order they are added; empty sections and empty homes are left out.
-function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPath } = {}) {
+function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, reviewCheckPath, decisionsPath } = {}) {
   const homes = {};
   const add = (home, title, lines) => {
     const kept = lines.filter(Boolean);
@@ -433,7 +433,7 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
       'When the user asks for status "on every reply" for a topic or list, end every later reply with a one-line version of its progress (its chart row when the status has a chart: bar, figure, current step), until the user says stop or puts that topic on hold. A hold stops the line.',
     get('PREFS_DAILY_CHECK') && 'Once a day, at the top of the first status, run a nothing-forgotten check.',
     get('PREFS_DAILY_CHECK') &&
-      `Show anything real it finds: review-page answers not yet collected, anything waiting on the user for more than ${days} days without being brought back, and standing rules with no evidence that they ran.`,
+      `Show anything real it finds: review-page answers not yet collected${reviewCheckPath ? ` (\`node ${reviewCheckPath} --days 14\` lists them)` : ''}, anything waiting on the user for more than ${days} days without being brought back, and standing rules with no evidence that they ran.`,
     get('PREFS_DAILY_CHECK') && 'Verify each item before calling it dropped.',
   ]);
   add('status-and-away', 'Live state and the queue', [
@@ -511,13 +511,17 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
   add('review-pages', 'Answers', [
     cards && get('PREFS_CHECK_ANSWERS_FIRST') &&
       'Before calling a review page open, answered or unanswered, check whether the user already answered it. Never assume it is unanswered.',
+    cards && get('PREFS_CHECK_ANSWERS_FIRST') && reviewCheckPath &&
+      `Run \`node ${reviewCheckPath}\` before calling any review page open, answered or unanswered, including pages that other agents made (workers, second mates). It reads Lavish's own state without collecting anything and marks each page answered (answer waiting to be collected), answered-collected or waiting. Narrow it with \`--under <folder>\` or \`--days <n>\`.`,
     cards && get('PREFS_CHECK_ANSWERS_FIRST') &&
-      '`lavish-axi` lists every session with its status, pending answers and listener. The pending answers it shows are only complete for a page with a listener. For a page whose listener is `none`, run `timeout 15 lavish-axi poll <file>` before calling it open or unanswered.',
+      "Do not trust `lavish-axi` alone for this: its list leaves out ended pages, so an answer sent with Send & End is not shown, and a page whose answer was collected looks the same as one nobody touched.",
+    cards && get('PREFS_CHECK_ANSWERS_FIRST') &&
+      'Poll only the pages you made. A poll takes the answer away from the agent that made the page, so for a page another agent made, read the check and pass the answer to that agent.',
     cards && get('PREFS_CHECK_ANSWERS_FIRST') &&
       'A poll consumes the answer it returns, so act on it or pass it on in the same turn. Answers stay queued until collected, so a long poll for a page you are waiting on can stay running.',
     cards && get('PREFS_CHECK_ANSWERS_FIRST') && 'Never reopen a page the user ended unless they ask.',
     cards && get('PREFS_CHECK_ANSWERS_FIRST') &&
-      'A page that says it ended, or a link that loads, does not mean answers were lost: read the session status and pending answers, and collect them with `lavish-axi poll <file>` first.',
+      'A page that says it ended, or a link that loads, does not mean answers were lost: read the session status and pending answers first. Collect an answer to a page you made with `lavish-axi poll <file>`.',
   ]);
   add('review-pages', 'Pages for invited colleagues', [
     cards && commentCardsPath &&

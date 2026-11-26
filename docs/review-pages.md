@@ -43,16 +43,29 @@ it lives.
    card template saves your picks and notes as you go and brings them back after a reload, and
    Send clears that saved draft. Every card but the first, and the recap, has a Back button
    that returns to the previous card with its pick and note filled in.
-5. **Check the real state before saying anything about it.** Running `lavish-axi` with no
-   arguments lists every session with its status and the number of answers waiting to be
-   collected. An agent looks there (or polls) before it ever tells you a page is still open
-   or a question is unanswered.
+5. **Check the real state before saying anything about it.** Before an agent tells you a page
+   is still open or a question is unanswered, it runs the answered-pages check that the
+   `preferences` module writes next to the card template:
+
+   ```sh
+   node ~/.config/ai-workstation-setup/review-pages.mjs            # every page that is not closed
+   node ~/.config/ai-workstation-setup/review-pages.mjs --days 14  # only pages changed lately
+   node ~/.config/ai-workstation-setup/review-pages.mjs --under ~/some/folder --json
+   ```
+
+   It reads Lavish's own state file and marks each page `answered` (your answer is waiting to
+   be collected), `answered-collected` (the agent that made the page already took it) or
+   `waiting`. It only reads, so a page that a worker or second mate made keeps its answer for
+   that agent. `lavish-axi` on its own is not enough: its list leaves out ended pages, so an
+   answer sent with Send & End does not show, and a page whose answer was collected looks the
+   same as a page nobody touched. An agent polls only the pages it made, because a poll takes
+   the answer away from the agent that made the page.
 6. **Record and link.** Each answer is recorded where your decisions live (see
    `PREFS_DECISIONS_LOG`), and the finished result is linked.
 7. **Respect an ended page.** If you end the session from the browser, the agent does not
    reopen it unless you ask for another review. A page that reads "ended" does not mean the
-   answers were lost: the agent reads the session status and pending answers, and still collects
-   them, before saying a page is open, answered or unanswered.
+   answers were lost: the agent runs the answered-pages check, and collects the answers of a
+   page it made, before saying a page is open, answered or unanswered.
 
 ## Card fields
 
