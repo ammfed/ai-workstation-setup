@@ -101,8 +101,10 @@ export function buildConfig(ctx, base) {
       lists: list(ctx.get('DAILY_SYNC_TICKTICK_LISTS')),
     };
   }
-  // Lists open review pages that nobody listens to. Read-only, silent when there are none.
-  config.reviewPages = { run: 'lavish-axi' };
+  // Lists review pages answered in the last 14 days whose answer nobody collected. Read-only,
+  // silent when there are none. It uses the preferences module's answered-pages check when that
+  // is installed, else the plain `lavish-axi` list.
+  config.reviewPages = { check: path.join(ctx.home, '.config', 'ai-workstation-setup', 'review-pages.mjs'), days: 14, run: 'lavish-axi' };
   config.versions = [];
   return config;
 }

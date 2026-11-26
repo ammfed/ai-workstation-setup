@@ -86,6 +86,12 @@ function hideKitPath(ctx) {
   return path.join(ctx.home, '.config', 'ai-workstation-setup', 'hide-kit.js');
 }
 
+// The answered-pages check, next to the card template: it reads Lavish's own state file and
+// says which review pages the user answered, without collecting any answer.
+function reviewCheckPath(ctx) {
+  return path.join(ctx.home, '.config', 'ai-workstation-setup', 'review-pages.mjs');
+}
+
 // The Firstmate home: this run's answer when the firstmate module runs too, else the saved one,
 // so `--modules preferences` alone still writes into the home Firstmate reads, not ~/firstmate.
 const firstmateHome = (ctx) =>
@@ -376,13 +382,14 @@ export default {
       await ctx.step('decision-card template', () => ctx.writeFile(cards, ctx.template('preferences/decision-cards.html'), { onConflict: 'ask' }));
       await ctx.step('hide tray script', () => ctx.writeFile(hideKitPath(ctx), ctx.template('preferences/hide-kit.js'), { onConflict: 'ask' }));
       await ctx.step('comment-card template', () => ctx.writeFile(commentCardsPath(ctx), ctx.template('preferences/comment-cards.html'), { onConflict: 'ask' }));
+      await ctx.step('answered-pages check', () => ctx.writeFile(reviewCheckPath(ctx), ctx.template('preferences/bin/review-pages.mjs'), { onConflict: 'ask' }));
     }
 
     const log = ctx.get('PREFS_DECISIONS_LOG');
     const privateRules = readPrivateRules(ctx);
     const tastePreset = readTastePreset(ctx);
     const get = (key) => ctx.get(key);
-    const opts = { cardsPath: cards, hideKitPath: cards && hideKitPath(ctx), commentCardsPath: cards && commentCardsPath(ctx), decisionsPath: log ? ctx.path(log) : null, privateRules, tastePreset };
+    const opts = { cardsPath: cards, hideKitPath: cards && hideKitPath(ctx), commentCardsPath: cards && commentCardsPath(ctx), reviewCheckPath: cards && reviewCheckPath(ctx), decisionsPath: log ? ctx.path(log) : null, privateRules, tastePreset };
     for (const name of targets) {
       const target = TARGETS[name];
       await ctx.step(name, () => {

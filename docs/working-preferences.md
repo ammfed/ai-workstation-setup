@@ -308,6 +308,11 @@ section at the end of each file (never in a skill), so edit them in your private
   comment, and it needs no Lavish runtime. The agent shares it as a private Claude artifact with
   named Commenters only after you confirm your organisation allows Anthropic hosting.
   [Review pages](review-pages.md#pages-for-invited-colleagues) gives the rules.
+- **Answered-pages check**: next to the card template the module writes
+  `~/.config/ai-workstation-setup/review-pages.mjs`. It reads Lavish's state file without
+  collecting anything and lists which review pages you answered, including pages that workers
+  and second mates made. The rules tell agents to run it before calling a page open or
+  unanswered. [Review pages](review-pages.md#the-loop) shows how to run it.
 - **No surprise tabs**: agent-clis sets `LAVISH_AXI_NO_OPEN=1` (`LAVISH_NO_OPEN`), so review
   pages never open browser tabs on their own. The agent opens a checked page once, on
   purpose, when it hands it over, and shares the link in chat.

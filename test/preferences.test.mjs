@@ -418,7 +418,7 @@ test('each skill file has a name, a plain description that names its triggers, a
 
 test('every rule lives in exactly one home, as test/rule-homes.mjs lists, so the split loses none', async () => {
   const yes = Object.fromEntries(preferences.questions.filter((q) => q.type === 'confirm').map((q) => [q.key, 'yes']));
-  const opts = { cardsPath: CARDS, hideKitPath: path.join(os.tmpdir(), 'hide-kit.js'), commentCardsPath: path.join(os.tmpdir(), 'comment-cards.html'), decisionsPath: path.join(os.tmpdir(), 'decisions.md'), vault: { path: path.join(os.tmpdir(), 'vault'), scripts: true, search: true } };
+  const opts = { cardsPath: CARDS, hideKitPath: path.join(os.tmpdir(), 'hide-kit.js'), commentCardsPath: path.join(os.tmpdir(), 'comment-cards.html'), reviewCheckPath: path.join(os.tmpdir(), 'review-pages.mjs'), decisionsPath: path.join(os.tmpdir(), 'decisions.md'), vault: { path: path.join(os.tmpdir(), 'vault'), scripts: true, search: true } };
   const bulletsOf = (text) => text.split('\n').filter((l) => l.startsWith('- ')).map((l) => l.slice(2));
   const homesFor = async (given) => {
     const homes = await renderHomes({ ...yes, ...ALL_ON, ...given }, opts);
@@ -1162,6 +1162,7 @@ test('a dry run plans the card template, the hide tray script and the five prefe
     assert.ok(r.stdout.includes(`would write ${path.join(dir, 'decision-cards.html')}`), r.stdout);
     assert.ok(r.stdout.includes(`would write ${path.join(dir, 'hide-kit.js')}`), r.stdout);
     assert.ok(r.stdout.includes(`would write ${path.join(dir, 'comment-cards.html')}`), r.stdout);
+    assert.ok(r.stdout.includes(`would write ${path.join(dir, 'review-pages.mjs')}`), r.stdout);
     for (const name of Object.keys(PREFERENCE_SKILLS)) {
       assert.ok(r.stdout.includes(`would write ${path.join(home, '.claude', 'skills', name, 'SKILL.md')}`), `${name}: ${r.stdout}`);
     }
@@ -1183,6 +1184,8 @@ test('a real run writes the hide tray script next to the card template', { skip:
     assert.equal(fs.readFileSync(path.join(dir, 'comment-cards.html'), 'utf8'), fs.readFileSync(COMMENT_CARDS, 'utf8'));
     assert.match(fs.readFileSync(path.join(home, '.claude', 'skills', 'review-pages', 'SKILL.md'), 'utf8'), new RegExp(`comment-card template at \`${path.join(dir, 'comment-cards.html').replace(/[.\\]/g, '\\$&')}\``));
     assert.match(fs.readFileSync(path.join(home, '.claude', 'skills', 'review-pages', 'SKILL.md'), 'utf8'), new RegExp(`Paste \`${path.join(dir, 'hide-kit.js').replace(/[.\\]/g, '\\$&')}\``));
+    assert.equal(fs.readFileSync(path.join(dir, 'review-pages.mjs'), 'utf8'), fs.readFileSync(REVIEW_CHECK, 'utf8'));
+    assert.ok(fs.readFileSync(path.join(home, '.claude', 'skills', 'review-pages', 'SKILL.md'), 'utf8').includes(`Run \`node ${path.join(dir, 'review-pages.mjs')}\` before calling any review page open`));
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
     fs.rmSync(home, { recursive: true, force: true });
@@ -1243,4 +1246,57 @@ test('the review-page rules send pages for colleagues through the comment-card t
   const get = (key) => ({ PREFS_DECISIONS: 'tool' })[key];
   const none = [renderPreferences(get, { cardsPath: null, commentCardsPath: null }), ...Object.values(renderPreferenceSkills(get, { cardsPath: null, commentCardsPath: null }))].join('\n');
   assert.doesNotMatch(none, /comment-card|ArtifactComments/);
+});
+
+// The answered-pages check (templates/preferences/bin/review-pages.mjs): it reads Lavish's state
+// file only, so a page another agent made shows as answered without its answer being collected.
+const REVIEW_CHECK = path.join(repoRoot, 'templates/preferences/bin/review-pages.mjs');
+
+test('the answered-pages check marks answered pages from the Lavish state file and never changes it', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'review-pages-'));
+  try {
+    const now = Date.now();
+    const at = (daysAgo) => new Date(now - daysAgo * 86400000).toISOString();
+    const user = (text, d = 0) => ({ role: 'user', kind: 'message', text, at: at(d) });
+    const agent = (text, d = 0) => ({ role: 'agent', text, at: at(d) });
+    const session = (file, fields) => ({ key: file, file, url: `http://127.0.0.1:4387/session/${path.basename(file)}`, prompts: [], chat: [], updated_at: at(0), ...fields });
+    const sessions = [
+      // Sent with Send & End and never collected: lavish-axi's own list leaves this page out.
+      session('/work/mate/a.html', { status: 'ended', ended_by: 'user', prompts: [{ prompt: 'Keep\nnote' }], chat: [user('Keep\nnote')] }),
+      // Collected by the agent that made it: lavish-axi shows it as open with 0 pending.
+      session('/work/mate/b.html', { status: 'open', chat: [agent('Pick one'), user('Option B')] }),
+      session('/work/mate/c.html', { status: 'open' }),
+      session('/work/mate/d.html', { status: 'open', chat: [user('Old'), agent('Changed, have a look')] }),
+      session('/work/mate/e.html', { status: 'ended', ended_by: 'agent', chat: [agent('Done')] }),
+      session('/work/main/f.html', { status: 'feedback', prompts: [{ prompt: 'Yes' }], updated_at: at(30) }),
+    ];
+    const state = path.join(dir, 'state.json');
+    fs.writeFileSync(state, JSON.stringify({ sessions: Object.fromEntries(sessions.map((s) => [s.key, s])) }));
+    const before = fs.readFileSync(state, 'utf8');
+    const run = (...args) => spawnSync(process.execPath, [REVIEW_CHECK, ...args], { encoding: 'utf8', env: { ...process.env, LAVISH_AXI_STATE_DIR: dir } });
+    const rows = (out) => out.trim().split('\n').slice(1).map((l) => l.split('\t').slice(0, 2).join(' '));
+
+    const all = run();
+    assert.equal(all.status, 0, all.stderr);
+    assert.match(all.stdout, /^review-pages: 2 answered and not collected, 1 answered and collected, 2 waiting on the user\n/);
+    assert.deepEqual(rows(all.stdout).sort(), ['answered /work/main/f.html', 'answered /work/mate/a.html', 'answered-collected /work/mate/b.html', 'waiting /work/mate/c.html', 'waiting /work/mate/d.html']);
+    assert.match(all.stdout, /answered\t\/work\/mate\/a\.html\t[^\n]*page ended by user[^\n]*answer: "Keep"\n/);
+    assert.match(all.stdout, /answered-collected\t\/work\/mate\/b\.html\t[^\n]*answer: "Option B"/);
+
+    // One home, recent pages, every page, and JSON.
+    assert.deepEqual(rows(run('--under', '/work/main').stdout), ['answered /work/main/f.html']);
+    assert.ok(!rows(run('--days', '7').stdout).includes('answered /work/main/f.html'));
+    assert.ok(rows(run('--all').stdout).includes('ended /work/mate/e.html'));
+    const json = JSON.parse(run('--json', '--under', '/work/mate').stdout);
+    assert.deepEqual(json.find((p) => p.file === '/work/mate/a.html'), { ...json.find((p) => p.file === '/work/mate/a.html'), state: 'answered', pending: 1, ended: true, endedBy: 'user', answer: 'Keep' });
+
+    assert.equal(fs.readFileSync(state, 'utf8'), before, 'the check never writes the state file');
+    assert.equal(run('--days', 'soon').status, 2);
+    fs.rmSync(state);
+    const empty = run();
+    assert.equal(empty.status, 0);
+    assert.match(empty.stdout, /no review pages to report/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
