@@ -137,12 +137,17 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
      It starts with two or three known ways to build this kind of system in one table, always including the plainest one, from official documentation and published architecture write-ups, starting from the owner's own system design reference when they keep one.
      Pick part by part, cheapest to run first, and record each hard-to-reverse pick as a decision record.
    - **An evaluation item for any AI part.** Test how well the AI part does its job on real examples before any pilot.
-   - **A handover item.** When real people will run or use it, an item names who runs it and how they learn it, and the day the measure from the last requirements round (rule 3.2) is checked again, blocked by the last build item.
+   - **A handover item.** When real people will run or use it, an item blocked by the last build item hands it over so someone else can run it. It names five things:
+     - the named owner on the client side;
+     - a one-page how-to for the three most common tasks;
+     - how a user reports a problem, and where the report lands (rule 9.5);
+     - who restarts it, and where its record is, when the owner is away;
+     - the day of the first use check, when the measure from the last requirements round (rule 3.2) is checked again.
    - Finished items stay on the list, marked done, never deleted.
    - Dates belong to the owner. Agents never set or move a date; they only flag one that has passed.
    - Plans show the order of the work, never days, hours or estimates. This is about plans only. The journey showcase in rule 1.5 records hours already spent, so it stays.
 
-   Why: each of these is easy to forget until it blocks a launch, and a date moved by an agent hides the slip the owner needs to see.
+   Why: each of these is easy to forget until it blocks a launch, and a date moved by an agent hides the slip the owner needs to see. A client has no agents, so a handover that only the agents could run leaves the client with software nobody can keep going.
 
 ## 2. Lead the way
 
