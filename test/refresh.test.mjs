@@ -5,6 +5,7 @@
 // Run: node --test test/refresh.test.mjs
 
 import assert from 'node:assert/strict';
+import { backupsOf } from './backups-helper.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -70,7 +71,8 @@ test('an older shipped copy (found in git history) is replaced under --yes, with
   assert.equal(v, true);
   assert.match(out, /replaced .*older version this setup shipped/);
   assert.equal(fs.readFileSync(f.target, 'utf8'), '// demo v2 for you\n');
-  assert.equal(fs.readdirSync(path.dirname(f.target)).filter((n) => n.includes('.bak-')).length, 1);
+  assert.equal(backupsOf(f.home, f.target).length, 1);
+  assert.deepEqual(fs.readdirSync(path.dirname(f.target)), ['demo.mjs'], 'no backup beside the file');
   assert.deepEqual(rec.skips, []);
   fs.rmSync(f.tmp, { recursive: true, force: true });
 });
@@ -163,9 +165,9 @@ for (const yes of [true, false]) {
     assert.match(asked[0], /exists and differs/);
     assert.deepEqual(screen, ['interrupt', 'resume']);
     assert.equal(fs.readFileSync(f.target, 'utf8'), yes ? '// demo v2 for you\n' : '// my own version\n');
-    const backups = fs.readdirSync(path.dirname(f.target)).filter((n) => n.startsWith('demo.mjs.bak-'));
+    const backups = backupsOf(f.home, f.target);
     assert.equal(backups.length, yes ? 1 : 0);
-    if (yes) assert.equal(fs.readFileSync(path.join(path.dirname(f.target), backups[0]), 'utf8'), '// my own version\n');
+    if (yes) assert.equal(fs.readFileSync(backups[0], 'utf8'), '// my own version\n');
     fs.rmSync(f.tmp, { recursive: true, force: true });
   });
 }

@@ -6,6 +6,7 @@
 // Run: node --test test/models.test.mjs
 
 import assert from 'node:assert/strict';
+import { backupsOf } from './backups-helper.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -221,7 +222,8 @@ test('the design review rules follow what the installed no-mistakes can read, an
     // An active block written earlier comes out on an old version, and the rest stays; a backup is kept.
     const active = `agent: auto\n\n${block}\n\nlog_level: info\n`;
     assert.equal((await run('v1.84.0', active)).text, 'agent: auto\n\nlog_level: info\n');
-    assert.ok(fs.readdirSync(path.dirname(file)).some((f) => f !== 'config.yaml' && f.startsWith('config.yaml')), 'a backup of the config is kept');
+    assert.ok(backupsOf(home, file).length > 0, 'a backup of the config is kept');
+    assert.deepEqual(fs.readdirSync(path.dirname(file)), ['config.yaml'], 'none beside it');
     // A block commented out by hand also comes out cleanly, and a version that reads it gets it back active.
     assert.equal((await run('v1.84.0', `agent: auto\n\n${commented}\n`)).text, 'agent: auto\n');
     const back = (await run('v1.99.0', `agent: auto\n\n${commented}\n\nlog_level: info\n`)).text;

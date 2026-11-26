@@ -6,6 +6,7 @@
 // Run: node --test test/optional-pieces.test.mjs
 
 import assert from 'node:assert/strict';
+import { backupsOf } from './backups-helper.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -142,12 +143,12 @@ test('the installer step restores a hand-patched cli.js from its untouched copy 
   try {
     await patchPixelAgents(ctx);
     assert.equal(fs.readFileSync(path.join(dist, 'cli.js'), 'utf8'), patchPixelCli(FAKE_CLI, '1.4.1'));
-    const backups = fs.readdirSync(dist).filter((n) => n.startsWith('cli.js.bak-'));
+    const backups = backupsOf(home, path.join(dist, 'cli.js'));
     assert.equal(backups.length, 1);
-    assert.equal(fs.readFileSync(path.join(dist, backups[0]), 'utf8'), HAND_PATCHED);
+    assert.equal(fs.readFileSync(backups[0], 'utf8'), HAND_PATCHED);
     assert.equal(fs.readFileSync(path.join(dist, 'cli.js.orig'), 'utf8'), FAKE_CLI);
     await patchPixelAgents(ctx);
-    assert.equal(fs.readdirSync(dist).filter((n) => n.startsWith('cli.js.bak-')).length, 1);
+    assert.equal(backupsOf(home, path.join(dist, 'cli.js')).length, 1);
   } finally {
     PRISTINE_SHA256['1.4.1'] = saved;
   }
@@ -399,7 +400,7 @@ test('writeFile replace keeps a backup and writes without asking', async () => {
   const ctx = context(home);
   assert.equal(await ctx.writeFile(file, 'new', { onConflict: 'replace' }), true);
   assert.equal(fs.readFileSync(file, 'utf8'), 'new');
-  assert.equal(fs.readdirSync(home).filter((f) => f.startsWith('tool.js.bak-')).length, 1);
+  assert.equal(backupsOf(home, file).length, 1);
   assert.equal(await context(home, { dryRun: true }).writeFile(file, 'newer', { onConflict: 'replace' }), true);
   assert.equal(fs.readFileSync(file, 'utf8'), 'new');
 });
@@ -495,7 +496,8 @@ test('a backup of a file inside a skill folder goes to the setup backups folder,
   const copies = fs.readdirSync(kept).filter((n) => n.startsWith('SKILL.md.bak-'));
   assert.equal(copies.length, 1);
   assert.equal(fs.readFileSync(path.join(kept, copies[0]), 'utf8'), 'old\n');
-  assert.equal(fs.readdirSync(home).filter((n) => n.startsWith('notes.txt.bak-')).length, 1, 'other files keep their backup beside them');
+  assert.equal(backupsOf(home, other).length, 1, 'other files go to the same backups folder');
+  assert.deepEqual(fs.readdirSync(home).filter((n) => n.includes('.bak-')), [], 'none beside the file');
 });
 
 test('a service file that differs only in its PATH line is up to date', async () => {
@@ -714,6 +716,28 @@ test('the lavish-axi wrapper sets no-open and runs the next lavish-axi on PATH',
   assert.equal(alone.status, 127);
 });
 
+test('only the last three backups of a file are kept, and a fourth removes the oldest', () => {
+  const home = tempHome();
+  const file = path.join(home, 'rules', 'note.md');
+  const other = path.join(home, 'rules', 'other.md');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, 'now');
+  fs.writeFileSync(other, 'other');
+  const folder = path.join(home, '.config', 'ai-workstation-setup', 'backups', 'files', 'rules');
+  fs.mkdirSync(folder, { recursive: true });
+  for (const stamp of ['20260101-000001', '20260101-000002', '20260101-000003']) {
+    fs.writeFileSync(path.join(folder, `note.md.bak-${stamp}`), stamp);
+  }
+  fs.writeFileSync(path.join(folder, 'other.md.bak-20250101-000001'), 'keep');
+  context(home).backup(file); // the fourth copy
+  const kept = backupsOf(home, file).map((f) => path.basename(f));
+  assert.equal(kept.length, 3);
+  assert.ok(!kept.includes('note.md.bak-20260101-000001'), 'the oldest copy is gone');
+  assert.ok(kept.includes('note.md.bak-20260101-000003'));
+  assert.equal(backupsOf(home, other).length, 1, 'another file keeps its own copies');
+  assert.deepEqual(fs.readdirSync(path.dirname(file)).sort(), ['note.md', 'other.md'], 'nothing beside the file');
+});
+
 test('a file this run created is not backed up when the same run changes it again', async () => {
   const home = tempHome();
   const file = path.join(home, 'settings.json');
@@ -727,7 +751,7 @@ test('a file this run created is not backed up when the same run changes it agai
   // A file that was there before the run is still backed up, once.
   const next = context(home);
   next.updateJson(file, (s) => (s.c = 3));
-  assert.equal(fs.readdirSync(home).filter((f) => f.startsWith('settings.json.bak-')).length, 1);
+  assert.equal(backupsOf(home, file).length, 1);
 });
 
 test('addUserPath adds a folder to PATH in the shell profile once, and skips one already on PATH', { skip: !unix }, async () => {
@@ -994,13 +1018,13 @@ test('a re-run over an older install removes the clone pin and the rc export, an
   fs.writeFileSync(rc, ['alias ll="ls -l"', `export FM_HOME="${f.ops}"  # ai-workstation-setup`, 'export OTHER=1  # ai-workstation-setup', 'export FM_HOME_NOTE=mine', ''].join('\n'));
   await runFirstmate(f);
   assert.deepEqual(readJson(settingsOf(f.dir)), { env: { KEEP: '1' }, permissions: { allow: ['Bash(ls)'] } });
-  assert.ok(fs.readdirSync(path.join(f.dir, '.claude')).some((n) => n.startsWith('settings.local.json.bak-')));
+  assert.ok(backupsOf(f.home, settingsOf(f.dir).replace(/settings\.json$/, 'settings.local.json')).length > 0);
   const text = fs.readFileSync(rc, 'utf8');
   assert.doesNotMatch(text, /^export FM_HOME=/m);
   assert.match(text, /alias ll="ls -l"/);
   assert.match(text, /export OTHER=1/);
   assert.match(text, /export FM_HOME_NOTE=mine/);
-  assert.ok(fs.readdirSync(f.home).some((n) => n.startsWith('.bashrc.bak-')));
+  assert.ok(backupsOf(f.home, rc).length > 0);
 
   // A pin that was the only setting leaves no empty env behind.
   fs.writeFileSync(settingsOf(f.dir), JSON.stringify({ env: { FM_HOME: f.ops } }));
@@ -1117,7 +1141,7 @@ test('opting in adds the two dispatch lines to a Firstmate .env and keeps its ot
   assert.doesNotMatch(out, /OPENROUTER_API_KEY in/);
 
   // A re-run changes nothing and makes no second backup.
-  const backups = () => fs.readdirSync(fmHome).filter((n) => n.startsWith('.env.bak-')).length;
+  const backups = () => backupsOf(home, env).length;
   assert.equal(backups(), 1);
   const again = await runOpenrouter(home, fmHome, { OPENROUTER_FIRSTMATE: 'yes' });
   assert.equal(fs.readFileSync(env, 'utf8'), `${HOME_ENV}FM_DISPATCH_PROVIDER=openrouter\nFM_DISPATCH_MODEL=typesafe/jev-1.13\n`);

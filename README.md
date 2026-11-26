@@ -142,9 +142,10 @@ adds one PATH line to your shell profile, so a new terminal finds it.
 Re-running is safe: installed tools are detected and skipped (tools that can prove
 they work without a sign-in are also given a quick real check), config edits only
 happen when something differs, and a changed file you own is never replaced
-without asking (a timestamped `.bak-*` copy is kept when it is: next to the file, or under
-`~/.config/ai-workstation-setup/backups/skills/` for a file inside a skill folder, because
-Claude Code reads every file there as part of the skill). With `--yes`, and at a
+without asking (a timestamped `.bak-*` copy is kept when it is, in one folder,
+`~/.config/ai-workstation-setup/backups/`, never beside the file: Claude Code reads every
+file in a skill folder, and a search of the skills or rules folders must not find old
+wording. The last three copies of each file are kept). With `--yes`, and at a
 terminal while the install runs, a
 script or file the setup shipped is refreshed without asking when your copy is an older version it
 shipped (known from a hash list in `~/.config/ai-workstation-setup/shipped.json` and
@@ -176,7 +177,7 @@ What the rerun does:
   their latest upstream version (it asks once, `--yes` updates, and an update replaces local
   edits to those skills). A skill you removed from `SKILLS` in `answers.env` stays off.
 - It replaces a file it wrote earlier (a hook, the status line, the reader subagent, a
-  bundled skill) with the new version, and keeps the old one as `<file>.bak-<time>`. A file
+  bundled skill) with the new version, and keeps the old one as `<file>.bak-<time>` in that backups folder. A file
   you edited is left untouched with a note; at a terminal it asks first, and no is the default.
 - It edits only its own keys in Claude Code's `settings.json`, from your answers, and keeps
   your other settings.
