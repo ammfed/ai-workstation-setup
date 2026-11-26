@@ -445,7 +445,7 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
 
 ## 9. Improve
 
-This section is phase 10. It keeps the way of working, and this playbook, current.
+This section is phase 10. It keeps the way of working, and this playbook, current, and it sends what real use teaches back into the work (rule 9.5).
 
 1. **Record each method lesson when it happens.**
    - When the owner corrects the way of working, write the lesson down in one line with what triggered it.
@@ -473,6 +473,11 @@ This section is phase 10. It keeps the way of working, and this playbook, curren
    - Search for the old wording afterwards, and confirm that no copy still carries it.
 
    Why: a copy left behind keeps giving the old rule, and the agents that read it go on working the old way.
+5. **What users and real use teach reopens the work.**
+   - Sort every try-out result, every failure found in real use and every report from a real user into one of three: fix it inside the requirement, reopen the requirement in the next requirements round, or run one narrow study (rule 3.6).
+   - The sorting goes on the outcomes page the phase already has. It adds no new page.
+
+   Why: a lesson from real use that changes only the method leaves the product built on a requirement the users have already shown wrong.
 
 ## 10. From a weak prototype to an aligned rules list
 
