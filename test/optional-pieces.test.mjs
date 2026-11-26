@@ -266,8 +266,8 @@ test('a stow reminder hook lands only in the settings file it is given', () => {
   fs.writeFileSync(local, JSON.stringify({ env: { SAMPLE: '1' } }));
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
   try {
-    setHook(ctx, 'UserPromptSubmit', 'context-reminder.mjs', 'node "context-reminder.mjs" 200000 "Run /stow now"', local);
-    setHook(ctx, 'UserPromptSubmit', 'context-reminder.mjs', 'node "context-reminder.mjs" 300000 "Run /stow now"', local);
+    setHook(ctx, 'UserPromptSubmit', 'context-reminder.mjs', 'node "context-reminder.mjs" 200000 "Run /stow now"', { file: local });
+    setHook(ctx, 'UserPromptSubmit', 'context-reminder.mjs', 'node "context-reminder.mjs" 300000 "Run /stow now"', { file: local });
     const s = JSON.parse(fs.readFileSync(local, 'utf8'));
     assert.equal(s.env.SAMPLE, '1');
     assert.deepEqual(s.hooks.UserPromptSubmit, [{ hooks: [{ type: 'command', command: 'node "context-reminder.mjs" 300000 "Run /stow now"' }] }]);
@@ -1430,6 +1430,66 @@ test('the stow gate is off by default and a dry run registers it on PreToolUse w
   assert.ok(r.stdout.includes(`would write ${path.join(home, '.claude', 'hooks', 'stow-gate.mjs')}`), r.stdout);
   const example = fs.readFileSync(path.join(repoRoot, 'answers.example.env'), 'utf8');
   assert.match(example, /^CLAUDE_STOW_GATE=no$/m);
+});
+
+// Runs the shipped helper model gate once, as Claude Code would before an Agent call.
+// Returns the deny reason, or '' when the call is allowed.
+function helperGateReply(toolInput, { tool = 'Agent', env = {}, raw } = {}) {
+  const script = path.join(repoRoot, 'templates', 'claude-code', 'bin', 'helper-model-gate.mjs');
+  const input = raw ?? JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: tool, tool_input: toolInput });
+  const childEnv = { ...process.env, ...env };
+  if (!('CLAUDE_CODE_SUBAGENT_MODEL_FORCE' in env)) delete childEnv.CLAUDE_CODE_SUBAGENT_MODEL_FORCE;
+  const r = spawnSync(process.execPath, [script], { input, encoding: 'utf8', env: childEnv });
+  assert.equal(r.status, 0, r.stderr);
+  if (!r.stdout) return '';
+  const out = JSON.parse(r.stdout).hookSpecificOutput;
+  assert.equal(out.hookEventName, 'PreToolUse');
+  assert.equal(out.permissionDecision, 'deny');
+  return out.permissionDecisionReason;
+}
+
+test('the helper model gate refuses a helper with no model named and allows a named one', () => {
+  const task = { description: 'Find endpoints', prompt: 'List the API endpoints', subagent_type: 'general-purpose' };
+  const reason = helperGateReply(task);
+  assert.match(reason, /^Helper model gate: name a model for this helper\./);
+  assert.match(reason, /models-and-research skill/);
+  assert.ok(!reason.includes('\n'), 'the reason is one line');
+  assert.match(helperGateReply({ ...task, model: '' }), /name a model/, 'an empty model is not a name');
+  assert.match(helperGateReply({ ...task, model: '  ' }), /name a model/);
+  assert.match(helperGateReply(task, { tool: 'Task' }), /name a model/, 'the old Task name is gated too');
+  assert.match(helperGateReply({ prompt: 'x' }), /name a model/, 'no subagent_type is still a helper');
+  assert.equal(helperGateReply({ ...task, model: 'haiku' }), '');
+  assert.equal(helperGateReply({ ...task, model: 'sonnet' }, { tool: 'Task' }), '');
+  assert.equal(helperGateReply({ ...task, subagent_type: 'fork' }), '', 'a fork runs on its parent model by design');
+  assert.equal(helperGateReply(task, { env: { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1' } }), '', 'a forced model cannot be passed, so nothing is refused');
+  assert.match(helperGateReply(task, { env: { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '' } }), /name a model/);
+  assert.equal(helperGateReply({ command: 'ls' }, { tool: 'Bash' }), '', 'other tools are never touched');
+  assert.equal(helperGateReply(null, { raw: 'not json' }), '', 'bad input allows the call');
+});
+
+test('the helper model gate is on by default and installs beside existing PreToolUse hooks', () => {
+  const home = tempHome();
+  const ctx = context(home);
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const mine = { matcher: 'Agent', hooks: [{ type: 'command', command: 'my-own-agent-check' }] };
+    writeSettings(settingsPath(ctx), { hooks: { PreToolUse: [mine] } });
+    const command = 'node "/x/.claude/hooks/helper-model-gate.mjs"';
+    setHook(ctx, 'PreToolUse', 'helper-model-gate.mjs', 'node "/old/helper-model-gate.mjs"');
+    setHook(ctx, 'PreToolUse', 'helper-model-gate.mjs', command, { matcher: 'Agent|Task' });
+    setHook(ctx, 'PreToolUse', 'helper-model-gate.mjs', command, { matcher: 'Agent|Task' });
+    const s = readJson(settingsPath(ctx));
+    assert.deepEqual(s.hooks.PreToolUse, [mine, { matcher: 'Agent|Task', hooks: [{ type: 'command', command }] }]);
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+  }
+  const answers = path.join(home, 'answers.env');
+  fs.writeFileSync(answers, '');
+  const env = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude') };
+  const r = spawnSync(process.execPath, [path.join(repoRoot, 'lib', 'installer.mjs'), '--dry-run', '--yes', '--modules', 'claude-code', '--answers', answers], { encoding: 'utf8', env });
+  assert.match(r.stdout, /PreToolUse hook helper-model-gate\.mjs/, r.stdout + r.stderr);
+  assert.ok(r.stdout.includes(`would write ${path.join(home, '.claude', 'hooks', 'helper-model-gate.mjs')}`), r.stdout);
+  assert.match(fs.readFileSync(path.join(repoRoot, 'answers.example.env'), 'utf8'), /^CLAUDE_HELPER_MODEL_GATE=yes$/m);
 });
 
 test('markitdown installs one pinned, Office-only spec through uv or pipx, with a version check', async () => {

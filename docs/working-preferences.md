@@ -344,3 +344,12 @@ section at the end of each file (never in a skill), so edit them in your private
   blocks on its own errors, and it stops waiting for its input after 2 seconds, so a session
   whose hook input never closes is not frozen. Answering no removes the hook. `apply-to-machine.sh`
   does not register it.
+- **Helper model gate**: a hook from the claude-code module (`CLAUDE_HELPER_MODEL_GATE`, on by
+  default) that refuses to start a helper (an `Agent` tool call) with no `model` named, and tells
+  the agent to pick one from the helper model table in the models-and-research skill. A helper
+  with no model runs on its parent's model and effort, so this keeps bulk work off the expensive
+  main model. A fork is exempt: it always runs on its parent's model and ignores a model it is
+  given. So is every call while `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set, because Claude Code
+  then refuses a passed model. It is a `PreToolUse` hook on `Agent|Task` in
+  `~/.claude/hooks/helper-model-gate.mjs`, added beside your own hooks; it never blocks on its
+  own errors. Answering no removes the hook.

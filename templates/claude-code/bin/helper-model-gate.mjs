@@ -1,0 +1,76 @@
+#!/usr/bin/env node
+// helper-model-gate - a Claude Code PreToolUse hook that refuses to start a helper whose model
+// is not named. Installed by ai-workstation-setup (claude-code module, CLAUDE_HELPER_MODEL_GATE)
+// into ~/.claude/hooks, registered on the Agent tool (matcher "Agent|Task": Task is the
+// tool's old name, still accepted as an alias).
+//
+// Why a hook and not a rule: a helper with no model runs on its parent's model and effort, so
+// an unnamed helper under an expensive parent runs expensive too. The written rule to name one
+// was broken more than once; a refused call cannot be read past (workflow-playbook rule 9.2).
+//
+// Allowed: a call whose tool_input.model is a non-empty string, and a fork
+// (subagent_type "fork"), which always runs on its parent's model and ignores a model it is
+// given, so there is nothing for it to name. Also allowed while
+// CLAUDE_CODE_SUBAGENT_MODEL_FORCE is set, because then Claude Code refuses a passed model.
+// Fields from code.claude.com/docs/en/hooks ("PreToolUse", "Agent") and /docs/en/sub-agents.
+// It never blocks on its own errors: an unreadable or late payload allows the call.
+
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const REASON =
+  'Helper model gate: name a model for this helper. Pass model (haiku, sonnet, opus or fable) picked from the helper model table in the models-and-research skill, then start it again.';
+
+/** The deny reason for one PreToolUse payload, or '' when the call may run. */
+export function refusal(input, env = process.env) {
+  if (!input || !['Agent', 'Task'].includes(input.tool_name)) return '';
+  const toolInput = input.tool_input || {};
+  if (toolInput.subagent_type === 'fork') return '';
+  if (/^(1|true|yes|on)$/i.test(String(env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE || ''))) return '';
+  if (typeof toolInput.model === 'string' && toolInput.model.trim()) return '';
+  return REASON;
+}
+
+// Read the hook payload without waiting for end-of-input (some sessions hand the hook a stdin
+// that never closes; see stow-gate.mjs). Allow the call if no payload arrives in 2 seconds.
+function readPayload() {
+  return new Promise((resolve) => {
+    let text = '';
+    const done = (value) => {
+      clearTimeout(timer);
+      process.stdin.removeAllListeners();
+      process.stdin.destroy();
+      resolve(value);
+    };
+    const timer = setTimeout(() => done(null), 2000);
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk) => {
+      text += chunk;
+      try {
+        done(JSON.parse(text));
+      } catch {
+        // not complete yet
+      }
+    });
+    process.stdin.on('end', () => {
+      try {
+        done(JSON.parse(text || '{}'));
+      } catch {
+        done(null);
+      }
+    });
+    process.stdin.on('error', () => done(null));
+  });
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
+  try {
+    const reason = refusal(await readPayload());
+    if (reason) {
+      process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } }));
+    }
+  } catch {
+    // never block on our own errors
+  }
+  process.exit(0);
+}
