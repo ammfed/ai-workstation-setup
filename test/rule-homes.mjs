@@ -185,6 +185,7 @@ export const RULE_HOMES = [
   row('Use medium effort by default, and high effort', MODELS, undefined, { PREFS_MODEL_ROUTING: 'balanced' }),
   row('Use a stronger model or a higher effort than these rules pick', MODELS),
   row('Treat subscription limits as scarce', MODELS, ['Treat subscription limits as scarce', 'Pause heavy work near a limit']),
+  row('Name the model of every helper', MODELS),
   row('Hand retrieval-heavy work', MODELS),
   row('When a rule changes, change every copy of it in the same pass', MODELS),
 

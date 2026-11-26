@@ -13,7 +13,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Context, detectPlatform } from '../lib/context.mjs';
 import agentClis, { NO_MISTAKES_REVIEW, REVIEW_RULE_PATHS, REVIEW_RULES, REVIEW_RULES_SINCE, noMistakesConfigPath, noMistakesVersion, parseReviewModel, readsGlobalReview, reviewRulesBlock, withClaudeReviewModel, withReviewRules, writeReviewRules } from '../modules/agent-clis/module.mjs';
-import claudeCode, { installReaderAgent, parseModelEfforts } from '../modules/claude-code/module.mjs';
+import claudeCode, { DEFAULT_SUBAGENT_MODEL, installReaderAgent, setDefaultSubagentModel, parseModelEfforts } from '../modules/claude-code/module.mjs';
 import backpass, { claudeModelId } from '../modules/backpass/module.mjs';
 import firstmate, { dispatchProfiles, secondmateDefault } from '../modules/firstmate/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
@@ -34,6 +34,18 @@ function withNoMistakes(ctx, version) {
   ctx.capture = (cmd) => (cmd === 'no-mistakes --version' && version ? `no-mistakes version ${version} (4822244) 2026-09-26T08:30:42Z` : null);
   return ctx;
 }
+
+test('the settings step names Sonnet 5.5 as the default helper model and keeps one the person set', () => {
+  const s = { env: { KEEP: '1' } };
+  setDefaultSubagentModel(s);
+  assert.deepEqual(s.env, { KEEP: '1', CLAUDE_CODE_SUBAGENT_MODEL: 'claude-sonnet-5-5' });
+  const none = {};
+  setDefaultSubagentModel(none);
+  assert.equal(none.env.CLAUDE_CODE_SUBAGENT_MODEL, DEFAULT_SUBAGENT_MODEL);
+  const mine = { env: { CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' } };
+  setDefaultSubagentModel(mine);
+  assert.equal(mine.env.CLAUDE_CODE_SUBAGENT_MODEL, 'haiku');
+});
 
 test('Claude Code sessions start Opus 5.5 at medium effort, pin no Fable level, and the question stays', () => {
   const q = question(claudeCode, 'CLAUDE_MODEL_EFFORTS');

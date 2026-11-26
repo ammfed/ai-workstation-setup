@@ -49,6 +49,29 @@ const GLOSSARY_RULE =
   'When the user asks about a term or a relationship, answer from the glossary and link to the file; if the answer was missing or wrong there, write it back in the same turn, so the answer never lives only in a chat. ' +
   "Record a decision that is hard to reverse, surprising and a real trade-off as a decision record (ADR) in `docs/adr/` beside the glossary, using the domain-modeling skill's ADR-FORMAT.md, and read the decision records in an area before changing it.";
 
+// Every helper gets a model named for it, picked from the task-type rows. Shared by the skill and the worker brief.
+function namedHelperRule(get) {
+  const routing = get('PREFS_MODEL_ROUTING');
+  if (!routing || routing === 'none') return '';
+  return `Name the model of every helper, subagent or workflow agent you start. A helper with no model copies its parent's model and effort, so an unnamed helper under an expensive parent runs expensive too. Pick each helper's model from the task-type rules in the models-and-research skill, never by habit, and size a fan-out to the work${
+    get('PREFS_QUOTA') ? ' after checking `quota-axi`' : ''
+  }. The machine default for an unnamed helper (\`CLAUDE_CODE_SUBAGENT_MODEL\` in \`~/.claude/settings.json\`) is a backstop only.`;
+}
+
+// The helper model table, carried as written (sources and links kept) into models-and-research.
+const HELPER_MODEL_TABLE = `Sources: A = "Choosing the right model", https://platform.claude.com/docs/en/about-claude/models/choosing-a-model (official documentation). B = Claude Code "Subagents", https://code.claude.com/docs/en/sub-agents (official documentation). C = "Models overview" prices, https://platform.claude.com/docs/en/models/overview (official documentation): per million tokens in/out, Fable 5.2 $8/$40, Opus 5.5 $4/$20, Sonnet 5.5 $2/$10, Haiku 5.5 from $0.10/$0.50.
+
+| Task kind | Model and effort | Why |
+|---|---|---|
+| Fetch, read, look up, summarise, high-volume extraction | Haiku 5.5 | A: lowest price, "high-volume intelligent processing", "subagent tasks"; B: Claude Code's own web-fetch and docs helpers run on Haiku |
+| Check a finding against its sources, draft, analyse data, small code | Sonnet 5.5, medium | A: "everyday coding, agent, and enterprise workloads", "data analysis, content creation" |
+| Build to a settled spec, supervise, routine review | Opus 5.5, medium | A: "most workloads start with Claude Opus 5.5"; tune effort before changing model |
+| Plan, architecture, judge other work, hard or unknown bugs | Opus 5.5, high | A: "complex agentic coding and enterprise work" |
+| Hours-long lead session, multistep deep research or review carried to a finished document | Fable 5.2, only when the user names it | A: Fable when Opus at xhigh or max still falls short; it costs twice Opus (C) |
+| A helper whose model nobody set | Sonnet 5.5 (CLAUDE_CODE_SUBAGENT_MODEL) | B: a helper with no model takes the parent's; the variable is the fallback before that |
+
+A lead keeps the judgment and hands bulk work to lower-cost models (A, "Combine models"). Size a fan-out to the work and to quota-axi; none of these sources sets a number.`;
+
 function delegateRule(get) {
   const cli = get('PREFS_DELEGATE_RETRIEVAL');
   if (!cli) return '';
@@ -103,7 +126,7 @@ export function renderBriefInclude(get, { checkerPath, privateRules, tastePreset
     ]),
   );
   parts.push(bullets('Past decisions', [vaultRule(vault)]));
-  parts.push(bullets('Helper models', [delegateRule(get)]));
+  parts.push(bullets('Helper models', [namedHelperRule(get), delegateRule(get)]));
   parts.push(bullets('Building', [get('PREFS_KUN') && KUN_RULE, get('PREFS_TEST_FIRST') && TEST_FIRST_RULE, get('PREFS_GLOSSARY_ADR') && GLOSSARY_RULE]));
   const checker = checkerPath && (/\s/.test(checkerPath) ? JSON.stringify(checkerPath) : checkerPath);
   // Workers run the checks their brief names, so the playbook's fresh reviewer (rule 4.7) is named here too.
@@ -599,8 +622,16 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
     get('PREFS_QUOTA') && 'Pause heavy work near a limit and say so.',
     habits &&
       'When a rule changes, change every copy of it in the same pass: each preference file, any dispatch or routing config, the installed skill and the template copy. A copy left behind keeps giving the old rule.',
+    namedHelperRule(get),
     delegateRule(get),
   ]);
+  // Only with the capable routing: the other routings pick models by their own rows, which this table would contradict.
+  if (routing === 'capable') {
+    (homes['models-and-research'] ??= []).push({
+      title: "Helper model table (Anthropic's own guidance, checked 26 Nov 2026)",
+      raw: HELPER_MODEL_TABLE,
+    });
+  }
   add('models-and-research', 'Briefing helpers', [
     get('PREFS_OWNERSHIP') &&
       'Brief a helper with one closed task, why it matters, and what comes back. How it finds the answer (sources, order, tools) is its call, and retrying a call that is safe to repeat needs no go-ahead.',
@@ -629,7 +660,8 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
   return homes;
 }
 
-const sectionText = ({ title, lines }) => `## ${title}\n\n${lines.map((l) => `- ${l}`).join('\n')}`;
+const bodyText = ({ lines, raw }) => raw ?? lines.map((l) => `- ${l}`).join('\n');
+const sectionText = (s) => `## ${s.title}\n\n${bodyText(s)}`;
 
 // The taste preset and private rules close the file, so they read as the user's own additions.
 function closingSections({ privateRules, tastePreset }) {
@@ -692,7 +724,7 @@ export function renderCaptain(get, opts = {}) {
     ...(homes.core ?? []).map(sectionText),
     ...Object.entries(PREFERENCE_SKILLS)
       .filter(([name]) => homes[name])
-      .map(([name, skill]) => `## ${skill.title}\n\n${homes[name].map((s) => `### ${s.title}\n\n${s.lines.map((l) => `- ${l}`).join('\n')}`).join('\n\n')}`),
+      .map(([name, skill]) => `## ${skill.title}\n\n${homes[name].map((s) => `### ${s.title}\n\n${bodyText(s)}`).join('\n\n')}`),
   ];
   return `# Working preferences\n\n${HEADER}\n\n${[...sections, ...closingSections(opts)].join('\n\n')}\n`;
 }
