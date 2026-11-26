@@ -32,6 +32,14 @@ const keep = { value: 'keep', label: 'keep (Claude Code default, or what you alr
 
 // Allow rules that let an agent merge a pull request without asking first (CLAUDE_ALLOW_PR_MERGE).
 export const PR_MERGE_RULES = ['Bash(gh pr merge:*)', 'Bash(gh-axi pr merge:*)'];
+
+// A helper started without a named model runs on this one, not on its parent's model. It is a backstop:
+// the models rules name a model for every helper. A value the person already set stays.
+export const DEFAULT_SUBAGENT_MODEL = 'claude-sonnet-5-5';
+export function setDefaultSubagentModel(s) {
+  s.env ??= {};
+  s.env.CLAUDE_CODE_SUBAGENT_MODEL ??= DEFAULT_SUBAGENT_MODEL;
+}
 const EFFORTS = ['low', 'medium', 'high', 'xhigh'];
 
 // "claude-opus-5-5=xhigh, claude-sonnet-5-5=low" -> { 'claude-opus-5-5': 'xhigh', ... }
@@ -343,6 +351,7 @@ export default {
             s.env ??= {};
             s.env.CLAUDE_CODE_FORCE_SESSION_PERSISTENCE = '1';
           } else if (persist === 'off' && s.env) delete s.env.CLAUDE_CODE_FORCE_SESSION_PERSISTENCE;
+          setDefaultSubagentModel(s);
           const window = String(ctx.get('CLAUDE_AUTOCOMPACT_WINDOW') || '').trim();
           if (window) {
             const tokens = Number(window);
@@ -352,7 +361,7 @@ export default {
             s.autoCompactWindow = tokens;
           }
         },
-        'model, effort, theme, permission mode, thinking summaries, Remote Control, view, auto-compact, spinner tips, notifications, feedback drafts, session persistence and the bypass prompt',
+        'model, effort, theme, permission mode, thinking summaries, Remote Control, view, auto-compact, spinner tips, notifications, feedback drafts, session persistence, the default helper model and the bypass prompt',
       ),
     );
 

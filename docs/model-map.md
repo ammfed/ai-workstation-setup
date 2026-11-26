@@ -54,6 +54,7 @@ or later.
 | Default model in `~/.claude/settings.json` (`model`) | claude-code | `CLAUDE_MODEL` | `opus` (Opus 5.5) |
 | Default effort in `~/.claude/settings.json` (`effortLevel`; it reaches Opus 5, Fable 5.1 and older models only) | claude-code | `CLAUDE_EFFORT` | `medium` |
 | Opus 5.5 effort a session starts at, in `~/.claude/settings.json` (`modelSettings`) | claude-code | `CLAUDE_MODEL_EFFORTS` | `claude-opus-5-5=medium` |
+| Model of a helper started without one (`CLAUDE_CODE_SUBAGENT_MODEL` in `env` of `~/.claude/settings.json`; a backstop, because the rules name a model for every helper; a value you set stays) | claude-code | none | `claude-sonnet-5-5` |
 | `reader` subagent in `~/.claude/agents/reader.md` (`model: haiku`, `effort: medium`, read-only tools) | claude-code | `CLAUDE_READER_AGENT` | yes; a reader you wrote is kept |
 | no-mistakes review model (`agent_config.claude` in `~/.no-mistakes/config.yaml`, or `$NM_HOME`) | agent-clis | `NO_MISTAKES_REVIEW_MODEL` | `claude-opus-5-5 medium` |
 | Example worker dispatch profiles (`config/crew-dispatch.json`) | firstmate | `FIRSTMATE_DISPATCH` | `capable` |

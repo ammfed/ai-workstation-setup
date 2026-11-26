@@ -145,6 +145,19 @@ test('building and the everyday habits are written in their sections, and each c
   assert.doesNotMatch(off, /End every reply with the next actions|"Check X"|A statement is a claim/);
 });
 
+test('every helper is named a model: the rule is in the skill and the worker brief, and goes with routing none', async () => {
+  const homes = await renderHomes();
+  const rule = /Name the model of every helper, subagent or workflow agent you start\. A helper with no model copies its parent's model and effort/;
+  assert.match(sectionOf(homes['models-and-research'], 'Models and effort'), rule);
+  assert.match(homes['models-and-research'], /size a fan-out to the work after checking `quota-axi`\. The machine default for an unnamed helper \(`CLAUDE_CODE_SUBAGENT_MODEL` in `~\/\.claude\/settings\.json`\) is a backstop only/);
+  assert.match(homes['models-and-research'], /task-type rules in the models-and-research skill/);
+  const ctx = await answer({ PREFS_TARGETS: 'claude,firstmate' });
+  assert.match(sectionOf(renderBriefInclude((key) => ctx.get(key)), 'Helper models'), rule);
+  const none = await render({ PREFS_MODEL_ROUTING: 'none' });
+  assert.doesNotMatch(none, /Name the model of every helper/);
+  assert.doesNotMatch(await render({ PREFS_QUOTA: 'no' }), /fan-out to the work after checking/);
+});
+
 test('ownership: the vendor sentence goes into worker briefs for code agents keep building, kept out of the user\'s own files, and one answer turns it all off', async () => {
   const homes = await renderHomes();
   const owner = sectionOf(homes['running-workers'], 'Ownership in briefs');

@@ -49,6 +49,15 @@ const GLOSSARY_RULE =
   'When the user asks about a term or a relationship, answer from the glossary and link to the file; if the answer was missing or wrong there, write it back in the same turn, so the answer never lives only in a chat. ' +
   "Record a decision that is hard to reverse, surprising and a real trade-off as a decision record (ADR) in `docs/adr/` beside the glossary, using the domain-modeling skill's ADR-FORMAT.md, and read the decision records in an area before changing it.";
 
+// Every helper gets a model named for it, picked from the task-type rows. Shared by the skill and the worker brief.
+function namedHelperRule(get) {
+  const routing = get('PREFS_MODEL_ROUTING');
+  if (!routing || routing === 'none') return '';
+  return `Name the model of every helper, subagent or workflow agent you start. A helper with no model copies its parent's model and effort, so an unnamed helper under an expensive parent runs expensive too. Pick each helper's model from the task-type rules in the models-and-research skill, never by habit, and size a fan-out to the work${
+    get('PREFS_QUOTA') ? ' after checking `quota-axi`' : ''
+  }. The machine default for an unnamed helper (\`CLAUDE_CODE_SUBAGENT_MODEL\` in \`~/.claude/settings.json\`) is a backstop only.`;
+}
+
 function delegateRule(get) {
   const cli = get('PREFS_DELEGATE_RETRIEVAL');
   if (!cli) return '';
@@ -103,7 +112,7 @@ export function renderBriefInclude(get, { checkerPath, privateRules, tastePreset
     ]),
   );
   parts.push(bullets('Past decisions', [vaultRule(vault)]));
-  parts.push(bullets('Helper models', [delegateRule(get)]));
+  parts.push(bullets('Helper models', [namedHelperRule(get), delegateRule(get)]));
   parts.push(bullets('Building', [get('PREFS_KUN') && KUN_RULE, get('PREFS_TEST_FIRST') && TEST_FIRST_RULE, get('PREFS_GLOSSARY_ADR') && GLOSSARY_RULE]));
   const checker = checkerPath && (/\s/.test(checkerPath) ? JSON.stringify(checkerPath) : checkerPath);
   // Workers run the checks their brief names, so the playbook's fresh reviewer (rule 4.7) is named here too.
@@ -599,6 +608,7 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
     get('PREFS_QUOTA') && 'Pause heavy work near a limit and say so.',
     habits &&
       'When a rule changes, change every copy of it in the same pass: each preference file, any dispatch or routing config, the installed skill and the template copy. A copy left behind keeps giving the old rule.',
+    namedHelperRule(get),
     delegateRule(get),
   ]);
   add('models-and-research', 'Briefing helpers', [
