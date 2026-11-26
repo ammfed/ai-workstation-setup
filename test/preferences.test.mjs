@@ -145,7 +145,7 @@ test('building and the everyday habits are written in their sections, and each c
   assert.doesNotMatch(off, /End every reply with the next actions|"Check X"|A statement is a claim/);
 });
 
-test('every helper is named a model: the rule is in the skill and the worker brief, and goes with routing none', async () => {
+test('every helper is named a model: the rule is in the skill and the worker brief, and only comes with the capable routing', async () => {
   const homes = await renderHomes();
   const rule = /Name the model of every helper, subagent or workflow agent you start\. A helper with no model copies its parent's model and effort/;
   assert.match(sectionOf(homes['models-and-research'], 'Models and effort'), rule);
@@ -156,6 +156,19 @@ test('every helper is named a model: the rule is in the skill and the worker bri
   const none = await render({ PREFS_MODEL_ROUTING: 'none' });
   assert.doesNotMatch(none, /Name the model of every helper/);
   assert.doesNotMatch(await render({ PREFS_QUOTA: 'no' }), /fan-out to the work after checking/);
+});
+
+test('models-and-research carries the helper model table with its sources, names Fable only for the user, and goes with routing none', async () => {
+  const homes = await renderHomes();
+  const text = homes['models-and-research'];
+  const table = sectionOf(text, "Helper model table (Anthropic's own guidance, checked 26 Nov 2026)");
+  for (const part of ['https://platform.claude.com/docs/en/about-claude/models/choosing-a-model', 'https://code.claude.com/docs/en/sub-agents', 'https://platform.claude.com/docs/en/models/overview', 'Fable 5.2 $8/$40', '| Fable 5.2, only when the user names it |', '| Sonnet 5.5 (CLAUDE_CODE_SUBAGENT_MODEL) |', 'none of these sources sets a number']) {
+    assert.ok(table.includes(part), part);
+  }
+  assert.doesNotMatch(table, /only when he names it/);
+  const ctx = await answer({ PREFS_TARGETS: 'claude,firstmate' });
+  assert.match(renderCaptain((key) => ctx.get(key), { cardsPath: CARDS }), /### Helper model table/);
+  for (const other of ['balanced', 'economical', 'none']) assert.doesNotMatch(await render({ PREFS_MODEL_ROUTING: other }), /Helper model table/, other);
 });
 
 test('ownership: the vendor sentence goes into worker briefs for code agents keep building, kept out of the user\'s own files, and one answer turns it all off', async () => {
@@ -399,7 +412,7 @@ test('each skill file has a name, a plain description that names its triggers, a
     const description = front.match(/^description: (.*)$/m)[1];
     assert.ok(description.length <= 1024 && /\bUse (before|for|when|whenever)\b/.test(description), `${name}: ${description}`);
     assert.ok(text.split('\n').length < 500, name);
-    assert.doesNotMatch(text, /^\|/m, `${name} has no tables`);
+    if (name !== 'models-and-research') assert.doesNotMatch(text, /^\|/m, `${name} has no tables`);
   }
 });
 
