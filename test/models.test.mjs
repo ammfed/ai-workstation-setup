@@ -383,7 +383,7 @@ test('the workflow-playbook skill points to the model rules and waits at a revie
   const skill = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
   const routing = skill.slice(skill.indexOf('**Match the model to the job.**'), skill.indexOf('2. **One complete brief.**'));
   assert.match(routing, /Follow the models-and-research skill for the model and effort of each job\./);
-  assert.match(routing, /Pick the model and effort for each job when it starts\. Never pin one model and effort for all work\./);
+  assert.doesNotMatch(routing, /Never pin one model/, 'the pick-per-job rule lives in the models-and-research skill only');
   assert.match(routing, /Without it: the default strong model at high effort for slides, games, any look or front-end design work, plans, specs, architecture, judging the quality of other work and a code bug hunt whose cause is unknown; the same model at medium effort for routine work/);
   assert.doesNotMatch(routing, /strongest model at low effort/);
   assert.doesNotMatch(routing, /\| Job \|/, 'the model table lives in the models-and-research skill only');
@@ -397,8 +397,9 @@ test('the workflow-playbook skill points to the model rules and waits at a revie
   assert.match(rules, /Opus 5\.5 at high effort[^\n]*code bug hunt whose cause is unknown/);
   assert.match(rules, /Never use extra-high or max effort unless the user names it/);
   assert.doesNotMatch(rules, /Give the hard work to Fable|Fable 5\.2 at low/);
-  assert.match(skill, /Change every copy of a rule at once/);
-  assert.match(skill, /Confirmed facts get no placeholders/);
+  assert.match(skill, /Change the rule in its one home\.\*\*\n   - Each rule lives in one file\. Every other file holds a one-line pointer to it, by skill and rule number or section\.\n   - When a rule changes, change it in its one home\./);
+  assert.doesNotMatch(skill, /every copy/);
+  assert.match(skill, /Confirmed facts get no placeholders\.\*\*\n   - Follow the writing-for-others skill's rule on confirmed facts/);
 
   const wait = skill.slice(skill.indexOf('2. **Never leave the next step empty'), skill.indexOf('3. **End every reply'));
   assert.match(wait, /stands by quietly for that answer: it does not prepare the next stage/);

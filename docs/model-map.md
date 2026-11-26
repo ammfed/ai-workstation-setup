@@ -37,9 +37,8 @@ or later.
    after a failed check. Work on Opus 5.5 medium re-runs once at high when the result is weak.
 4. Drop back to Opus 5.5 medium once the hard part (a plan, a proven cause) is done.
 5. Never set xhigh or max, or Fable, by rule. Use them only when you name them for a task.
-6. When a rule in this map changes, change every copy of it in the same pass: your preference
-   files, any dispatch or routing config, the installed skills and your copy of this template.
-   A copy left behind keeps giving the old rule.
+6. When a rule in this map changes, change it in its one home (the models-and-research skill).
+   Every other file holds only a pointer to it, so no copy is left behind giving the old rule.
 7. Brief the model the way its vendor's prompting guide says
    ([Opus 5.5](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5),
    [Fable 5.2](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2)).

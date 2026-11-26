@@ -603,7 +603,9 @@ test('the capture line sets once per project whether paperwork merges on green c
   const text = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
   const rule = text.slice(text.indexOf('8. **Set the review stakes once per project, at capture.**'), text.indexOf('## 3. Evidence and research'));
   assert.match(rule, /\*\*Merges:\*\* .*Paperwork merges when its checks pass \(notes, research, decision records, documents, prototypes\), or every merge waits for the owner's word/);
-  assert.match(rule, /Product code, sign-in, real data, a public repository and anything hard to undo always wait for the owner's word/);
+  // What always waits, and the one-line notice, live in the merge rule of working-preferences.md.
+  assert.match(rule, /What always waits for the owner's word, and the one-line notice for each automatic merge, follow the merge rule in working-preferences\.md \(Safety\)\./);
+  assert.doesNotMatch(rule, /Product code, sign-in, real data/);
   assert.match(rule, /This choice is the owner's alone.*Until the owner picks, every merge waits/s);
 });
 
@@ -637,7 +639,8 @@ test('the playbook loads Kun lightly: the route file at session start, the other
   const text = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
   const line = text.split('\n').find((l) => l.startsWith('- Load Kun lightly.'));
   assert.ok(line, 'the Kun paragraph has the light-load line');
-  assert.match(line, /At session start read `ENTRY\.md` only/);
+  // The ENTRY.md-only start itself lives in the Kun rule of working-preferences.md.
+  assert.match(line, /The `ENTRY\.md`-only start in working-preferences\.md holds even where the kun skill says to read all of its files\./);
   assert.match(line, /Open the tools list \(`TOOLS\.md`\) at capture and at improve/);
   assert.match(line, /Open the opinions file \(`OPINIONS\.md`\) only when a check needs Kun's view on a named question/);
   assert.match(line, /Never load the voice file \(`VOICE\.md`\) for this work/);
