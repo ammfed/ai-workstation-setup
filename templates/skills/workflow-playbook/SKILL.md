@@ -33,7 +33,7 @@ Phases 2 to 4 are the early phases. They run before anything is built, and the e
 
 Why: a spec written before real users try the prototype builds the owner's guess of their journey, and an agent walking the prototype as a user cannot show what a real user does.
 
-**Skills only the owner can start.** wayfinder, to-spec, to-tickets, to-questionnaire and teach start only when the owner types `/wayfinder`, `/to-spec`, `/to-tickets`, `/to-questionnaire` or `/teach`. An agent cannot start them. Until the owner types the command, the coordinator does that phase itself with the same output (the map, the spec, items with blockers, the questionnaire) and offers the command in one line.
+**Skills only the owner can start.** wayfinder, to-spec, to-tickets, to-questionnaire and teach start only when the owner types `/wayfinder`, `/to-spec`, `/to-tickets`, `/to-questionnaire` or `/teach`. Until then the coordinator opens the skill's file and follows it as the procedure, and the fleet's work queue is the tracker.
 
 Why: a phase that waits for a skill no agent can start stalls with nobody doing it.
 

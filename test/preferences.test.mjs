@@ -490,8 +490,8 @@ test('the route names each skill only the user can start only with the note that
   const building = sectionOf((await renderHomes({ PREFS_ROUTE: 'yes' }))['running-workers'], 'Building something new');
   const notes = {
     wayfinder: 'When the user types /wayfinder, wayfinder tracks',
-    'to-spec': 'Only the user starts to-spec, by typing /to-spec; until then write the spec yourself and offer /to-spec in one line.',
-    'to-tickets': 'Only the user starts to-tickets, by typing /to-tickets; until then cut the tickets yourself and offer /to-tickets in one line.',
+    'to-spec': 'Only the user starts to-spec, by typing /to-spec; until then open its skill file and follow it as the procedure.',
+    'to-tickets': "Only the user starts to-tickets, by typing /to-tickets; until then open its skill file and follow it as the procedure, with the fleet's work queue as the tracker.",
   };
   for (const [name, note] of Object.entries(notes)) {
     const count = (text) => (text.match(new RegExp(`(?<![\\w-])/?${name}(?![\\w-])`, 'g')) ?? []).length;
