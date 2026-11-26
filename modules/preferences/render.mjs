@@ -274,6 +274,7 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, reviewCheck
 
   const status = get('PREFS_STATUS');
   const days = get('PREFS_STALE_DAYS') || '2';
+  const buildCap = /^[1-9]\d*$/.test(String(get('PREFS_BUILD_CAP') ?? '').trim()) ? String(get('PREFS_BUILD_CAP')).trim() : '';
   const decisions = get('PREFS_DECISIONS');
   const cards = decisions === 'cards' || decisions === 'both';
   const allCards = cards && cardsPath && get('PREFS_PAGES_ALL_CARDS');
@@ -350,6 +351,8 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, reviewCheck
       'End every project reply with one plain line that says where the work is on the map, the next step, who takes it and when. Name the step in words, never as a count such as "step 3 of 6". Say when as an event or a day, not a clock time. When the user takes the next step, say exactly what they need to do and link to it.',
     get('PREFS_FINISH_FIRST') &&
       'Prefer finishing over expanding. Once something works, stop instead of proposing the next improvement, and suggest cutting scope at most once.',
+    buildCap &&
+      `Builds in progress are capped at ${buildCap}. When ${buildCap} builds are already in progress, a new build waits in the queue and starts when one finishes.`,
     get('PREFS_FINISH_FIRST') &&
       'State the case against a risky choice once, with the consequence named. If the user keeps it, go ahead and do not raise it again.',
   ]);

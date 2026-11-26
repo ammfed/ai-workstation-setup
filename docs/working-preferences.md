@@ -151,6 +151,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | `PREFS_RESEQUENCE` | yes | The agent reorders queued work by what blocks what without asking, then tells you the new order and why. |
 | `PREFS_ORIENT` | yes | Every project reply ends with one line that says where the work is on the map, the next step, who takes it and when. When the next step is yours, the line says exactly what you need to do and links to it. No step counters. |
 | `PREFS_FINISH_FIRST` | yes | Once something works, the agent stops instead of proposing the next improvement, suggests cutting scope at most once, and raises a risk once. |
+| `PREFS_BUILD_CAP` | 3 | The most builds in progress at once. When that many are already in progress, a new build waits in the queue and starts when one finishes. The playbook's capture phase points to this setting. `0` or empty means no limit. |
 
 ### AI and model use
 
@@ -236,6 +237,7 @@ Firstmate's `captain.md` holds every rule, wherever it lives here.
 | `PREFS_RESEQUENCE` | Work ordered by what blocks what finishes sooner. | status-and-away |
 | `PREFS_ORIENT` | You always know what comes next without asking. | Core |
 | `PREFS_FINISH_FIRST` | Finished work beats a growing list of improvements. | Core |
+| `PREFS_BUILD_CAP` | A fixed number of builds keeps the one reviewer from being the bottleneck. | Core |
 | `PREFS_MODEL_ROUTING`, `PREFS_QUOTA`, `PREFS_DELEGATE_*` | Quota is limited, and the wrong effort quietly lowers quality. | models-and-research (the helper rule also in worker briefs) |
 | `PREFS_RESEARCH_BROWSER` | Your own browser holds your accounts and tabs. | models-and-research |
 | `PREFS_SOURCE_QUALITY`, `PREFS_VERIFY_USER_CLAIMS`, `PREFS_LIVE_FACTS`, `PREFS_FINDINGS_TO_CHANGE` | Weak or stale sources make a strong claim look settled, and research that changes nothing was wasted. | models-and-research |
