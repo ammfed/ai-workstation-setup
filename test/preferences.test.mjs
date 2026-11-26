@@ -383,6 +383,18 @@ test('every project reply ends with where the work is, and it closes the reply t
   assert.match(await render({ PREFS_ORIENT: 'no' }), /End every reply with the next actions/);
 });
 
+test('the build cap is off until a number is set, then one rule names the number and the question', async () => {
+  assert.equal((await answer()).get('PREFS_BUILD_CAP'), '');
+  assert.doesNotMatch(await render(), /capped at/);
+  for (const bad of ['0', '-2', 'many', '2.5']) assert.doesNotMatch(await render({ PREFS_BUILD_CAP: bad }), /capped at/, bad);
+  const core = (await renderHomes({ PREFS_BUILD_CAP: '3' })).core;
+  assert.match(core, /Builds in progress are capped at 3\..*3 builds are already active, ask one question: what does this displace\. Park the displaced work with the trigger/);
+  const skill = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
+  assert.match(skill, /Check the build cap at capture[\s\S]*what does this displace[\s\S]*no limit/);
+  assert.match(fs.readFileSync(path.join(repoRoot, 'docs', 'working-preferences.md'), 'utf8'), /`PREFS_BUILD_CAP`/);
+  assert.match(fs.readFileSync(path.join(repoRoot, 'answers.example.env'), 'utf8'), /^PREFS_BUILD_CAP=$/m);
+});
+
 test('the core file stays short: 40 rules or fewer, under 80 lines and about 2,000 tokens, plain bullets under a few headings, and a pointer to each skill', async () => {
   const vault = { path: path.join(os.tmpdir(), 'vault'), scripts: true, search: true };
   const ctx = await answer({ PREFS_DELEGATE_RETRIEVAL: 'agy' });

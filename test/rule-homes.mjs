@@ -168,6 +168,7 @@ export const RULE_HOMES = [
   row('End every project reply with one plain line', 'core'),
   row('Prefer finishing over expanding', 'core'),
   row('State the case against a risky choice once', 'core'),
+  row('Builds in progress are capped at', 'core', ['Builds in progress are capped at'], { PREFS_BUILD_CAP: '3' }),
 
   // AI and model use
   row('Pick the model and effort for each task when it starts', MODELS),

@@ -16,7 +16,7 @@ Every piece of work runs through some of these ten phases, in this order. Each p
 
 | Phase | Route step | Goal | Leads | Owner | Hands to | The next phase starts when |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1. Capture | Plan | Write the idea down, judge whether it fits and when, pick the phases from the table below and set the review stakes once (rule 2.8) | The coordinator | wayfinder (owner starts it) | A map with every phase of the path queued as an item (rule 2.4) | The map is written. The first item has no blocker |
+| 1. Capture | Plan | Write the idea down, judge whether it fits and when, pick the phases from the table below and set the review stakes once (rule 2.8) and check the build cap (rule 2.9) | The coordinator | wayfinder (owner starts it) | A map with every phase of the path queued as an item (rule 2.4) | The map is written. The first item has no blocker |
 | 2. Requirements | Decide | Turn a vague goal into requirements the owner agrees with | A skill, in rounds with the owner | grilling, with domain-modeling in a repo | Requirements, and a glossary in a repo | The owner agrees to the last round (gate) |
 | 3. Does it already exist | Decide | Find products, tools or people that already do this | A research worker, beside phase 2 | research | A report and one card: build, reuse or stop | The card is answered in the next requirements round |
 | 4. Vision | Decide | Fix the destination and the test for which later ideas to accept | A skill, with the owner | vision | A vision file, once per project | The owner approves it. This closes the early phases gate |
@@ -193,6 +193,10 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
    - The owner may change the stakes at any time; an agent never lowers them on its own.
 
    Why: the full run costs time and usage limits that throwaway work does not repay, and a level set once stops each change from being argued again. Choosing it change by change is a guess an automatic router cannot make well.
+
+9. **Check the build cap at capture.** The cap is the build cap in the owner's working preferences. When it is set and that many builds are already active, ask one question before the new one starts: what does this displace. Park the displaced work with the trigger that brings it back. When the cap is empty, there is no limit and nothing is asked.
+
+   Why: the owner is the only reviewer, so their capacity limits how much can be open at once, and a new build above the cap takes attention from one already running.
 
 ## 3. Evidence and research
 

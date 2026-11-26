@@ -270,6 +270,12 @@ export default {
     yes('PREFS_RESEQUENCE', 'Ideas: let the agent reorder queued work by what blocks what, then tell you the new order?'),
     yes('PREFS_ORIENT', 'Ideas: end every project reply with one line on where the work is, the next step, who takes it and when?'),
     yes('PREFS_FINISH_FIRST', 'Ideas: once something works, stop instead of proposing the next improvement, and raise a risk once, not repeatedly?'),
+    {
+      key: 'PREFS_BUILD_CAP',
+      type: 'text',
+      message: 'Ideas: the most builds in progress at once (a whole number; empty means no limit)',
+      default: '',
+    },
 
     // AI and model use
     {
