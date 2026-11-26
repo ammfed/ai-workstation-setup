@@ -43,7 +43,7 @@
 .hk-tray button{font:inherit;font-size:14px;border:1px solid #E1E3E5;background:#fff;color:#1B1D21;border-radius:999px;padding:3px 10px;cursor:pointer}
 .hk-tray button:disabled{opacity:.45;cursor:not-allowed}
 .hk-tray button[aria-pressed="true"]{background:#F9F7ED;border-color:#B68A35;color:#7C5E24}
-.hk-tray .hk-send{background:#B68A35;border-color:#B68A35;color:#1B1D21}
+.hk-tray .hk-send{background:#8A6A2B;border-color:#8A6A2B;color:#fff}
 .hk-tray .hk-row{display:flex;gap:6px;flex-wrap:wrap}
 .hk-tray .hk-msg{color:#2F663C;font-size:14px;margin-top:6px}
 .hk-tray .hk-msg:empty{display:none}
