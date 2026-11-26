@@ -552,7 +552,7 @@ test('the stow reminder is on by default when Firstmate is picked', () => {
 test('the card template ships its fonts, colours, waiting strip and phone layout', () => {
   const html = fs.readFileSync(path.join(repoRoot, 'templates/preferences/decision-cards.html'), 'utf8');
   assert.match(html, /fonts\.googleapis\.com\/css2\?family=Inter:wght@600;700;800&family=Roboto\+Mono:wght@500&family=Roboto:wght@400;500;700/);
-  for (const colour of ['#EDEDED', '#B68A35', '#92722A', '#7C5E24', '#F9F7ED', '#1B1D21', '#232528', '#5F646D', '#E1E3E5', '#2F663C', '#F3FAF4', '#B2550B', '#FFFBEB']) {
+  for (const colour of ['#EDEDED', '#B68A35', '#7C5E24','#F9F7ED', '#1B1D21', '#232528', '#5F646D', '#E1E3E5', '#2F663C', '#F3FAF4', '#B2550B', '#FFFBEB']) {
     assert.ok(html.includes(colour), `missing ${colour}`);
   }
   assert.match(html, /--radius:16px/);
@@ -560,6 +560,38 @@ test('the card template ships its fonts, colours, waiting strip and phone layout
   assert.match(html, /@media \(max-width:719px\)/);
   assert.match(html, /previewsTall/);
   assert.match(html, /showModal\(\)/, 'a picture opens full size on tap');
+});
+
+// WCAG 2.2 contrast ratio of two #RGB or #RRGGBB colours (success criterion 1.4.3 asks 4.5 to 1 for text).
+function contrast(a, b) {
+  const lum = (hex) => {
+    const full = hex.length === 4 ? hex.slice(1).replace(/./g, '$&$&') : hex.slice(1);
+    const [r, g, bl] = full.match(/../g).map((x) => parseInt(x, 16) / 255).map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+test('the card template text on gold and the small gold labels reach 4.5 to 1 in both themes', () => {
+  const html = fs.readFileSync(path.join(repoRoot, 'templates/preferences/decision-cards.html'), 'utf8');
+  const kit = fs.readFileSync(path.join(repoRoot, 'templates/preferences/hide-kit.js'), 'utf8');
+  const themes = { light: html.match(/:root\{([^}]*)\}/)[1], dark: html.match(/:root\[data-theme="dark"\]\{([^}]*)\}/)[1] };
+  for (const [name, block] of Object.entries(themes)) {
+    const token = (t) => block.match(new RegExp(`--${t}:(#[0-9A-Fa-f]{6})`))[1];
+    const pairs = [
+      ['button text on gold', token('on-accent'), token('accent')],
+      ['small label on the page', token('accent-ink'), token('bg')],
+      ['small label on a card', token('accent-ink'), token('panel')],
+    ];
+    for (const [what, fg, bg] of pairs) {
+      assert.ok(contrast(fg, bg) >= 4.5, `${name}: ${what} ${fg} on ${bg} is ${contrast(fg, bg).toFixed(2)} to 1`);
+    }
+  }
+  for (const [name, rule] of [['light', /^\.hk-tray \.hk-send\{background:(#\w{3,6});[^}]*color:(#\w{3,6})\}/m], ['dark', /^:root\[data-theme="dark"\] \.hk-tray \.hk-send\{background:(#\w{3,6});[^}]*color:(#\w{3,6})\}/m]]) {
+    const [, bg, fg] = kit.match(rule);
+    assert.ok(contrast(fg, bg) >= 4.5, `${name}: the hide tray's send button ${fg} on ${bg} is ${contrast(fg, bg).toFixed(2)} to 1`);
+  }
 });
 
 test('the card template labels its note box and hides an empty waiting strip', () => {
