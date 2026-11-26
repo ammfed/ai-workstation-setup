@@ -4,6 +4,7 @@
 // Run: node --test test/second-brain.test.mjs
 
 import assert from 'node:assert/strict';
+import { backupsOf } from './backups-helper.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -565,6 +566,8 @@ test('claude files: a rules file shipped by PR 56 or PR 59 is replaced on a reru
       const out = (await claudeFilesInto(home, { VAULT_OUTSIDE_MODELS: outside }, clone)).out;
       assert.match(out, /replaced .*rules[\\/]second-brain\.md \(it was an older version this setup shipped\)/, outside);
       assert.match(fs.readFileSync(rulesFile, 'utf8'), /Trust the newest dated line/);
+      assert.ok(backupsOf(home, rulesFile).length > 0, 'the old file is backed up');
+      assert.ok(!fs.readdirSync(path.dirname(rulesFile)).some((f) => f.includes('.bak-')), 'the rules folder holds no backup');
 
       // A local edit to an old copy is left alone.
       fs.rmSync(path.join(home, '.config'), { recursive: true, force: true });
@@ -573,7 +576,6 @@ test('claude files: a rules file shipped by PR 56 or PR 59 is replaced on a reru
       assert.match(kept, /second-brain\.md exists with different content \(a local edit/);
       assert.match(fs.readFileSync(rulesFile, 'utf8'), /My own line/);
     }
-    assert.ok(fs.readdirSync(path.dirname(rulesFile)).some((f) => f.startsWith('second-brain.md.bak-')), 'the old file is backed up');
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
     fs.rmSync(tmp, { recursive: true, force: true });

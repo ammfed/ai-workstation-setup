@@ -3,6 +3,7 @@
 // Run: node --test test/progress.test.mjs
 
 import assert from 'node:assert/strict';
+import { backupsOf } from './backups-helper.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -157,9 +158,9 @@ test('a setup-notes.md the setup did not write is backed up; a dry run writes on
   fs.writeFileSync(own, 'my own notes\n');
   const ctx = new Context({ platform: detectPlatform(), dryRun: false, interactive: true, answers: new Map(), prompter: null, repoRoot });
   fs.closeSync(openNotes(ctx).fd);
-  const backups = fs.readdirSync(home).filter((f) => f.startsWith(`${NOTES_FILE}.bak-`));
+  const backups = backupsOf(home, own);
   assert.equal(backups.length, 1);
-  assert.equal(fs.readFileSync(path.join(home, backups[0]), 'utf8'), 'my own notes\n');
+  assert.equal(fs.readFileSync(backups[0], 'utf8'), 'my own notes\n');
 
   const before = fs.readFileSync(own, 'utf8');
   const dry = new Context({ platform: detectPlatform(), dryRun: true, interactive: true, answers: new Map(), prompter: null, repoRoot });
