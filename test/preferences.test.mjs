@@ -19,7 +19,7 @@ import firstmate from '../modules/firstmate/module.mjs';
 import preferences from '../modules/preferences/module.mjs';
 import { parsePrivateRules } from '../modules/preferences/private-rules.mjs';
 import { BRIEF_BLOCK_END, BRIEF_BLOCK_START, OWNERSHIP_SENTENCE, PREFERENCE_SKILLS, briefCopies, mergeBriefBlock, renderBriefInclude, renderCaptain, renderCaptainShared, renderPreferenceSkills, renderPreferences } from '../modules/preferences/render.mjs';
-import { ALL_ON, RULE_HOMES } from './rule-homes.mjs';
+import { ALL_ON, PLAYBOOK_HOMES, RULE_HOMES } from './rule-homes.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CARDS = path.join(os.tmpdir(), 'decision-cards.html');
@@ -359,10 +359,10 @@ test('the capable model rules: effort picked per task, Opus 5.5 high for design,
   assert.doesNotMatch(await render({ PREFS_MODEL_ROUTING: 'none' }), /Pick the model and effort for each task/);
 });
 
-test('a rule change reaches every copy, and a confirmed fact is never a placeholder', async () => {
+test('a rule changes in its one home, and a confirmed fact is never a placeholder', async () => {
   const homes = await renderHomes();
-  assert.match(homes['models-and-research'], /When a rule changes, change every copy of it in the same pass: each preference file, any dispatch or routing config, the installed skill and the template copy\. A copy left behind keeps giving the old rule\./);
-  assert.match(homes['writing-for-others'], /When a fact is confirmed, write the fact itself, never a placeholder for it\./);
+  assert.match(homes['models-and-research'], /When a rule changes, change it in its one home; every other file holds only a pointer to it \(workflow-playbook rule 9\.4\)\./);
+  assert.match(homes['writing-for-others'], /When a fact is confirmed \(a name, a date, a figure, a link\), write the fact itself, never a placeholder for it\. Keep a placeholder only for a fact that is still open, and list it as open\./);
 });
 
 test('a fleet checks live state, keeps work moving, and names windows by their labels; a deadline never skips a check', async () => {
@@ -465,6 +465,63 @@ test('every rule lives in exactly one home, as test/rule-homes.mjs lists, so the
   assert.ok(all.core.some((b) => b.startsWith('End every project reply with one plain line')));
 });
 
+// A sentence is a pointer when it names a home other than its own file: a preference skill,
+// working-preferences.md, the playbook or one of its files, or a playbook rule or section number
+// outside SKILL.md. A "Without it:" bullet is the playbook's stand-in for a missing preference skill.
+function ruleSentences(home, text) {
+  const others = [...Object.keys(PREFERENCE_SKILLS), 'working-preferences.md', 'workflow-playbook', 'playbook', ...PLAYBOOK_HOMES].filter((n) => n !== home);
+  const pointer = (s) => others.some((n) => s.includes(n)) || (home !== 'SKILL.md' && /\b(rule|section) \d/.test(s));
+  const body = text.replace(/^---\n[\s\S]*?\n---\n/, '');
+  const start = body.indexOf('\n## ');
+  return body
+    .slice(start === -1 ? 0 : start)
+    .split('\n')
+    .filter((l) => !l.startsWith('#'))
+    .map((l) => l.replace(/^\s*(?:[-*]|\d+\.)\s+/, ''))
+    .filter((l) => !/^Without it:/.test(l))
+    .flatMap((l) => l.split(/(?<=[.!?:])\s+(?=[A-Z"])/))
+    .filter((s) => !pointer(s));
+}
+
+// Two homes repeat a rule when one sentence in each shares a run of RUN words, with "owner" read as
+// "user" (the playbook's word and the preferences' word for the same person). Nine words clear
+// stock phrases such as "retrying a call that is safe to repeat" and catch a copied sentence.
+// STOCK lists the longer phrases that two different rules may share; each is dropped first.
+const RUN = 9;
+const STOCK = ['carry on with the work that does not depend on it'];
+function repeatedSentences(homes) {
+  const words = (s) => STOCK.reduce((t, p) => t.replaceAll(p, ' '), s.toLowerCase().replace(/\bowner\b/g, 'user').replace(/[^a-z0-9]+/g, ' ')).trim().split(' ').filter(Boolean);
+  const seen = new Map();
+  const found = new Set();
+  for (const [home, text] of Object.entries(homes)) {
+    for (const sentence of ruleSentences(home, text)) {
+      const w = words(sentence);
+      for (let i = 0; i + RUN <= w.length; i++) {
+        const key = w.slice(i, i + RUN).join(' ');
+        const first = seen.get(key);
+        if (!first) seen.set(key, { home, sentence });
+        else if (first.home !== home) found.add(`${first.home}: ${first.sentence}\n  ${home}: ${sentence}`);
+      }
+    }
+  }
+  return [...found];
+}
+
+test('each rule sentence lives in one home: no preference file and no playbook file repeats another', async () => {
+  const yes = Object.fromEntries(preferences.questions.filter((q) => q.type === 'confirm').map((q) => [q.key, 'yes']));
+  const playbook = path.join(repoRoot, 'templates', 'skills', 'workflow-playbook');
+  const pb = Object.fromEntries(PLAYBOOK_HOMES.map((f) => [f, fs.readFileSync(path.join(playbook, f), 'utf8')]));
+  const answers = [{}, ...new Map(RULE_HOMES.filter((r) => r.when).map((r) => [JSON.stringify(r.when), r.when])).values()];
+  for (const given of answers) {
+    const { core, ...skills } = await renderHomes({ ...yes, ...ALL_ON, ...given });
+    const repeats = repeatedSentences({ 'working-preferences.md': core, ...skills, ...pb });
+    assert.deepEqual(repeats, [], `under ${JSON.stringify(given)}:\n${repeats.join('\n')}`);
+  }
+  // The check fails on a copy: a playbook rule written again in a preference skill is caught.
+  const copied = { ...pb, 'review-pages': '## Copy\n\n- Add the next checkpoint only when the user says the next stage is good.\n' };
+  assert.equal(repeatedSentences(copied).length, 1);
+});
+
 test('captain.md holds the core rules and every skill\'s rules in one file, with no pointers to skills', async () => {
   const ctx = await answer();
   const get = (key) => ctx.get(key);
@@ -494,7 +551,7 @@ test('the skills are written only with the claude target', { skip: process.platf
 
 test('the route starts a map at once for an effort over several sessions, and wayfinder tracks it on request', async () => {
   const building = sectionOf((await renderHomes({ PREFS_ROUTE: 'yes' }))['running-workers'], 'Building something new');
-  assert.match(building, /If the effort takes more than one session, start a map at once without being asked and show it\./);
+  assert.match(building, /If the effort takes more than one session, start the map that workflow-playbook rule 2\.1 describes, without being asked, and show it\./);
   assert.match(building, /When the user types \/wayfinder, wayfinder tracks the map as tickets\./);
 });
 

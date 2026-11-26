@@ -388,7 +388,8 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, reviewCheck
     get('PREFS_OUTWARD_AS_USER') &&
       'Anything that goes to other people (documents, emails, pull request text, published pages) is written as the user, in their professional voice.',
     get('PREFS_OUTWARD_AS_USER') && 'Leave out agent and tooling labels, internal ids, source-type tags and speaker notes.',
-    habits && 'When a fact is confirmed, write the fact itself, never a placeholder for it.',
+    habits &&
+      'When a fact is confirmed (a name, a date, a figure, a link), write the fact itself, never a placeholder for it. Keep a placeholder only for a fact that is still open, and list it as open.',
     get('PREFS_NATURAL_TRANSLATION') &&
       'When writing in another language, write it the way a native speaker in that field would, with the terms they actually use. Never translate literally from English.',
     get('PREFS_WRITING_PRINCIPLES') && 'Lead with the real point.',
@@ -557,10 +558,11 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, reviewCheck
       `In a brief for code the agents build and keep building (this setup's own repositories, a prototype, a tool or product the user runs with agents), include this sentence word for word: "${OWNERSHIP_SENTENCE}" Without it a worker adds to the existing structure, even repeating code, and reports nearby problems instead of fixing them.`,
     own &&
       "Leave the sentence out, and say the change should stay small, where the user or someone else owns what is changed: the user's hand-written files (answers files, private rules, saved memory), the notes vault, a client's or another team's repository, upstream tools, and a small fix the user wants changed as little as possible. A scope rule elsewhere in the brief does not cancel the sentence, so leaving it out is the only way to turn it off.",
+    // The core file holds the list of steps that need no go-ahead when it is written; point to it then.
     own &&
-      'Name what the worker decides on its own (the shape of the code, the order of the work, its tools and method) and the routine steps that need no go-ahead (retrying a call that is safe to repeat, fixing a bug its change exposes, merging repeated code in code it owns, adding tests, updating docs its change made wrong). A general "act freely" does nothing; named steps do.',
+      `Name what the worker decides on its own (the shape of the code, the order of the work, its tools and method) and the routine steps that need no go-ahead (${act ? 'the list under Decisions in working-preferences.md' : 'retrying a call that is safe to repeat, fixing a bug its change exposes, merging repeated code in code it owns, adding tests, updating docs its change made wrong'}). A general "act freely" does nothing; named steps do.`,
     own &&
-      "Before a worker's pull request is called ready, read its diff, not only its summary. A worker that owns the code makes changes nobody asked for (mostly tests and docs), sometimes changes how an existing feature behaves, and often leaves small changes out of its summary.",
+      "Ask the worker's report to list every change, small ones too, with any change to how an existing feature behaves on its own line. Before a worker's pull request is called ready, read its diff, not only its summary. A worker that owns the code makes changes nobody asked for (mostly tests and docs), sometimes changes how an existing feature behaves, and often leaves small changes out of its summary.",
   ]);
   add('running-workers', 'Building something new', [
     get('PREFS_BUILD_WHOLE_GOAL') &&
@@ -570,7 +572,7 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, reviewCheck
     get('PREFS_BUILD_WHOLE_GOAL') && 'Run the full validation pipeline once the first complete pass exists, not on every step.',
     get('PREFS_ROUTE') &&
       'Take a software project (building or changing an app, a tool or a codebase) through six steps, each with its skill when installed: ' +
-        '1 Plan: write the idea down, judge fit and timing, and say so in one line. If the effort takes more than one session, start a map at once without being asked and show it. When the user types /wayfinder, wayfinder tracks the map as tickets. ' +
+        '1 Plan: write the idea down, judge fit and timing, and say so in one line. If the effort takes more than one session, start the map that workflow-playbook rule 2.1 describes, without being asked, and show it. When the user types /wayfinder, wayfinder tracks the map as tickets. ' +
         '2 Decide: settle the open decisions in rounds of questions and record the answers (grilling, with domain-modeling for the glossary and decision records). ' +
         '3 Prototype: write a spec that names the test seams, with a throwaway prototype when the look or flow needs judging, and get it approved before building (prototype). Only the user starts to-spec, by typing /to-spec; until then open its skill file and follow it as the procedure. ' +
         '4 Breakdown: cut a spec too big for one change into tickets with their blocking edges. Only the user starts to-tickets, by typing /to-tickets; until then open its skill file and follow it as the procedure, with the fleet\'s work queue as the tracker. ' +
@@ -629,7 +631,7 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, reviewCheck
     get('PREFS_QUOTA') && 'Treat subscription limits as scarce. Check them with `quota-axi` before heavy or parallel work, and take the cheapest path that still answers.',
     get('PREFS_QUOTA') && 'Pause heavy work near a limit and say so.',
     habits &&
-      'When a rule changes, change every copy of it in the same pass: each preference file, any dispatch or routing config, the installed skill and the template copy. A copy left behind keeps giving the old rule.',
+      'When a rule changes, change it in its one home; every other file holds only a pointer to it (workflow-playbook rule 9.4).',
     namedHelperRule(get),
     delegateRule(get),
   ]);

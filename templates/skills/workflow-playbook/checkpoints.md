@@ -57,7 +57,7 @@ Start here when the owner has approved a walk-through but each new note changes 
     Prompt: "Pause. Bring all my feedback into one rules list. Show the source of each rule and list the conflicts in a table. Then agree on the rules with me before you start again."
 21. **Study the pattern the owner points to.** Before changing the rules list, study the pattern as described in rule 3.9. Check our own screens at the target sizes (step 18).
     Prompt: "I like how [product] handles [pattern]. Find out what it is, how and why they use it, and whether it solves [problem] here. Adapt it, do not copy it."
-22. **Check every direction online.** Check each direction in the rules list as described in rule 3.8. If a source disagrees with the owner, show both options on the alignment page.
+22. **Check every direction online.** Check each direction in the rules list as described in rule 3.8. If a source disagrees with the owner, show both options on the alignment page (rule 3.8).
     Prompt: "Check my direction online against design systems, usability research and W3C standards. If they disagree with me, show me both options."
 23. **Draw sketches from one script and one words file.** Draw grey sketches that show shapes, not colours. Draw each screen at the target size, at a smaller size and at a larger size. If the product supports a right to left language, draw those layouts too. Keep all sketch text in one words file that one script reads. Then one wording change can update every sketch.
     Prompt: "Sketch each screen in grey at [three sizes] and in right to left layouts where needed. Keep all the words in one file, so one change updates every sketch."

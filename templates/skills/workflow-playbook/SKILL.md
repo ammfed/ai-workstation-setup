@@ -39,10 +39,9 @@ Why: a phase that waits for a skill no agent can start stalls with nobody doing 
 
 **Kun supervises every phase.** The kun skill (`/kun`) supervises the whole life cycle.
 
-- Run `/kun` once per session, at the start of real work. Name the kind of work and follow the route Kun's `ENTRY.md` gives for it (research, planning, reproduction, guardrails, implementation, validation).
-- Load Kun lightly. At session start read `ENTRY.md` only, even where the kun skill says to read all of its files. Open the tools list (`TOOLS.md`) at capture and at improve, where the check table names it. Open the opinions file (`OPINIONS.md`) only when a check needs Kun's view on a named question. Never load the voice file (`VOICE.md`) for this work.
+- Run `/kun` when and as the "Before you start" rule in working-preferences.md says, and follow the route Kun's `ENTRY.md` gives (research, planning, reproduction, guardrails, implementation, validation).
+- Load Kun lightly. The `ENTRY.md`-only start in working-preferences.md holds even where the kun skill says to read all of its files. Open the tools list (`TOOLS.md`) at capture and at improve, where the check table names it. Open the opinions file (`OPINIONS.md`) only when a check needs Kun's view on a named question. Never load the voice file (`VOICE.md`) for this work.
 - At the start of each phase and again before its gate, check the phase's row below against that load.
-- Run `/kun` again only in a new session or after compaction.
 - A check is a pass the agent runs, not a page and not a question to the owner.
 - A finding that changes the plan goes on the phase's outcomes page.
 - Kun fills the gaps this playbook leaves. When two sources of rules disagree, the first in this order wins, and the conflict goes on that page too:
@@ -170,10 +169,7 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
 
    Why: an empty next step stalls the work, preparation made before the answer is often redone when the answer changes it, and a stage started before approval may have to be done again.
 3. **End every reply with where the work is.**
-   - End each project reply with one plain line that says where the work is on the map, the next step, who takes it and when. For example: "Where we are: concepts are on the review page. Next: you answer the cards, then I offer the layout options."
-   - Name the step in words, not as a count such as "step 3 of 6".
-   - Say when as an event or a day, not a clock time.
-   - When the owner takes the next step, say exactly what they need to do and link to it.
+   - Follow the map-line rule in working-preferences.md (Focus and priorities). For example: "Where we are: concepts are on the review page. Next: you answer the cards, then I offer the layout options."
 
    Why: the owner always knows what comes next without asking, and a step count gives a number but does not say what to do.
 4. **Queue the whole path at the start.**
@@ -205,8 +201,7 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
    - When a project moves up (a prototype becomes the product, private notes are shared), say so in the status and switch it to the full run before the next change ships. A prototype that becomes the product gets the full run in phase 7.
    - The owner may change the stakes at any time; an agent never lowers them on its own.
    - **Merges:** the capture line also says one of two things. Paperwork merges when its checks pass (notes, research, decision records, documents, prototypes), or every merge waits for the owner's word.
-     Product code, sign-in, real data, a public repository and anything hard to undo always wait for the owner's word.
-     Each automatic merge is told to the owner in one line.
+     What always waits for the owner's word, and the one-line notice for each automatic merge, follow the merge rule in working-preferences.md (Safety).
      This choice is the owner's alone, made as a card the first time the project's capture line is shown. Until the owner picks, every merge waits for the owner's word.
 
    Why: the full run costs time and usage limits that throwaway work does not repay, and a level set once stops each change from being argued again. Choosing it change by change is a guess an automatic router cannot make well. A merge permission given again for every small paperwork change costs the owner a word each time and protects nothing.
@@ -279,8 +274,7 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
    Why: research that waits to be requested comes too late, a stage that does not name its research rests on a guess, and research with no bound grows until it buries the decision it was for.
 7. **Use trusted sources.**
    - Use usability research groups, design systems, standards bodies such as the W3C, and official documentation.
-   - Name the type of each source.
-   - Skip blogs and content farms.
+   - Name source types and skip weak sources the way the models-and-research skill (Research) says.
 
    Why: a weak source makes a strong claim look settled.
 8. **Check the owner's direction online.**
@@ -297,9 +291,7 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
 
    Why: a pattern copied without its reasons brings the other product's problems with it.
 10. **Check tools before recommending them.**
-    - Research a tool before installing it.
-    - Before giving advice about a tool or purchase, check the vendor's pages again that day.
-    - Give only current examples from a live ranking checked that day, and include the date.
+    - Follow the models-and-research skill (Research) before installing, recommending or buying a tool.
 
     Why: tools, prices and rankings change every month, and memory goes out of date.
 
@@ -312,13 +304,11 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
 2. **Build, open and send the page the way the review-pages skill says.**
    - That skill holds the card template, the layout, the "Based on" line, the screenshot checks, and when to open and send the link.
    - Without it: one card at a time, each with one decision, a picture where it helps, little text and clear choices. End each card with a short "Based on" line that names the types of sources behind it.
-   - Every card but the first, and the recap, has a Back button that returns with the pick and note filled in.
    - At every stage end, send a short results page: what was found, what was decided and by whom, and what is still open.
 
    Why: page rules kept in two places drift apart, and the owner then gets pages built two ways.
 3. **Every element has a reason.**
-   - Each element on a page or screen helps someone decide or act.
-   - Remove filler text, captions and decoration.
+   - Follow `building.md` rule 22 on every page and screen.
 
    Why: anything without a reason makes the owner read instead of see.
 4. **Present stakeholder pages live.**
@@ -328,9 +318,8 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
 
    Why: answers given in the room are recorded at once, and the summary goes straight into the meeting notes.
 5. **Check the page before sharing it.**
-   - Run the review-pages skill's screenshot checks, at the owner's target screen size first (checkpoints.md, step 18).
+   - Run the review-pages skill's checks (the screenshots and the Back button), at the owner's target screen size first (checkpoints.md, step 18).
    - Then open the hosted page itself. Check that it loads, has no answers yet and includes every source it cites.
-   - Click Back on a middle card. Check that the previous card comes back with its pick and note.
    - Only then tell the owner it is ready.
 
    Why: a page marked ready that is broken or already answered wastes a round.
@@ -344,7 +333,7 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
    | Outcomes page | The end of each phase | What was found, what was decided and by whom, what it means, what is still open | Next, or a note |
 
    - What only the owner can judge (taste, look and feel) is never graded by an agent. It goes on a card with a recommendation.
-   - When several pages are ready at once, hold them, check them against each other (each question asked once, no clashing recommendations, one set of names) and hand them over together in the order to take them.
+   - When several pages are ready at once, follow the review-pages skill (Opening and sending).
    - A page for a gate goes alone.
 
    Why: a few fixed review points tell the owner when they are needed, and everything between them can run without waiting.
@@ -358,8 +347,7 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
 
    Why: each check catches a failure the owner would otherwise find first, and the owner's time goes to decisions, not to finding mistakes.
 8. **Leave an open page alone.**
-   - While the owner has a page open and has not sent or ended it, keep its file as it is.
-   - Queue the change, and make it after the owner sends or ends the page.
+   - Follow the review-pages skill's rule on an open page (Opening and sending).
 
    Why: the page reloads when its file changes, and the reload can wipe what the owner is typing.
 
@@ -368,7 +356,7 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
 1. **Check before you ask.**
    - Search the owner's earlier rulings and the stated goal first. If the answer is there, act and tell the owner in one line.
    - Ask only about taste, intent, risk, money or people, and always give a recommendation.
-   - When asking in chat, use a structured question: one clear question at a time, a small sketch of each option, and the recommended option first.
+   - When asking in chat, follow the question-tool rule in working-preferences.md (Decisions).
 
    Why: most questions are already answered, and each extra question costs the owner attention.
 2. **Keep work moving.**
@@ -379,11 +367,10 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
 
    Why: asking for approval on things the owner cannot judge wastes their time, and widening a pass changes things they did not choose.
 3. **A round reaches the owner one question at a time.**
-   - A round decides what is asked now: the open questions that can be answered now, with facts looked up instead of asked.
+   - What a round asks follows the grilling rule in working-preferences.md (Decisions).
    - How it reaches the owner is separate: one question or one card at a time, each with a recommendation, worded so that "yes" takes the recommendation. Put what is already settled first.
    - In chat, use the question tool, never a numbered list of questions.
    - On a page, the round is one page from the card template, its cards shown one at a time, with one send at the end.
-   - Ask the next round only after the answers.
 
    Why: a list of questions makes the owner hunt for the one to answer, and a round that asks what is not yet answerable wastes a turn.
 
@@ -397,7 +384,7 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
    Why: the agent that wrote the text cannot hear how it sounds, and a bare list of strings gets a shallow answer.
 2. **Plain words.**
    - Short sentences, everyday words, one word for one thing.
-   - Anything others will read is written as the owner, with no agent or crew wording, internal codes or citations.
+   - Anything others will read follows the writing-for-others skill.
 
    Why: jargon stalls decisions, and outsiders do not know or care about the agents.
 3. **Check names from speech.** The owner often dictates, and speech to text can change names and terms.
@@ -407,8 +394,7 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
 
    Why: a misheard name that reaches a page or a rule spreads to every later stage.
 4. **Confirmed facts get no placeholders.**
-   - When a fact is confirmed (a name, a date, a figure, a link), write the fact itself into the page, deck or document.
-   - Keep a placeholder only for a fact that is still open, and list it as open.
+   - Follow the writing-for-others skill's rule on confirmed facts, in every page, deck or document.
 
    Why: a placeholder for a known fact looks unfinished to the owner and can ship by mistake.
 
@@ -416,19 +402,15 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
 
 1. **Match the model to the job.**
    - Follow the models-and-research skill for the model and effort of each job.
-   - Pick the model and effort for each job when it starts. Never pin one model and effort for all work.
-   - Without it: the default strong model at high effort for slides, games, any look or front-end design work, plans, specs, architecture, judging the quality of other work and a code bug hunt whose cause is unknown; the same model at medium effort for routine work (building or fixing to a settled spec, scouts, ordinary audits, documents, pages, polish of a settled look and pull request reviews); and a faster model for small, clear tasks and bulk reading.
-   - Give each helper one task, and check its work yourself.
-   - Use a model above these only when the owner names it for a task. Never set extra-high or max effort by rule.
-   - A coordinator running at a lower effort than these rules pick never writes the plan itself. It hands planning to a worker at the right effort and checks the effort that actually started.
+   - Without it: the default strong model at high effort for slides, games, any look or front-end design work, plans, specs, architecture, judging the quality of other work and a code bug hunt whose cause is unknown; the same model at medium effort for routine work (building or fixing to a settled spec, scouts, ordinary audits, documents, pages, polish of a settled look and pull request reviews); and a faster model for small, clear tasks and bulk reading. Give each helper one task, and check its work yourself. Use a model above these only when the owner names it for a task. Never set extra-high or max effort by rule. A coordinator running at a lower effort than these rules pick never writes the plan itself. It hands planning to a worker at the right effort and checks the effort that actually started.
 
    Why: quota is limited, planning at the wrong effort quietly lowers the quality of everything built on it, and a model table kept in two places drifts apart.
 2. **One complete brief.**
    - Each worker gets one brief: the owner's exact words, the whole goal, every earlier report and version (not a chosen subset), the current rulings, the tools ruled out, and the finish line.
-   - Name the phase skill or skills the work needs, taken from the phase table at the top (its Owner column), and tell the worker to load them before it starts.
+   - Name the phase skills the way the running-workers skill (Briefing and landing) says, taken from the phase table at the top (its Owner column).
    - Never drip steps.
 
-   Why: step-by-step prompts make a builder loop on details and miss the main idea, and a partial inventory hides earlier work. A worker also loads a phase skill only when its brief names it: an audit found build, prototype and bug workers almost never loaded theirs unprompted.
+   Why: step-by-step prompts make a builder loop on details and miss the main idea, and a partial inventory hides earlier work. An audit found build, prototype and bug workers almost never loaded their phase skill unprompted.
 3. **Standing lines in every build brief.**
    - Each build item (phase 7) names the approved prototype page it builds.
    - A spec with several items builds on one integration branch. An item starts when its blockers have merged into that branch.
@@ -437,13 +419,9 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
 
    Why: a worker that builds from a description instead of the approved page drifts from it, items merged one by one into the main branch clash late, and a reviewer who cannot see the change or its risk either waves it through or holds it too long.
 4. **Give the worker the code and the room.**
-   - In a brief for code the agents build and keep building (this setup's repositories, a prototype, a tool or product the owner runs with agents), include the vendor's ownership sentence word for word: "This codebase is yours: what it's for and how it's built are your call, and you'll keep building on it."
-   - Leave it out, and say the change should stay small, where the owner or someone else owns what is changed: the owner's hand-written files and saved memory, the notes vault, a client's or another team's repository, upstream tools, and a small fix the owner wants changed as little as possible.
-   - Name what the worker decides on its own (the shape of the code, the order of the work, its tools and method) and the steps that need no go-ahead: retrying a call that is safe to repeat, fixing a bug its change exposes, merging repeated code in code it owns, adding tests, and updating docs its change made wrong.
-   - Name the stops you want (nothing can move without the owner, or a blocker someone put there on purpose). Ask the worker to work through ordinary errors, timeouts and failing tools.
-   - Ask its report to list every change, small ones too, with any change to how an existing feature behaves on its own line. Review the diff, not only the summary.
+   - Follow the running-workers skill: its "Ownership in briefs" section for the ownership sentence, what the worker decides and the report, and its rule on the stops in a brief for a long task.
 
-   Why: a worker told nothing about ownership adds to the structure it finds, even repeating code, and reports nearby problems instead of fixing them. The sentence changes that, and a scope rule elsewhere does not cancel it, so leaving it out is the only off switch. A general "act freely" changes nothing, while named steps do. An owner also makes changes nobody asked for and leaves small ones out of its summary, so the list and the diff keep them visible.
+   Why: a worker told nothing about ownership or its stops keeps the structure it finds and stops early, and brief rules kept in two places drift apart.
 
 ## 8. Memory and status
 
@@ -484,9 +462,9 @@ This section is phase 10. It keeps the way of working, and this playbook, curren
    - Save the session's lessons and the owner's rulings (rule 8.1) with the stow skill when it is installed, then compact.
 
    Why: compacting in the middle of a step loses the half-done work, and compacting before a save loses what the owner taught.
-4. **Change every copy of a rule at once.**
-   - When a rule changes, change every copy of it in the same pass: each preference file, any dispatch or routing config, the installed skill and the template repository copy.
-   - Search for the old wording afterwards, and confirm that no copy still carries it.
+4. **Change the rule in its one home.**
+   - Each rule lives in one file. Every other file holds a one-line pointer to it, by skill and rule number or section.
+   - When a rule changes, change it in its one home.
 
    Why: a copy left behind keeps giving the old rule, and the agents that read it go on working the old way.
 5. **What users and real use teach reopens the work.**
@@ -499,9 +477,6 @@ This section is phase 10. It keeps the way of working, and this playbook, curren
 
 - When a scattered prototype has to reach a direction the owner likes, an approved journey map and one agreed rules list, read `checkpoints.md` in this skill's folder and follow its steps.
 - It holds 25 steps in three checkpoints, most with a reusable prompt. The steps named above (step 12, step 18) are its steps.
-- Add the next checkpoint only when the owner says the next stage is good.
-
-Why: writing down the steps and prompts makes a direction that took many rounds to find faster to reach next time.
 
 ## 11. Making a video
 

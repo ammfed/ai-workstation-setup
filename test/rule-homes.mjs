@@ -5,6 +5,11 @@
 // that clause), and `when` holds the answers that switch the rule on
 // when ALL_ON does not. test/preferences.test.mjs checks every row against the renderer.
 
+// The workflow playbook files that hold rules of their own. With the preference homes above, each
+// rule sentence lives in exactly one of them; every other file holds a one-line pointer to it
+// (workflow-playbook rule 9.4). test/preferences.test.mjs fails on a sentence written in two homes.
+export const PLAYBOOK_HOMES = ['SKILL.md', 'building.md', 'checkpoints.md'];
+
 // Every preference answered so that the most rules are written: each yes-or-no question yes
 // (the taste preset aside), the Simplified Technical English style, and a helper CLI.
 export const ALL_ON = { PREFS_WRITING_STYLE: 'ste', PREFS_DELEGATE_RETRIEVAL: 'agy', PREFS_TASTE_PRESET: 'no' };
@@ -24,7 +29,7 @@ export const RULE_HOMES = [
   row('Give the result, not a commentary', 'core'),
   row('Do not use em dashes.', 'core'),
   row('Anything that goes to other people', WFO, ['is written as the user, in their professional voice', 'Leave out agent and tooling labels']),
-  row('When a fact is confirmed, write the fact itself', WFO),
+  row('When a fact is confirmed, write the fact itself', WFO, ['When a fact is confirmed (a name, a date, a figure, a link), write the fact itself']),
   row('When writing in another language', WFO),
   row('Writing for other people leads with the real point', WFO, ['Lead with the real point.', 'Give each strong claim its reason or evidence', 'No corporate filler']),
   row('Before building a deck or document', WFO, ['agree its one-sentence point', 'draft it as plain paragraphs']),
@@ -190,7 +195,7 @@ export const RULE_HOMES = [
   row('Treat subscription limits as scarce', MODELS, ['Treat subscription limits as scarce', 'Pause heavy work near a limit']),
   row('Name the model of every helper', MODELS),
   row('Hand retrieval-heavy work', MODELS),
-  row('When a rule changes, change every copy of it in the same pass', MODELS),
+  row('When a rule changes, change it in its one home', MODELS),
 
   // Research
   row('Do web research in a separate, visible browser', MODELS),

@@ -1,6 +1,6 @@
 # Building anything with a screen
 
-A companion to the workflow playbook. Read it whenever the work has a screen, a page, a deck or a document layout, in any phase from research to ship. It adds the design and interface method that the playbook's general rules do not cover. The playbook's phases, gates, review pages and wording rules still apply, and the principle checks in `principles/checks.md` still run before anything reaches the owner.
+A companion to the workflow playbook, whose section 13 says when to read it. It adds the design and interface method that the playbook's general rules do not cover. The playbook's phases, gates, review pages and wording rules still apply, and the principle checks in `principles/checks.md` still run before anything reaches the owner.
 
 Each rule names the phase it belongs to. Rules the playbook or the checks already hold are not repeated here; the last section points to them.
 
@@ -157,7 +157,7 @@ Each rule names the phase it belongs to. Rules the playbook or the checks alread
 40. **Style feedback is about the thing being built.** A comment on look, light or dark mode, or style is about the product, slide or screen, never about the review page. Keep the review page's own style.
 
     Why: restyling the review page from product feedback changes the one tool the owner already likes.
-41. **Never rewrite a review page while it is open.** Changes wait for the owner's OK to reload, and every page keeps the owner's typed answers and notes across a reload.
+41. **Never rewrite a review page while it is open.** Follow the review-pages skill's rule on an open page (Opening and sending), and make every page keep the owner's typed answers and notes across a reload.
 
     Why: a reload that loses typed answers loses the owner's work.
 
