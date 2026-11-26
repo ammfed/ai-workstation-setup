@@ -273,8 +273,8 @@ export default {
     {
       key: 'PREFS_BUILD_CAP',
       type: 'text',
-      message: 'Ideas: the most builds in progress at once (a whole number; empty means no limit)',
-      default: '',
+      message: 'Ideas: the most builds in progress at once (a whole number; 0 or empty means no limit)',
+      default: '3',
     },
 
     // AI and model use

@@ -151,7 +151,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | `PREFS_RESEQUENCE` | yes | The agent reorders queued work by what blocks what without asking, then tells you the new order and why. |
 | `PREFS_ORIENT` | yes | Every project reply ends with one line that says where the work is on the map, the next step, who takes it and when. When the next step is yours, the line says exactly what you need to do and links to it. No step counters. |
 | `PREFS_FINISH_FIRST` | yes | Once something works, the agent stops instead of proposing the next improvement, suggests cutting scope at most once, and raises a risk once. |
-| `PREFS_BUILD_CAP` | empty (no limit) | A whole number caps the builds in progress. When an idea is captured while that many builds are already active, the agent asks one question: what does this displace. The displaced work is parked with the trigger that brings it back. The playbook's capture phase points to this setting. Leave it empty for no limit. |
+| `PREFS_BUILD_CAP` | 3 | The most builds in progress at once. When that many are already in progress, a new build waits in the queue and starts when one finishes. The playbook's capture phase points to this setting. `0` or empty means no limit. |
 
 ### AI and model use
 

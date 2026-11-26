@@ -194,7 +194,7 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
 
    Why: the full run costs time and usage limits that throwaway work does not repay, and a level set once stops each change from being argued again. Choosing it change by change is a guess an automatic router cannot make well.
 
-9. **Check the build cap at capture.** The cap is the build cap in the owner's working preferences. When it is set and that many builds are already active, ask one question before the new one starts: what does this displace. Park the displaced work with the trigger that brings it back. When the cap is empty, there is no limit and nothing is asked.
+9. **Check the build cap at capture.** The cap is the build cap in the owner's working preferences. When that many builds are already in progress, queue the new build, with the finishing of one of them as its blocker. It starts when one finishes, without asking again. When the cap is 0 or empty, there is no limit.
 
    Why: the owner is the only reviewer, so their capacity limits how much can be open at once, and a new build above the cap takes attention from one already running.
 

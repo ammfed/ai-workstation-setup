@@ -383,19 +383,19 @@ test('every project reply ends with where the work is, and it closes the reply t
   assert.match(await render({ PREFS_ORIENT: 'no' }), /End every reply with the next actions/);
 });
 
-test('the build cap is off until a number is set, then one rule names the number and the question', async () => {
-  assert.equal((await answer()).get('PREFS_BUILD_CAP'), '');
-  assert.doesNotMatch(await render(), /capped at/);
-  for (const bad of ['0', '-2', 'many', '2.5']) assert.doesNotMatch(await render({ PREFS_BUILD_CAP: bad }), /capped at/, bad);
-  const core = (await renderHomes({ PREFS_BUILD_CAP: '3' })).core;
-  assert.match(core, /Builds in progress are capped at 3\..*3 builds are already active, ask one question: what does this displace\. Park the displaced work with the trigger/);
+test('the build cap is 3 by default, can be switched off, and one rule says a new build waits in the queue above it', async () => {
+  assert.equal((await answer()).get('PREFS_BUILD_CAP'), '3');
+  assert.match((await renderHomes()).core, /Builds in progress are capped at 3\. When 3 builds are already in progress, a new build waits in the queue and starts when one finishes\./);
+  for (const off of ['', '0']) assert.doesNotMatch(await render({ PREFS_BUILD_CAP: off }), /capped at/, `"${off}"`);
+  for (const bad of ['-2', 'many', '2.5']) assert.doesNotMatch(await render({ PREFS_BUILD_CAP: bad }), /capped at/, bad);
+  assert.match((await renderHomes({ PREFS_BUILD_CAP: '5' })).core, /capped at 5\. When 5 builds/);
   const skill = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
-  assert.match(skill, /Check the build cap at capture[\s\S]*what does this displace[\s\S]*no limit/);
-  assert.match(fs.readFileSync(path.join(repoRoot, 'docs', 'working-preferences.md'), 'utf8'), /`PREFS_BUILD_CAP`/);
-  assert.match(fs.readFileSync(path.join(repoRoot, 'answers.example.env'), 'utf8'), /^PREFS_BUILD_CAP=$/m);
+  assert.match(skill, /Check the build cap at capture[\s\S]*queue the new build[\s\S]*no limit/);
+  assert.match(fs.readFileSync(path.join(repoRoot, 'docs', 'working-preferences.md'), 'utf8'), /`PREFS_BUILD_CAP` \| 3 \|/);
+  assert.match(fs.readFileSync(path.join(repoRoot, 'answers.example.env'), 'utf8'), /^PREFS_BUILD_CAP=3$/m);
 });
 
-test('the core file stays short: 40 rules or fewer, under 80 lines and about 2,000 tokens, plain bullets under a few headings, and a pointer to each skill', async () => {
+test('the core file stays short: 41 rules or fewer, under 80 lines and about 2,000 tokens, plain bullets under a few headings, and a pointer to each skill', async () => {
   const vault = { path: path.join(os.tmpdir(), 'vault'), scripts: true, search: true };
   const ctx = await answer({ PREFS_DELEGATE_RETRIEVAL: 'agy' });
   const core = renderPreferences((key) => ctx.get(key), { cardsPath: CARDS, hideKitPath: path.join(os.tmpdir(), 'hide-kit.js'), vault });
@@ -403,7 +403,7 @@ test('the core file stays short: 40 rules or fewer, under 80 lines and about 2,0
   const headings = lines.filter((l) => l.startsWith('## '));
   const pointers = sectionOf(core, 'Rules that load when needed').split('\n').filter((l) => l.startsWith('- '));
   const rules = lines.filter((l) => l.startsWith('- ')).length - pointers.length;
-  assert.ok(rules <= 40, `${rules} rules`);
+  assert.ok(rules <= 41, `${rules} rules`);
   assert.ok(lines.length <= 80, `${lines.length} lines`);
   assert.ok(core.length / 4 < 2000, `about ${Math.round(core.length / 4)} tokens`);
   assert.ok(headings.length <= 7, headings.join(', '));

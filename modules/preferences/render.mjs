@@ -352,7 +352,7 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
     get('PREFS_FINISH_FIRST') &&
       'Prefer finishing over expanding. Once something works, stop instead of proposing the next improvement, and suggest cutting scope at most once.',
     buildCap &&
-      `Builds in progress are capped at ${buildCap}. When a new idea is captured while ${buildCap} builds are already active, ask one question: what does this displace. Park the displaced work with the trigger that brings it back.`,
+      `Builds in progress are capped at ${buildCap}. When ${buildCap} builds are already in progress, a new build waits in the queue and starts when one finishes.`,
     get('PREFS_FINISH_FIRST') &&
       'State the case against a risky choice once, with the consequence named. If the user keeps it, go ahead and do not raise it again.',
   ]);
