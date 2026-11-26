@@ -266,8 +266,8 @@ test('a stow reminder hook lands only in the settings file it is given', () => {
   fs.writeFileSync(local, JSON.stringify({ env: { SAMPLE: '1' } }));
   process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
   try {
-    setHook(ctx, 'UserPromptSubmit', 'context-reminder.mjs', 'node "context-reminder.mjs" 200000 "Run /stow now"', local);
-    setHook(ctx, 'UserPromptSubmit', 'context-reminder.mjs', 'node "context-reminder.mjs" 300000 "Run /stow now"', local);
+    setHook(ctx, 'UserPromptSubmit', 'context-reminder.mjs', 'node "context-reminder.mjs" 200000 "Run /stow now"', { file: local });
+    setHook(ctx, 'UserPromptSubmit', 'context-reminder.mjs', 'node "context-reminder.mjs" 300000 "Run /stow now"', { file: local });
     const s = JSON.parse(fs.readFileSync(local, 'utf8'));
     assert.equal(s.env.SAMPLE, '1');
     assert.deepEqual(s.hooks.UserPromptSubmit, [{ hooks: [{ type: 'command', command: 'node "context-reminder.mjs" 300000 "Run /stow now"' }] }]);
@@ -597,6 +597,14 @@ test('the playbook sets the review stakes once per project at capture: full run 
   assert.match(rule, /an agent never lowers them on its own/);
 });
 
+test('the capture line sets once per project whether paperwork merges on green checks, and only the owner picks it', () => {
+  const text = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
+  const rule = text.slice(text.indexOf('8. **Set the review stakes once per project, at capture.**'), text.indexOf('## 3. Evidence and research'));
+  assert.match(rule, /\*\*Merges:\*\* .*Paperwork merges when its checks pass \(notes, research, decision records, documents, prototypes\), or every merge waits for the owner's word/);
+  assert.match(rule, /Product code, sign-in, real data, a public repository and anything hard to undo always wait for the owner's word/);
+  assert.match(rule, /This choice is the owner's alone.*Until the owner picks, every merge waits/s);
+});
+
 test('the playbook names every skill the installer offers, once: as a phase owner, as the supervisor or in its table of skills that own no phase', () => {
   const text = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
   const section = text.slice(text.indexOf('## Phases'), text.indexOf('## 1. Stage gates'));
@@ -607,7 +615,7 @@ test('the playbook names every skill the installer offers, once: as a phase owne
   const rest = section.slice(section.indexOf('**Skills that own no phase.**'));
   assert.ok(rest.length > 0 && section.includes('**Skills that own no phase.**'), 'the phases section has a table of skills that own no phase');
   const table = rest.slice(rest.indexOf('\n| Skill |'), rest.indexOf('\n\n', rest.indexOf('\n| Skill |')));
-  const noPhase = table.split('\n').filter((l) => l.startsWith('| ') && !l.startsWith('| Skill |') && !l.startsWith('| ---')).map((l) => cells(l)[0].replace(/ \(owner starts it\)$/, ''));
+  const noPhase = table.split('\n').filter((l) => l.startsWith('| ') && !l.startsWith('| Skill |') && !l.startsWith('| ---')).map((l) => cells(l)[0].replace(/ \((owner starts it|when installed)\)$/, ''));
   const named = (name, where) => new RegExp(`(^|[^\\w-])${name}([^\\w-]|$)`).test(where);
   const offered = skills.questions.find((q) => q.key === 'SKILLS').choices.flatMap((c) => [c.value, ...(c.helpers ?? [])]).filter((n) => n !== 'workflow-playbook');
   for (const name of offered) {
@@ -616,7 +624,21 @@ test('the playbook names every skill the installer offers, once: as a phase owne
   }
   // shot-prompts ships with the playbook, so it is installed with it and never offered on its own.
   const bundled = ['shot-prompts'];
-  for (const name of noPhase) assert.ok(offered.includes(name) || bundled.includes(name), `${name} in the playbook is a skill the installer offers`);
+  // A skill this setup does not install is named only with "(when installed)", so the playbook works without it.
+  const optional = table.split('\n').filter((l) => / \(when installed\) \|/.test(l)).map((l) => cells(l)[0].replace(/ \(when installed\)$/, ''));
+  assert.deepEqual(optional, ['create-system-design']);
+  for (const name of optional) assert.ok(!offered.includes(name), `${name} is offered, so it needs no "(when installed)"`);
+  for (const name of noPhase) assert.ok(offered.includes(name) || bundled.includes(name) || optional.includes(name), `${name} in the playbook is a skill the installer offers`);
+});
+
+test('the playbook loads Kun lightly: the route file at session start, the other files only when a check names them', () => {
+  const text = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
+  const line = text.split('\n').find((l) => l.startsWith('- Load Kun lightly.'));
+  assert.ok(line, 'the Kun paragraph has the light-load line');
+  assert.match(line, /At session start read `ENTRY\.md` only/);
+  assert.match(line, /Open the tools list \(`TOOLS\.md`\) at capture and at improve/);
+  assert.match(line, /Open the opinions file \(`OPINIONS\.md`\) only when a check needs Kun's view on a named question/);
+  assert.match(line, /Never load the voice file \(`VOICE\.md`\) for this work/);
 });
 
 test('the playbook gives every phase one /kun check, in phase order', () => {
@@ -1430,6 +1452,98 @@ test('the stow gate is off by default and a dry run registers it on PreToolUse w
   assert.ok(r.stdout.includes(`would write ${path.join(home, '.claude', 'hooks', 'stow-gate.mjs')}`), r.stdout);
   const example = fs.readFileSync(path.join(repoRoot, 'answers.example.env'), 'utf8');
   assert.match(example, /^CLAUDE_STOW_GATE=no$/m);
+});
+
+// Runs the shipped helper model gate once, as Claude Code would before an Agent call.
+// Returns the deny reason, or '' when the call is allowed.
+function helperGateReply(toolInput, { tool = 'Agent', env = {}, raw, home = tempHome(), cwd = home } = {}) {
+  const script = path.join(repoRoot, 'templates', 'claude-code', 'bin', 'helper-model-gate.mjs');
+  const input = raw ?? JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: tool, tool_input: toolInput, cwd });
+  const childEnv = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), ...env };
+  if (!('CLAUDE_CODE_SUBAGENT_MODEL_FORCE' in env)) delete childEnv.CLAUDE_CODE_SUBAGENT_MODEL_FORCE;
+  const r = spawnSync(process.execPath, [script], { input, encoding: 'utf8', env: childEnv });
+  assert.equal(r.status, 0, r.stderr);
+  if (!r.stdout) return '';
+  const out = JSON.parse(r.stdout).hookSpecificOutput;
+  assert.equal(out.hookEventName, 'PreToolUse');
+  assert.equal(out.permissionDecision, 'deny');
+  return out.permissionDecisionReason;
+}
+
+test('the helper model gate refuses a helper with no model named and allows a named one', () => {
+  const task = { description: 'Find endpoints', prompt: 'List the API endpoints', subagent_type: 'general-purpose' };
+  const reason = helperGateReply(task);
+  assert.match(reason, /^Helper model gate: name a model for this helper\./);
+  assert.match(reason, /models-and-research skill/);
+  assert.ok(!reason.includes('\n'), 'the reason is one line');
+  assert.match(helperGateReply({ ...task, model: '' }), /name a model/, 'an empty model is not a name');
+  assert.match(helperGateReply({ ...task, model: '  ' }), /name a model/);
+  assert.match(helperGateReply(task, { tool: 'Task' }), /name a model/, 'the old Task name is gated too');
+  assert.match(helperGateReply({ prompt: 'x' }), /name a model/, 'no subagent_type is still a helper');
+  assert.equal(helperGateReply({ ...task, model: 'haiku' }), '');
+  assert.equal(helperGateReply({ ...task, model: 'sonnet' }, { tool: 'Task' }), '');
+  assert.equal(helperGateReply({ ...task, subagent_type: 'fork' }), '', 'a fork runs on its parent model by design');
+  assert.equal(helperGateReply(task, { env: { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1' } }), '', 'a forced model cannot be passed, so nothing is refused');
+  assert.match(helperGateReply(task, { env: { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '' } }), /name a model/);
+  assert.equal(helperGateReply({ command: 'ls' }, { tool: 'Bash' }), '', 'other tools are never touched');
+  assert.equal(helperGateReply(null, { raw: 'not json' }), '', 'bad input allows the call');
+});
+
+const agentFile = (dir, name, model) => {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${name}-file.md`), `---\nname: ${name}\ndescription: sample\n${model === undefined ? '' : `model: ${model}\n`}---\n\nBody.\n`);
+};
+
+test('the helper model gate allows an agent type whose own definition names a model', () => {
+  const home = tempHome();
+  const userAgents = path.join(home, '.claude', 'agents');
+  agentFile(userAgents, 'reader', 'haiku');
+  agentFile(path.join(userAgents, 'nested'), 'deep-reader', '"sonnet"');
+  agentFile(userAgents, 'copycat', 'inherit');
+  agentFile(userAgents, 'plain');
+  const call = (type, opts = {}) => helperGateReply({ description: 'd', prompt: 'p', subagent_type: type }, { home, ...opts });
+  assert.equal(call('reader'), '', 'a user agent with model: haiku runs as defined');
+  assert.equal(call('deep-reader'), '', 'agent folders are scanned recursively and quotes are dropped');
+  assert.match(call('copycat'), /name a model/, 'model: inherit still needs a named model');
+  assert.match(call('plain'), /name a model/, 'a definition with no model still needs a named model');
+  assert.match(call('reader-file'), /name a model/, 'the type is the frontmatter name, not the file name');
+  assert.match(call('general-purpose'), /name a model/, 'a built-in type has no definition to read');
+  assert.match(call('some-plugin:reviewer'), /name a model/, 'a plugin type has no definition to read');
+
+  const repo = path.join(home, 'repo');
+  const sub = path.join(repo, 'pkg', 'app');
+  fs.mkdirSync(path.join(repo, '.git'), { recursive: true });
+  fs.mkdirSync(sub, { recursive: true });
+  agentFile(path.join(repo, '.claude', 'agents'), 'project-helper', 'sonnet');
+  agentFile(path.join(sub, '.claude', 'agents'), 'reader', 'inherit');
+  assert.equal(call('project-helper', { cwd: sub }), '', 'project agents are found from cwd up to the repository root');
+  assert.match(call('project-helper'), /name a model/, 'a project agent outside cwd is not used');
+  assert.match(call('reader', { cwd: sub }), /name a model/, 'the closest definition wins over the user one');
+});
+
+test('the helper model gate is on by default and installs beside existing PreToolUse hooks', () => {
+  const home = tempHome();
+  const ctx = context(home);
+  process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude');
+  try {
+    const mine = { matcher: 'Agent', hooks: [{ type: 'command', command: 'my-own-agent-check' }] };
+    writeSettings(settingsPath(ctx), { hooks: { PreToolUse: [mine] } });
+    const command = 'node "/x/.claude/hooks/helper-model-gate.mjs"';
+    setHook(ctx, 'PreToolUse', 'helper-model-gate.mjs', 'node "/old/helper-model-gate.mjs"');
+    setHook(ctx, 'PreToolUse', 'helper-model-gate.mjs', command, { matcher: 'Agent|Task' });
+    setHook(ctx, 'PreToolUse', 'helper-model-gate.mjs', command, { matcher: 'Agent|Task' });
+    const s = readJson(settingsPath(ctx));
+    assert.deepEqual(s.hooks.PreToolUse, [mine, { matcher: 'Agent|Task', hooks: [{ type: 'command', command }] }]);
+  } finally {
+    delete process.env.CLAUDE_CONFIG_DIR;
+  }
+  const answers = path.join(home, 'answers.env');
+  fs.writeFileSync(answers, '');
+  const env = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude') };
+  const r = spawnSync(process.execPath, [path.join(repoRoot, 'lib', 'installer.mjs'), '--dry-run', '--yes', '--modules', 'claude-code', '--answers', answers], { encoding: 'utf8', env });
+  assert.match(r.stdout, /PreToolUse hook helper-model-gate\.mjs/, r.stdout + r.stderr);
+  assert.ok(r.stdout.includes(`would write ${path.join(home, '.claude', 'hooks', 'helper-model-gate.mjs')}`), r.stdout);
+  assert.match(fs.readFileSync(path.join(repoRoot, 'answers.example.env'), 'utf8'), /^CLAUDE_HELPER_MODEL_GATE=yes$/m);
 });
 
 test('markitdown installs one pinned, Office-only spec through uv or pipx, with a version check', async () => {

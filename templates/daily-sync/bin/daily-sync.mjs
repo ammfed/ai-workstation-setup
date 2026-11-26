@@ -624,19 +624,25 @@ function expandEnv(env = {}) {
 
 // ---------------------------------------------------------------- review pages
 
-// Read-only. `lavish-axi` with no arguments lists the sessions as rows `file,status,url,pending,listener`.
-// A page nobody listens to (listener `none`) can hold an answer the list does not show, and only
-// `lavish-axi poll` reads it. A poll consumes the answer, so this step never polls.
+// Read-only: pages the user answered whose answer no agent has collected yet. This step never
+// polls, because a poll takes the answer away from the agent that made the page.
+// With the answered-pages check installed (`check`, written by the preferences module), it reads
+// Lavish's state file, which also covers pages ended with Send & End. Without it, `lavish-axi`
+// lists the pages that are not ended as rows `file,status,url,pending,listener`.
 function reviewPages(spec) {
-  const r = sh(spec.run || 'lavish-axi', { timeoutSec: 30 });
-  if (r.code !== 0) throw new Error(`could not list the pages: ${exitText(r)}`);
-  const unheard = [];
-  for (const line of lines(r.out)) {
-    const m = /^(.+?),(open|feedback),"?https?:[^",]*"?,\d+,none$/.exec(line);
-    if (m) unheard.push(m[1]);
+  const check = spec.check && expandHome(spec.check);
+  let answered;
+  if (check && fs.existsSync(check)) {
+    const r = sh(`"${process.execPath}" "${check}" --json --days ${Number(spec.days) || 14}`, { timeoutSec: 30 });
+    if (r.code !== 0) throw new Error(`could not read the pages: ${exitText(r)}`);
+    answered = JSON.parse(r.out).filter((p) => p.state === 'answered').map((p) => p.file);
+  } else {
+    const r = sh(spec.run || 'lavish-axi', { timeoutSec: 30 });
+    if (r.code !== 0) throw new Error(`could not list the pages: ${exitText(r)}`);
+    answered = lines(r.out).map((line) => /^(.+?),(open|feedback),"?https?:[^",]*"?,([1-9]\d*),[^,]*$/.exec(line)).filter(Boolean).map((m) => m[1]);
   }
-  if (!unheard.length) return;
-  notes.push(`review pages: ${unheard.length} open with no listener, may hold an unseen answer (collect with "timeout 15 lavish-axi poll <file>"): ${sample(unheard)}`);
+  if (!answered.length) return;
+  notes.push(`review pages: ${answered.length} answered and not collected (the agent that made each page collects its answer): ${sample(answered)}`);
 }
 
 // ---------------------------------------------------------------- commands and versions

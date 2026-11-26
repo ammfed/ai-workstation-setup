@@ -43,8 +43,8 @@ at each step and which phases each kind of work needs. The skill for each step:
 6. **Ship**: no-mistakes.
 
 wayfinder, to-spec and to-tickets start only when you type `/wayfinder`, `/to-spec` or
-`/to-tickets`. Until then the agent does that step itself with the same output (the map,
-the spec, tickets with blockers) and offers the command in one line.
+`/to-tickets`. Until then the agent opens the skill's file and follows it as the procedure,
+and the fleet's work queue is the tracker.
 
 ## Short paths
 
@@ -80,7 +80,8 @@ Pack skills this setup leaves out, and what would bring each one back:
 
 The pack's setup skill (`setup-matt-pocock-skills`) writes an issue tracker file and a
 domain file into a repository. Run it only in a repository that has a tracker in use,
-agents working in it, and code the engineering skills apply to.
+agents working in it, and code the engineering skills apply to. With a fleet tool, its work
+queue is the tracker, so skip the setup skill and any step in another skill that points to it.
 
 ## Stow, retro and backpass
 

@@ -135,7 +135,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | --- | --- | --- |
 | `PREFS_BUILD_WHOLE_GOAL` | yes | Before something new is built, the research and the user journeys are shown on one review page. Then one builder gets the whole goal in a single brief (your words, the constraints, what done means) and runs, never fed step by step; the full validation pipeline runs once the first complete pass exists. |
 | `PREFS_ROUTE` | no | Software projects go through six steps, each with its skill: Plan, Decide, Prototype, Breakdown, Build, Ship, with short paths for a small change and a bug. [The route](route.md) describes each step. |
-| `PREFS_KUN` | yes | At the start of real work (a feature, a bug, a refactor, a plan, research or an explainer), the agent runs `/kun` once and follows the route its `ENTRY.md` gives for that kind of work. Later checks in the session reuse that load. Small clear tasks, status replies and helper subagents skip it. |
+| `PREFS_KUN` | yes | At the start of real work (a feature, a bug, a refactor, a plan, research or an explainer), the agent runs `/kun` once and follows the route its `ENTRY.md` gives for that kind of work, reading only `ENTRY.md` at that start. Later checks in the session reuse that load. Small clear tasks, status replies and helper subagents skip it. |
 | `PREFS_TEST_FIRST` | no | Product code is built test-first at the seams the spec names (tdd, codebase-design). Prototypes, docs and config are not test-first. |
 | `PREFS_GLOSSARY_ADR` | no | Every project and every onboarding has a `GLOSSARY.md` from its first day, made with the domain-modeling skill, in the repo or the project's working folder. Beyond the term list it keeps how the parties relate, open questions, the source of each fact and the material's own word in another language. Questions about a term are answered from it, and a missing answer is written back the same turn. A decision that is hard to reverse, surprising and a real trade-off goes in `docs/adr/` beside it, and the records in an area are read before changing it. |
 | `PREFS_PROTOTYPE_CHECK` | no | Before you see a prototype, the agent opens it at your target screen size first, then at laptop width and, when `PREFS_PAGE_PHONE` is yes, at phone width (390 px), checks that font sizes and column positions stay the same on every tab, and fixes broken layout, unclear labels and dead ends. |
@@ -151,6 +151,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 | `PREFS_RESEQUENCE` | yes | The agent reorders queued work by what blocks what without asking, then tells you the new order and why. |
 | `PREFS_ORIENT` | yes | Every project reply ends with one line that says where the work is on the map, the next step, who takes it and when. When the next step is yours, the line says exactly what you need to do and links to it. No step counters. |
 | `PREFS_FINISH_FIRST` | yes | Once something works, the agent stops instead of proposing the next improvement, suggests cutting scope at most once, and raises a risk once. |
+| `PREFS_BUILD_CAP` | 3 | The most builds in progress at once. When that many are already in progress, a new build waits in the queue and starts when one finishes. The playbook's capture phase points to this setting. `0` or empty means no limit. |
 
 ### AI and model use
 
@@ -176,7 +177,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 
 | Key | Default | Rule |
 | --- | --- | --- |
-| `PREFS_MERGE` | `explicit` | Pull requests merge only on your explicit word. `green` lets the agent merge its own green pull requests. |
+| `PREFS_MERGE` | `explicit` | Pull requests merge only on your explicit word, apart from paperwork in a project where you chose at capture that paperwork merges once its checks pass (workflow-playbook rule 2.8). `green` lets the agent merge its own green pull requests. |
 | `PREFS_VERIFY_CAUSE` | yes | No guessed causes: a failure's cause is named only when checked, otherwise "cause unknown". |
 | `PREFS_PAUSE_WORD` | `pause` | Saying this word stops every running agent until you say resume. Empty for none. |
 | `PREFS_STOP_DIGGING` | yes | A problem is confirmed from evidence before its cause is hunted; after about two checks that find nothing, the agent reports what is known. A command or check that fails the same way twice is not run a third time unchanged: the agent tries one other way (waiting on a busy tool, fixing the request, another source), then reports the failure and carries on with the work that does not depend on it. |
@@ -236,6 +237,7 @@ Firstmate's `captain.md` holds every rule, wherever it lives here.
 | `PREFS_RESEQUENCE` | Work ordered by what blocks what finishes sooner. | status-and-away |
 | `PREFS_ORIENT` | You always know what comes next without asking. | Core |
 | `PREFS_FINISH_FIRST` | Finished work beats a growing list of improvements. | Core |
+| `PREFS_BUILD_CAP` | A fixed number of builds keeps the one reviewer from being the bottleneck. | Core |
 | `PREFS_MODEL_ROUTING`, `PREFS_QUOTA`, `PREFS_DELEGATE_*` | Quota is limited, and the wrong effort quietly lowers quality. | models-and-research (the helper rule also in worker briefs) |
 | `PREFS_RESEARCH_BROWSER` | Your own browser holds your accounts and tabs. | models-and-research |
 | `PREFS_SOURCE_QUALITY`, `PREFS_VERIFY_USER_CLAIMS`, `PREFS_LIVE_FACTS`, `PREFS_FINDINGS_TO_CHANGE` | Weak or stale sources make a strong claim look settled, and research that changes nothing was wasted. | models-and-research |
@@ -308,6 +310,11 @@ section at the end of each file (never in a skill), so edit them in your private
   comment, and it needs no Lavish runtime. The agent shares it as a private Claude artifact with
   named Commenters only after you confirm your organisation allows Anthropic hosting.
   [Review pages](review-pages.md#pages-for-invited-colleagues) gives the rules.
+- **Answered-pages check**: next to the card template the module writes
+  `~/.config/ai-workstation-setup/review-pages.mjs`. It reads Lavish's state file without
+  collecting anything and lists which review pages you answered, including pages that workers
+  and second mates made. The rules tell agents to run it before calling a page open or
+  unanswered. [Review pages](review-pages.md#the-loop) shows how to run it.
 - **No surprise tabs**: agent-clis sets `LAVISH_AXI_NO_OPEN=1` (`LAVISH_NO_OPEN`), so review
   pages never open browser tabs on their own. The agent opens a checked page once, on
   purpose, when it hands it over, and shares the link in chat.
@@ -344,3 +351,16 @@ section at the end of each file (never in a skill), so edit them in your private
   blocks on its own errors, and it stops waiting for its input after 2 seconds, so a session
   whose hook input never closes is not frozen. Answering no removes the hook. `apply-to-machine.sh`
   does not register it.
+- **Helper model gate**: a hook from the claude-code module (`CLAUDE_HELPER_MODEL_GATE`, on by
+  default) that refuses to start a helper (an `Agent` tool call) with no `model` named, and tells
+  the agent to pick one from the helper model table in the models-and-research skill. A helper
+  with no model runs on its parent's model and effort, so this keeps bulk work off the expensive
+  main model. A call is allowed when its agent type's own definition sets a model (for example
+  the `reader` agent, `model: haiku`): the gate reads project `.claude/agents` folders from the
+  session's folder up to the repository root, then `~/.claude/agents`, and matches the `name`
+  field. A definition with `model: inherit` or no model, and a built-in or plugin agent type it
+  cannot read, still needs a model on the call. A fork is exempt: it always runs on its parent's
+  model and ignores a model it is given. So is every call while `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set, because Claude Code
+  then refuses a passed model. It is a `PreToolUse` hook on `Agent|Task` in
+  `~/.claude/hooks/helper-model-gate.mjs`, added beside your own hooks; it never blocks on its
+  own errors. Answering no removes the hook.

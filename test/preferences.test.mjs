@@ -193,11 +193,20 @@ test('ownership: the vendor sentence goes into worker briefs for code agents kee
   assert.doesNotMatch(renderBriefInclude((key) => (key === 'PREFS_OWNERSHIP' ? false : ctx.get(key))), /Room to work/);
 });
 
+test('the explicit merge rule lets only paperwork merge on green checks, and only in a project where the user chose it at capture', async () => {
+  const safety = sectionOf((await renderHomes()).core, 'Safety');
+  assert.match(safety, /Merge a pull request only when the user explicitly says to merge that pull request\./);
+  assert.match(safety, /The one exception: paperwork \(notes, research, decision records, documents, prototypes\) in a project where the user chose at capture that it merges on green checks \(workflow-playbook rule 2\.8\)\./);
+  assert.match(safety, /Product code, sign-in, real data, a public repository and anything hard to undo still wait,/);
+  assert.doesNotMatch(sectionOf((await renderHomes({ PREFS_MERGE: 'green' })).core, 'Safety'), /The one exception: paperwork/);
+});
+
 test('the /kun rule is on by default, in sessions and worker briefs, and can be turned off', async () => {
   const building = sectionOf((await renderHomes()).core, 'Before you start');
   assert.match(building, /At the start of real work \(a feature, a bug, a refactor, a plan, research or an explainer\), run \/kun once/);
   assert.match(building, /Later checks in the same session reuse that load; run it again only in a new session or after compaction\./);
   assert.match(building, /Skip it for small clear tasks/);
+  assert.match(building, /At that start read ENTRY\.md only; open its other files only when a check names them\./);
   assert.doesNotMatch(await render({ PREFS_KUN: 'no' }), /run \/kun once/);
   const ctx = await answer({ PREFS_TARGETS: 'claude,firstmate' });
   assert.equal(ctx.get('PREFS_KUN'), true);
@@ -383,7 +392,19 @@ test('every project reply ends with where the work is, and it closes the reply t
   assert.match(await render({ PREFS_ORIENT: 'no' }), /End every reply with the next actions/);
 });
 
-test('the core file stays short: 40 rules or fewer, under 80 lines and about 2,000 tokens, plain bullets under a few headings, and a pointer to each skill', async () => {
+test('the build cap is 3 by default, can be switched off, and one rule says a new build waits in the queue above it', async () => {
+  assert.equal((await answer()).get('PREFS_BUILD_CAP'), '3');
+  assert.match((await renderHomes()).core, /Builds in progress are capped at 3\. A new build above that waits in the queue\./);
+  for (const off of ['', '0']) assert.doesNotMatch(await render({ PREFS_BUILD_CAP: off }), /capped at/, `"${off}"`);
+  for (const bad of ['-2', 'many', '2.5']) assert.doesNotMatch(await render({ PREFS_BUILD_CAP: bad }), /capped at/, bad);
+  assert.match((await renderHomes({ PREFS_BUILD_CAP: '5' })).core, /capped at 5\. A new build above that/);
+  const skill = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
+  assert.match(skill, /Check the build cap at capture[\s\S]*queue the new build[\s\S]*no limit/);
+  assert.match(fs.readFileSync(path.join(repoRoot, 'docs', 'working-preferences.md'), 'utf8'), /`PREFS_BUILD_CAP` \| 3 \|/);
+  assert.match(fs.readFileSync(path.join(repoRoot, 'answers.example.env'), 'utf8'), /^PREFS_BUILD_CAP=3$/m);
+});
+
+test('the core file stays short: 41 rules or fewer, under 80 lines and about 2,000 tokens, plain bullets under a few headings, and a pointer to each skill', async () => {
   const vault = { path: path.join(os.tmpdir(), 'vault'), scripts: true, search: true };
   const ctx = await answer({ PREFS_DELEGATE_RETRIEVAL: 'agy' });
   const core = renderPreferences((key) => ctx.get(key), { cardsPath: CARDS, hideKitPath: path.join(os.tmpdir(), 'hide-kit.js'), vault });
@@ -391,7 +412,7 @@ test('the core file stays short: 40 rules or fewer, under 80 lines and about 2,0
   const headings = lines.filter((l) => l.startsWith('## '));
   const pointers = sectionOf(core, 'Rules that load when needed').split('\n').filter((l) => l.startsWith('- '));
   const rules = lines.filter((l) => l.startsWith('- ')).length - pointers.length;
-  assert.ok(rules <= 40, `${rules} rules`);
+  assert.ok(rules <= 41, `${rules} rules`);
   assert.ok(lines.length <= 80, `${lines.length} lines`);
   assert.ok(core.length / 4 < 2000, `about ${Math.round(core.length / 4)} tokens`);
   assert.ok(headings.length <= 7, headings.join(', '));
@@ -418,7 +439,7 @@ test('each skill file has a name, a plain description that names its triggers, a
 
 test('every rule lives in exactly one home, as test/rule-homes.mjs lists, so the split loses none', async () => {
   const yes = Object.fromEntries(preferences.questions.filter((q) => q.type === 'confirm').map((q) => [q.key, 'yes']));
-  const opts = { cardsPath: CARDS, hideKitPath: path.join(os.tmpdir(), 'hide-kit.js'), commentCardsPath: path.join(os.tmpdir(), 'comment-cards.html'), decisionsPath: path.join(os.tmpdir(), 'decisions.md'), vault: { path: path.join(os.tmpdir(), 'vault'), scripts: true, search: true } };
+  const opts = { cardsPath: CARDS, hideKitPath: path.join(os.tmpdir(), 'hide-kit.js'), commentCardsPath: path.join(os.tmpdir(), 'comment-cards.html'), reviewCheckPath: path.join(os.tmpdir(), 'review-pages.mjs'), decisionsPath: path.join(os.tmpdir(), 'decisions.md'), vault: { path: path.join(os.tmpdir(), 'vault'), scripts: true, search: true } };
   const bulletsOf = (text) => text.split('\n').filter((l) => l.startsWith('- ')).map((l) => l.slice(2));
   const homesFor = async (given) => {
     const homes = await renderHomes({ ...yes, ...ALL_ON, ...given }, opts);
@@ -481,8 +502,8 @@ test('the route names each skill only the user can start only with the note that
   const building = sectionOf((await renderHomes({ PREFS_ROUTE: 'yes' }))['running-workers'], 'Building something new');
   const notes = {
     wayfinder: 'When the user types /wayfinder, wayfinder tracks',
-    'to-spec': 'Only the user starts to-spec, by typing /to-spec; until then write the spec yourself and offer /to-spec in one line.',
-    'to-tickets': 'Only the user starts to-tickets, by typing /to-tickets; until then cut the tickets yourself and offer /to-tickets in one line.',
+    'to-spec': 'Only the user starts to-spec, by typing /to-spec; until then open its skill file and follow it as the procedure.',
+    'to-tickets': "Only the user starts to-tickets, by typing /to-tickets; until then open its skill file and follow it as the procedure, with the fleet's work queue as the tracker.",
   };
   for (const [name, note] of Object.entries(notes)) {
     const count = (text) => (text.match(new RegExp(`(?<![\\w-])/?${name}(?![\\w-])`, 'g')) ?? []).length;
@@ -1194,6 +1215,7 @@ test('a dry run plans the card template, the hide tray script and the five prefe
     assert.ok(r.stdout.includes(`would write ${path.join(dir, 'decision-cards.html')}`), r.stdout);
     assert.ok(r.stdout.includes(`would write ${path.join(dir, 'hide-kit.js')}`), r.stdout);
     assert.ok(r.stdout.includes(`would write ${path.join(dir, 'comment-cards.html')}`), r.stdout);
+    assert.ok(r.stdout.includes(`would write ${path.join(dir, 'review-pages.mjs')}`), r.stdout);
     for (const name of Object.keys(PREFERENCE_SKILLS)) {
       assert.ok(r.stdout.includes(`would write ${path.join(home, '.claude', 'skills', name, 'SKILL.md')}`), `${name}: ${r.stdout}`);
     }
@@ -1215,6 +1237,8 @@ test('a real run writes the hide tray script next to the card template', { skip:
     assert.equal(fs.readFileSync(path.join(dir, 'comment-cards.html'), 'utf8'), fs.readFileSync(COMMENT_CARDS, 'utf8'));
     assert.match(fs.readFileSync(path.join(home, '.claude', 'skills', 'review-pages', 'SKILL.md'), 'utf8'), new RegExp(`comment-card template at \`${path.join(dir, 'comment-cards.html').replace(/[.\\]/g, '\\$&')}\``));
     assert.match(fs.readFileSync(path.join(home, '.claude', 'skills', 'review-pages', 'SKILL.md'), 'utf8'), new RegExp(`Paste \`${path.join(dir, 'hide-kit.js').replace(/[.\\]/g, '\\$&')}\``));
+    assert.equal(fs.readFileSync(path.join(dir, 'review-pages.mjs'), 'utf8'), fs.readFileSync(REVIEW_CHECK, 'utf8'));
+    assert.ok(fs.readFileSync(path.join(home, '.claude', 'skills', 'review-pages', 'SKILL.md'), 'utf8').includes(`Run \`node ${path.join(dir, 'review-pages.mjs')}\` before calling any review page open`));
   } finally {
     delete process.env.CLAUDE_CONFIG_DIR;
     fs.rmSync(home, { recursive: true, force: true });
@@ -1275,4 +1299,57 @@ test('the review-page rules send pages for colleagues through the comment-card t
   const get = (key) => ({ PREFS_DECISIONS: 'tool' })[key];
   const none = [renderPreferences(get, { cardsPath: null, commentCardsPath: null }), ...Object.values(renderPreferenceSkills(get, { cardsPath: null, commentCardsPath: null }))].join('\n');
   assert.doesNotMatch(none, /comment-card|ArtifactComments/);
+});
+
+// The answered-pages check (templates/preferences/bin/review-pages.mjs): it reads Lavish's state
+// file only, so a page another agent made shows as answered without its answer being collected.
+const REVIEW_CHECK = path.join(repoRoot, 'templates/preferences/bin/review-pages.mjs');
+
+test('the answered-pages check marks answered pages from the Lavish state file and never changes it', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'review-pages-'));
+  try {
+    const now = Date.now();
+    const at = (daysAgo) => new Date(now - daysAgo * 86400000).toISOString();
+    const user = (text, d = 0) => ({ role: 'user', kind: 'message', text, at: at(d) });
+    const agent = (text, d = 0) => ({ role: 'agent', text, at: at(d) });
+    const session = (file, fields) => ({ key: file, file, url: `http://127.0.0.1:4387/session/${path.basename(file)}`, prompts: [], chat: [], updated_at: at(0), ...fields });
+    const sessions = [
+      // Sent with Send & End and never collected: lavish-axi's own list leaves this page out.
+      session('/work/mate/a.html', { status: 'ended', ended_by: 'user', prompts: [{ prompt: 'Keep\nnote' }], chat: [user('Keep\nnote')] }),
+      // Collected by the agent that made it: lavish-axi shows it as open with 0 pending.
+      session('/work/mate/b.html', { status: 'open', chat: [agent('Pick one'), user('Option B')] }),
+      session('/work/mate/c.html', { status: 'open' }),
+      session('/work/mate/d.html', { status: 'open', chat: [user('Old'), agent('Changed, have a look')] }),
+      session('/work/mate/e.html', { status: 'ended', ended_by: 'agent', chat: [agent('Done')] }),
+      session('/work/main/f.html', { status: 'feedback', prompts: [{ prompt: 'Yes' }], updated_at: at(30) }),
+    ];
+    const state = path.join(dir, 'state.json');
+    fs.writeFileSync(state, JSON.stringify({ sessions: Object.fromEntries(sessions.map((s) => [s.key, s])) }));
+    const before = fs.readFileSync(state, 'utf8');
+    const run = (...args) => spawnSync(process.execPath, [REVIEW_CHECK, ...args], { encoding: 'utf8', env: { ...process.env, LAVISH_AXI_STATE_DIR: dir } });
+    const rows = (out) => out.trim().split('\n').slice(1).map((l) => l.split('\t').slice(0, 2).join(' '));
+
+    const all = run();
+    assert.equal(all.status, 0, all.stderr);
+    assert.match(all.stdout, /^review-pages: 2 answered and not collected, 1 answered and collected, 2 waiting on the user\n/);
+    assert.deepEqual(rows(all.stdout).sort(), ['answered /work/main/f.html', 'answered /work/mate/a.html', 'answered-collected /work/mate/b.html', 'waiting /work/mate/c.html', 'waiting /work/mate/d.html']);
+    assert.match(all.stdout, /answered\t\/work\/mate\/a\.html\t[^\n]*page ended by user[^\n]*answer: "Keep"\n/);
+    assert.match(all.stdout, /answered-collected\t\/work\/mate\/b\.html\t[^\n]*answer: "Option B"/);
+
+    // One home, recent pages, every page, and JSON.
+    assert.deepEqual(rows(run('--under', '/work/main').stdout), ['answered /work/main/f.html']);
+    assert.ok(!rows(run('--days', '7').stdout).includes('answered /work/main/f.html'));
+    assert.ok(rows(run('--all').stdout).includes('ended /work/mate/e.html'));
+    const json = JSON.parse(run('--json', '--under', '/work/mate').stdout);
+    assert.deepEqual(json.find((p) => p.file === '/work/mate/a.html'), { ...json.find((p) => p.file === '/work/mate/a.html'), state: 'answered', pending: 1, ended: true, endedBy: 'user', answer: 'Keep' });
+
+    assert.equal(fs.readFileSync(state, 'utf8'), before, 'the check never writes the state file');
+    assert.equal(run('--days', 'soon').status, 2);
+    fs.rmSync(state);
+    const empty = run();
+    assert.equal(empty.status, 0);
+    assert.match(empty.stdout, /no review pages to report/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -274,6 +274,12 @@ export default {
       when: (ctx) => ctx.get('CLAUDE_STOW_GATE'),
     },
     {
+      key: 'CLAUDE_HELPER_MODEL_GATE',
+      type: 'confirm',
+      message: 'Refuse to start a helper agent unless a model is named for it, so a helper never quietly runs on the expensive main model?',
+      default: true,
+    },
+    {
       key: 'CLAUDE_READER_AGENT',
       type: 'confirm',
       message: 'Add a read-only "reader" subagent on Haiku for reading, lookup and summaries (keeps your own reader if you have one)?',
@@ -471,6 +477,15 @@ export default {
       const script = path.join(claudeDir(ctx), 'hooks', 'stow-gate.mjs');
       await ctx.writeFile(script, ctx.template('claude-code/bin/stow-gate.mjs'), { onConflict: 'ask' });
       setHook(ctx, 'PreToolUse', 'stow-gate.mjs', `node "${script}" ${tokens}`);
+    });
+
+    // A PreToolUse hook on the Agent tool that refuses a helper with no model named; see
+    // templates/claude-code/bin/helper-model-gate.mjs. Answering no removes the hook.
+    await ctx.step('helper model gate hook', async () => {
+      if (!ctx.get('CLAUDE_HELPER_MODEL_GATE')) return removeHook(ctx, 'PreToolUse', 'helper-model-gate.mjs');
+      const script = path.join(claudeDir(ctx), 'hooks', 'helper-model-gate.mjs');
+      await ctx.writeFile(script, ctx.template('claude-code/bin/helper-model-gate.mjs'), { onConflict: 'ask' });
+      setHook(ctx, 'PreToolUse', 'helper-model-gate.mjs', `node "${script}"`, { matcher: 'Agent|Task' });
     });
 
     // Fetches the template at most once a day and prints one line when this clone is behind;

@@ -22,7 +22,7 @@ const STE_RULES = [
 const TEST_FIRST_RULE =
   'Build product code test-first at the seams the spec names (tdd, codebase-design skills when installed). Prototypes, docs and config are not test-first.';
 const KUN_RULE =
-  'At the start of real work (a feature, a bug, a refactor, a plan, research or an explainer), run /kun once (the kun skill, when installed) and follow the route its ENTRY.md gives for that kind of work. ' +
+  'At the start of real work (a feature, a bug, a refactor, a plan, research or an explainer), run /kun once (the kun skill, when installed) and follow the route its ENTRY.md gives for that kind of work. At that start read ENTRY.md only; open its other files only when a check names them. ' +
   'Later checks in the same session reuse that load; run it again only in a new session or after compaction. ' +
   'Skip it for small clear tasks (a typo, a version bump, a config tweak), status replies and helper subagents.';
 // Written to worker briefs only when a vault is configured; sessions get the same lines from the
@@ -261,7 +261,7 @@ const STATUS_CHART = [
 
 // Every rule, placed in its home: 'core' or one of PREFERENCE_SKILLS. Each home keeps its
 // sections in the order they are added; empty sections and empty homes are left out.
-function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPath } = {}) {
+function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, reviewCheckPath, decisionsPath } = {}) {
   const homes = {};
   const add = (home, title, lines) => {
     const kept = lines.filter(Boolean);
@@ -274,6 +274,7 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
 
   const status = get('PREFS_STATUS');
   const days = get('PREFS_STALE_DAYS') || '2';
+  const buildCap = /^[1-9]\d*$/.test(String(get('PREFS_BUILD_CAP') ?? '').trim()) ? String(get('PREFS_BUILD_CAP')).trim() : '';
   const decisions = get('PREFS_DECISIONS');
   const cards = decisions === 'cards' || decisions === 'both';
   const allCards = cards && cardsPath && get('PREFS_PAGES_ALL_CARDS');
@@ -333,7 +334,7 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
     grill === 'every' &&
       'Every round of questions to the user runs the grilling method: map the open decisions, ask only the ones that can be answered now, give a recommendation on each, look facts up instead of asking for them, and ask the next round only after the answers.',
     grill === 'every' &&
-      'Keep it balanced. When the intent and the request are clear enough, go ahead without asking. Ask only where a real gap would change the result, and never loop with questions for their own sake.',
+      'Keep it balanced. When the intent and the request are clear enough, go ahead without asking. Ask only where a real gap would change the result, and never ask just to ask.',
     grill === 'gaps' &&
       'Question the user hard about a plan only when it has a real gap: an underspecified instruction, an untested premise, or something irreversible whose reasoning was never tested. Never as the default way to ask.',
     (grill === 'every' || grill === 'gaps') && (decisions === 'tool' || decisions === 'both') &&
@@ -345,11 +346,13 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
     habits && '"Check X" is a question, not a go-ahead to widen the work. Ask before adding to a pass.',
     habits && 'Never hand the user a menu of what to run next. Choose, start, and report what started and what waits.',
     get('PREFS_CAPTURE_IDEAS') &&
-      'When the user shares an idea, capture it and weigh it against the current priorities: fold it into current work when it fits, otherwise park it with a clear trigger that brings it back. Say in one line where it landed, and if asked, give a real opinion on it with the reasoning.',
+      'When the user shares an idea, capture it and weigh it against the current priorities: fold it into current work when it fits, otherwise park it with a clear trigger that brings it back. Say in one line where it landed. If asked, give a real opinion with its reason.',
     get('PREFS_ORIENT') &&
       'End every project reply with one plain line that says where the work is on the map, the next step, who takes it and when. Name the step in words, never as a count such as "step 3 of 6". Say when as an event or a day, not a clock time. When the user takes the next step, say exactly what they need to do and link to it.',
     get('PREFS_FINISH_FIRST') &&
       'Prefer finishing over expanding. Once something works, stop instead of proposing the next improvement, and suggest cutting scope at most once.',
+    buildCap &&
+      `Builds in progress are capped at ${buildCap}. A new build above that waits in the queue.`,
     get('PREFS_FINISH_FIRST') &&
       'State the case against a risky choice once, with the consequence named. If the user keeps it, go ahead and do not raise it again.',
   ]);
@@ -357,11 +360,12 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
   add('core', 'Safety', [
     "Never put secrets, tokens, passwords or personal data in files, commits, pull requests, pages or logs. Secrets come from environment variables or the tool's own sign-in.",
     merge === 'explicit' &&
-      'Merge a pull request only when the user explicitly says to merge that pull request. Approving the work is not a merge instruction.',
+      'Merge a pull request only when the user explicitly says to merge that pull request. Approving the work is not a merge instruction. ' +
+        'The one exception: paperwork (notes, research, decision records, documents, prototypes) in a project where the user chose at capture that it merges on green checks (workflow-playbook rule 2.8). Product code, sign-in, real data, a public repository and anything hard to undo still wait, and each such merge is told in one line.',
     merge === 'green' &&
       'You may merge your own pull requests once every check passes. Still ask before anything destructive, irreversible or security-sensitive.',
     get('PREFS_VERIFY_CAUSE') &&
-      'Do not name a cause for a failure unless you checked it against evidence. Otherwise report the failure and say the cause is unknown.',
+      'Do not name a cause for a failure unless you checked it against evidence. Otherwise report it and say the cause is unknown.',
     get('PREFS_STOP_DIGGING') &&
       'A request to investigate is not proof that something is broken. Confirm the problem from real evidence first, or ask what the user saw. If about two checks turn up nothing, stop and report what is known.',
     get('PREFS_STOP_DIGGING') &&
@@ -433,7 +437,7 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
       'When the user asks for status "on every reply" for a topic or list, end every later reply with a one-line version of its progress (its chart row when the status has a chart: bar, figure, current step), until the user says stop or puts that topic on hold. A hold stops the line.',
     get('PREFS_DAILY_CHECK') && 'Once a day, at the top of the first status, run a nothing-forgotten check.',
     get('PREFS_DAILY_CHECK') &&
-      `Show anything real it finds: review-page answers not yet collected, anything waiting on the user for more than ${days} days without being brought back, and standing rules with no evidence that they ran.`,
+      `Show anything real it finds: review-page answers not yet collected${reviewCheckPath ? ` (\`node ${reviewCheckPath} --days 14\` lists them)` : ''}, anything waiting on the user for more than ${days} days without being brought back, and standing rules with no evidence that they ran.`,
     get('PREFS_DAILY_CHECK') && 'Verify each item before calling it dropped.',
   ]);
   add('status-and-away', 'Live state and the queue', [
@@ -511,13 +515,17 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
   add('review-pages', 'Answers', [
     cards && get('PREFS_CHECK_ANSWERS_FIRST') &&
       'Before calling a review page open, answered or unanswered, check whether the user already answered it. Never assume it is unanswered.',
+    cards && get('PREFS_CHECK_ANSWERS_FIRST') && reviewCheckPath &&
+      `Run \`node ${reviewCheckPath}\` before calling any review page open, answered or unanswered, including pages that other agents made (workers, second mates). It reads Lavish's own state without collecting anything and marks each page answered (answer waiting to be collected), answered-collected or waiting. Narrow it with \`--under <folder>\` or \`--days <n>\`.`,
     cards && get('PREFS_CHECK_ANSWERS_FIRST') &&
-      '`lavish-axi` lists every session with its status, pending answers and listener. The pending answers it shows are only complete for a page with a listener. For a page whose listener is `none`, run `timeout 15 lavish-axi poll <file>` before calling it open or unanswered.',
+      "Do not trust `lavish-axi` alone for this: its list leaves out ended pages, so an answer sent with Send & End is not shown, and a page whose answer was collected looks the same as one nobody touched.",
+    cards && get('PREFS_CHECK_ANSWERS_FIRST') &&
+      'Poll only the pages you made. A poll takes the answer away from the agent that made the page, so for a page another agent made, read the check and pass the answer to that agent.',
     cards && get('PREFS_CHECK_ANSWERS_FIRST') &&
       'A poll consumes the answer it returns, so act on it or pass it on in the same turn. Answers stay queued until collected, so a long poll for a page you are waiting on can stay running.',
     cards && get('PREFS_CHECK_ANSWERS_FIRST') && 'Never reopen a page the user ended unless they ask.',
     cards && get('PREFS_CHECK_ANSWERS_FIRST') &&
-      'A page that says it ended, or a link that loads, does not mean answers were lost: read the session status and pending answers, and collect them with `lavish-axi poll <file>` first.',
+      'A page that says it ended, or a link that loads, does not mean answers were lost: read the session status and pending answers first. Collect an answer to a page you made with `lavish-axi poll <file>`.',
   ]);
   add('review-pages', 'Pages for invited colleagues', [
     cards && commentCardsPath &&
@@ -564,8 +572,8 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
       'Take a software project (building or changing an app, a tool or a codebase) through six steps, each with its skill when installed: ' +
         '1 Plan: write the idea down, judge fit and timing, and say so in one line. If the effort takes more than one session, start a map at once without being asked and show it. When the user types /wayfinder, wayfinder tracks the map as tickets. ' +
         '2 Decide: settle the open decisions in rounds of questions and record the answers (grilling, with domain-modeling for the glossary and decision records). ' +
-        '3 Prototype: write a spec that names the test seams, with a throwaway prototype when the look or flow needs judging, and get it approved before building (prototype). Only the user starts to-spec, by typing /to-spec; until then write the spec yourself and offer /to-spec in one line. ' +
-        '4 Breakdown: cut a spec too big for one change into tickets with their blocking edges. Only the user starts to-tickets, by typing /to-tickets; until then cut the tickets yourself and offer /to-tickets in one line. ' +
+        '3 Prototype: write a spec that names the test seams, with a throwaway prototype when the look or flow needs judging, and get it approved before building (prototype). Only the user starts to-spec, by typing /to-spec; until then open its skill file and follow it as the procedure. ' +
+        '4 Breakdown: cut a spec too big for one change into tickets with their blocking edges. Only the user starts to-tickets, by typing /to-tickets; until then open its skill file and follow it as the procedure, with the fleet\'s work queue as the tracker. ' +
         '5 Build: one builder builds the whole spec test-first (tdd, codebase-design). ' +
         '6 Ship: validate, open a pull request, and merge once approved (no-mistakes).',
     get('PREFS_ROUTE') &&

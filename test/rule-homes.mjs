@@ -85,7 +85,9 @@ export const RULE_HOMES = [
   row('Before describing a question as still open', 'core', undefined, { PREFS_DECISIONS: 'tool' }),
   row('Before calling a review page open', PAGES, [
     'Before calling a review page open',
-    'run `timeout 15 lavish-axi poll <file>` before calling it open',
+    'review-pages.mjs` before calling any review page open',
+    'its list leaves out ended pages',
+    'Poll only the pages you made.',
     'A poll consumes the answer it returns',
     'Never reopen a page the user ended',
     'does not mean answers were lost',
@@ -168,6 +170,7 @@ export const RULE_HOMES = [
   row('End every project reply with one plain line', 'core'),
   row('Prefer finishing over expanding', 'core'),
   row('State the case against a risky choice once', 'core'),
+  row('Builds in progress are capped at', 'core'),
 
   // AI and model use
   row('Pick the model and effort for each task when it starts', MODELS),
