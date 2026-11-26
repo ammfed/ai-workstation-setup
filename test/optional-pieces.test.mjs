@@ -597,6 +597,14 @@ test('the playbook sets the review stakes once per project at capture: full run 
   assert.match(rule, /an agent never lowers them on its own/);
 });
 
+test('the capture line sets once per project whether paperwork merges on green checks, and only the owner picks it', () => {
+  const text = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
+  const rule = text.slice(text.indexOf('8. **Set the review stakes once per project, at capture.**'), text.indexOf('## 3. Evidence and research'));
+  assert.match(rule, /\*\*Merges:\*\* .*Paperwork merges when its checks pass \(notes, research, decision records, documents, prototypes\), or every merge waits for the owner's word/);
+  assert.match(rule, /Product code, sign-in, real data, a public repository and anything hard to undo always wait for the owner's word/);
+  assert.match(rule, /This choice is the owner's alone.*Until the owner picks, every merge waits/s);
+});
+
 test('the playbook names every skill the installer offers, once: as a phase owner, as the supervisor or in its table of skills that own no phase', () => {
   const text = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
   const section = text.slice(text.indexOf('## Phases'), text.indexOf('## 1. Stage gates'));

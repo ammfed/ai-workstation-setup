@@ -7,7 +7,7 @@ description: A working method for long projects run by one owner with AI agents.
 
 These rules come from a long project that was restarted several times. Every restart had the same cause: work moved ahead of the owner's decisions, or research went into the product without a purpose. Each rule below fixes one of those failures, or a later one: the owner was left with a blank page and no clear next step.
 
-- The owner is the person who decides: the goal, taste, dates, money, people, and every merge. Agents and workers own the rest: how the work is built, the shape of the code they build and keep building, and the routine steps on the way (rule 7.4).
+- The owner is the person who decides: the goal, taste, dates, money, people, and every merge, apart from the paperwork merges the owner allowed for one project (rule 2.8). Agents and workers own the rest: how the work is built, the shape of the code they build and keep building, and the routine steps on the way (rule 7.4).
 - Each rule has a "Why" line. Keep the reason in mind when a case does not fit the words.
 
 ## Phases, from an idea to shipped and improved
@@ -184,17 +184,21 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
    - Ask the owner only the few questions that set the direction, each with a recommendation.
    - Inside a stage, when a choice can be undone, go ahead on the recommendation and fold in the answer when it comes.
    - When it cannot, hold only that branch and keep the rest moving.
-   - Decisions only the owner can make (dates, money, people, taste, anything hard to undo) and every merge never start on their own.
+   - Decisions only the owner can make (dates, money, people, taste, anything hard to undo) and every merge the owner has not allowed for the project (rule 2.8) never start on their own.
 
    Why: waiting on every answer stalls the work, and acting on an answer that cannot be undone takes a decision away from the owner.
-8. **Set the review stakes once per project, at capture.** The capture line says which of two review levels the project gets, and every later change in that project uses it without asking again:
+8. **Set the review stakes once per project, at capture.** The capture line says which of two review levels the project gets and how its merges land, and every later change in that project uses them without asking again:
    - **Full review run:** a public repository, or anything stakeholders or other people will see. Every change goes through the full validation and review run before it reaches them.
    - **Self-review:** private notes and throwaway prototypes. The worker checks its own change against the brief and the checks of section 4, and skips the full run.
    - When unsure, pick the full run.
    - When a project moves up (a prototype becomes the product, private notes are shared), say so in the status and switch it to the full run before the next change ships. A prototype that becomes the product gets the full run in phase 7.
    - The owner may change the stakes at any time; an agent never lowers them on its own.
+   - **Merges:** the capture line also says one of two things. Paperwork merges when its checks pass (notes, research, decision records, documents, prototypes), or every merge waits for the owner's word.
+     Product code, sign-in, real data, a public repository and anything hard to undo always wait for the owner's word.
+     Each automatic merge is told to the owner in one line.
+     This choice is the owner's alone, made as a card the first time the project's capture line is shown. Until the owner picks, every merge waits for the owner's word.
 
-   Why: the full run costs time and usage limits that throwaway work does not repay, and a level set once stops each change from being argued again. Choosing it change by change is a guess an automatic router cannot make well.
+   Why: the full run costs time and usage limits that throwaway work does not repay, and a level set once stops each change from being argued again. Choosing it change by change is a guess an automatic router cannot make well. A merge permission given again for every small paperwork change costs the owner a word each time and protects nothing.
 
 ## 3. Evidence and research
 

@@ -176,7 +176,7 @@ The first three apply with `PREFS_DECISIONS=both` or `cards`; the starter page a
 
 | Key | Default | Rule |
 | --- | --- | --- |
-| `PREFS_MERGE` | `explicit` | Pull requests merge only on your explicit word. `green` lets the agent merge its own green pull requests. |
+| `PREFS_MERGE` | `explicit` | Pull requests merge only on your explicit word, apart from paperwork in a project where you chose at capture that paperwork merges once its checks pass (workflow-playbook rule 2.8). `green` lets the agent merge its own green pull requests. |
 | `PREFS_VERIFY_CAUSE` | yes | No guessed causes: a failure's cause is named only when checked, otherwise "cause unknown". |
 | `PREFS_PAUSE_WORD` | `pause` | Saying this word stops every running agent until you say resume. Empty for none. |
 | `PREFS_STOP_DIGGING` | yes | A problem is confirmed from evidence before its cause is hunted; after about two checks that find nothing, the agent reports what is known. A command or check that fails the same way twice is not run a third time unchanged: the agent tries one other way (waiting on a busy tool, fixing the request, another source), then reports the failure and carries on with the work that does not depend on it. |

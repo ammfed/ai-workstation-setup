@@ -357,7 +357,8 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, decisionsPa
   add('core', 'Safety', [
     "Never put secrets, tokens, passwords or personal data in files, commits, pull requests, pages or logs. Secrets come from environment variables or the tool's own sign-in.",
     merge === 'explicit' &&
-      'Merge a pull request only when the user explicitly says to merge that pull request. Approving the work is not a merge instruction.',
+      'Merge a pull request only when the user explicitly says to merge that pull request. Approving the work is not a merge instruction. ' +
+        'The one exception: paperwork (notes, research, decision records, documents, prototypes) in a project where the user chose at capture that it merges on green checks (workflow-playbook rule 2.8). Product code, sign-in, real data, a public repository and anything hard to undo still wait, and each such merge is told in one line.',
     merge === 'green' &&
       'You may merge your own pull requests once every check passes. Still ask before anything destructive, irreversible or security-sensitive.',
     get('PREFS_VERIFY_CAUSE') &&
