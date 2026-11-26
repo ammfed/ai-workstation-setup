@@ -206,6 +206,7 @@ test('the /kun rule is on by default, in sessions and worker briefs, and can be 
   assert.match(building, /At the start of real work \(a feature, a bug, a refactor, a plan, research or an explainer\), run \/kun once/);
   assert.match(building, /Later checks in the same session reuse that load; run it again only in a new session or after compaction\./);
   assert.match(building, /Skip it for small clear tasks/);
+  assert.match(building, /At that start read ENTRY\.md only; open its other files only when a check names them\./);
   assert.doesNotMatch(await render({ PREFS_KUN: 'no' }), /run \/kun once/);
   const ctx = await answer({ PREFS_TARGETS: 'claude,firstmate' });
   assert.equal(ctx.get('PREFS_KUN'), true);

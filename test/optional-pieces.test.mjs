@@ -627,6 +627,16 @@ test('the playbook names every skill the installer offers, once: as a phase owne
   for (const name of noPhase) assert.ok(offered.includes(name) || bundled.includes(name), `${name} in the playbook is a skill the installer offers`);
 });
 
+test('the playbook loads Kun lightly: the route file at session start, the other files only when a check names them', () => {
+  const text = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
+  const line = text.split('\n').find((l) => l.startsWith('- Load Kun lightly.'));
+  assert.ok(line, 'the Kun paragraph has the light-load line');
+  assert.match(line, /At session start read `ENTRY\.md` only/);
+  assert.match(line, /Open the tools list \(`TOOLS\.md`\) at capture and at improve/);
+  assert.match(line, /Open the opinions file \(`OPINIONS\.md`\) only when a check needs Kun's view on a named question/);
+  assert.match(line, /Never load the voice file \(`VOICE\.md`\) for this work/);
+});
+
 test('the playbook gives every phase one /kun check, in phase order', () => {
   const text = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
   const section = text.slice(text.indexOf('## Phases'), text.indexOf('## 1. Stage gates'));

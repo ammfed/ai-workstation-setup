@@ -22,7 +22,7 @@ const STE_RULES = [
 const TEST_FIRST_RULE =
   'Build product code test-first at the seams the spec names (tdd, codebase-design skills when installed). Prototypes, docs and config are not test-first.';
 const KUN_RULE =
-  'At the start of real work (a feature, a bug, a refactor, a plan, research or an explainer), run /kun once (the kun skill, when installed) and follow the route its ENTRY.md gives for that kind of work. ' +
+  'At the start of real work (a feature, a bug, a refactor, a plan, research or an explainer), run /kun once (the kun skill, when installed) and follow the route its ENTRY.md gives for that kind of work. At that start read ENTRY.md only; open its other files only when a check names them. ' +
   'Later checks in the same session reuse that load; run it again only in a new session or after compaction. ' +
   'Skip it for small clear tasks (a typo, a version bump, a config tweak), status replies and helper subagents.';
 // Written to worker briefs only when a vault is configured; sessions get the same lines from the

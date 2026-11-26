@@ -40,6 +40,7 @@ Why: a phase that waits for a skill no agent can start stalls with nobody doing 
 **Kun supervises every phase.** The kun skill (`/kun`) supervises the whole life cycle.
 
 - Run `/kun` once per session, at the start of real work. Name the kind of work and follow the route Kun's `ENTRY.md` gives for it (research, planning, reproduction, guardrails, implementation, validation).
+- Load Kun lightly. At session start read `ENTRY.md` only, even where the kun skill says to read all of its files. Open the tools list (`TOOLS.md`) at capture and at improve, where the check table names it. Open the opinions file (`OPINIONS.md`) only when a check needs Kun's view on a named question. Never load the voice file (`VOICE.md`) for this work.
 - At the start of each phase and again before its gate, check the phase's row below against that load.
 - Run `/kun` again only in a new session or after compaction.
 - A check is a pass the agent runs, not a page and not a question to the owner.
@@ -53,7 +54,7 @@ Why: a phase that waits for a skill no agent can start stalls with nobody doing 
 - A fleet tool's own mechanics (how it starts, tracks and lands workers) stay its own. The owner's rules reach its workers through the briefs.
 - If `/kun` cannot load, say so in the status and go on with this playbook alone.
 
-Why: one supervisor that checks every phase against the same method catches drift early, and a supervisor that stops the work when it is offline costs more than it saves.
+Why: one supervisor that checks every phase against the same method catches drift early, and a supervisor that stops the work when it is offline costs more than it saves. Kun's four files together are tens of thousands of tokens, while the route sits in `ENTRY.md` alone.
 
 | Phase | The /kun check |
 | --- | --- |
