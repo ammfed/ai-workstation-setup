@@ -20,7 +20,7 @@ Every piece of work runs through some of these ten phases, in this order. Each p
 | 2. Requirements | Decide | Turn a vague goal into requirements the owner agrees with | A skill, in rounds with the owner | grilling, with domain-modeling in a repo | Requirements, and a glossary in a repo | The owner agrees to the last round (gate) |
 | 3. Does it already exist | Decide | Find products, tools or people that already do this | A research worker, beside phase 2 | research | A report and one card: build, reuse or stop | The card is answered in the next requirements round |
 | 4. Vision | Decide | Fix the destination and the test for which later ideas to accept | A skill, with the owner | vision | A vision file, once per project | The owner approves it. This closes the early phases gate |
-| 5. Prototype | Prototype | Settle the look and the flow, then write the spec | Workers build, the owner judges | prototype with section 10, then to-spec (owner starts it) | The approved prototype link and the spec | The owner approves the checkpoint page (gate) |
+| 5. Prototype | Prototype | Settle the look and the flow, three to five real users try it, then write the spec | Workers build, the owner judges | prototype with section 10, then to-spec (owner starts it) | The approved prototype link and the spec | The owner approves the checkpoint page (gate) |
 | 6. Breakdown | Breakdown | Cut the spec into items, one worker each | The coordinator | to-tickets (owner starts it) | Items with blockers, including the fixed items (rule 1.6) | Each item starts as soon as its blockers clear |
 | 7. Build | Build | Build each item, test-first where it pays | Workers | tdd, codebase-design | A pull request with a labelled preview | Green checks file the review item |
 | 8. Review | Ship | The owner's review of what will ship, after the checks | The owner | a review page (section 4) | Keep, Change or Discard answers | The owner says to merge |
@@ -28,6 +28,10 @@ Every piece of work runs through some of these ten phases, in this order. Each p
 | 10. Improve | After Ship | Turn what slowed the work into rules and checks | The coordinator prepares, the owner approves | this playbook, section 9 | Proposal cards | A standing item, approved once |
 
 Phases 2 to 4 are the early phases. They run before anything is built, and the early phases gate blocks phase 5 (rule 1.1).
+
+**Real users try the prototype before the spec.** In phase 5, once the look and the flow are settled, three to five real users try the prototype, guided by a short questionnaire. The checkpoint page shows what the users did beside the owner's Keep, Change or Discard. The agents' role walk (checkpoints.md, step 1) stays as a check before the users see it, and it is a check, not a user test. When no real user can be reached, the owner says so, and the page records it as an open risk.
+
+Why: a spec written before real users try the prototype builds the owner's guess of their journey, and an agent walking the prototype as a user cannot show what a real user does.
 
 **Skills only the owner can start.** wayfinder, to-spec, to-tickets, to-questionnaire and teach start only when the owner types `/wayfinder`, `/to-spec`, `/to-tickets`, `/to-questionnaire` or `/teach`. An agent cannot start them. Until the owner types the command, the coordinator does that phase itself with the same output (the map, the spec, items with blockers, the questionnaire) and offers the command in one line.
 
@@ -69,7 +73,7 @@ Why: one supervisor that checks every phase against the same method catches drif
 | Skill | Use it when |
 | --- | --- |
 | find-docs | A plan or code names a library, framework or service: fetch its current docs first, never work from memory (phases 3, 5 and 7) |
-| to-questionnaire (owner starts it) | A gap only someone else can fill, such as a colleague, a vendor or real users: turn it into a short questionnaire for that person, including the real-user try-out (rule 1.6) |
+| to-questionnaire (owner starts it) | A gap only someone else can fill, such as a colleague, a vendor or real users: turn it into a short questionnaire for that person, including the real-user try-out (phase 5) |
 | teach (owner starts it) | The owner asks to learn a new skill or concept |
 | composio-cli | The work needs an outside app the owner has connected, such as email, a calendar or a tracker |
 | motion-designer | A video plan or review that needs motion decisions: timing, easing, staging and follow-through, used beside the video tool (video.md, stage 1, rule 4) |
@@ -129,7 +133,6 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
 6. **Some items are always on the list.** Breakdown (phase 6) adds these items whenever they apply, before any other build item:
    - **System design first.** The first build item settles the contracts, the data model and the hard-to-reverse decisions. Front end and back end work start only after it.
    - **An evaluation item for any AI part.** Test how well the AI part does its job on real examples before any pilot.
-   - **A real-user try-out.** When real people will use the result, they try the prototype, guided by a short questionnaire. The results come back as a card.
    - **A handover item.** When real people will run or use it, an item names who runs it and how they learn it, blocked by the last build item.
    - Finished items stay on the list, marked done, never deleted.
    - Dates belong to the owner. Agents never set or move a date; they only flag one that has passed.
@@ -316,7 +319,7 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
    | Review point | Phase | What the page shows | The owner answers |
    | --- | --- | --- | --- |
    | Round page | 2, 3 | What is settled on top, then one question per card, each with a recommendation (rule 5.3) | Yes, a pick, or a note |
-   | Checkpoint page | 5 | Options the owner can flip between, with real screenshots | Keep, Change or Discard. Comments are not agreement (rule 1.2) |
+   | Checkpoint page | 5 | Options the owner can flip between, with real screenshots, and what the real users did when they tried it, or the open risk when none could be reached | Keep, Change or Discard. Comments are not agreement (rule 1.2) |
    | Preview page | 8 | The build running. The first line says which code it runs and which data: sample data, or real data the owner has already allowed | Keep, Change or Discard, then the word to merge |
    | Outcomes page | The end of each phase | What was found, what was decided and by whom, what it means, what is still open | Next, or a note |
 
