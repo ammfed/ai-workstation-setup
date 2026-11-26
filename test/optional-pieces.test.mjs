@@ -1434,10 +1434,10 @@ test('the stow gate is off by default and a dry run registers it on PreToolUse w
 
 // Runs the shipped helper model gate once, as Claude Code would before an Agent call.
 // Returns the deny reason, or '' when the call is allowed.
-function helperGateReply(toolInput, { tool = 'Agent', env = {}, raw } = {}) {
+function helperGateReply(toolInput, { tool = 'Agent', env = {}, raw, home = tempHome(), cwd = home } = {}) {
   const script = path.join(repoRoot, 'templates', 'claude-code', 'bin', 'helper-model-gate.mjs');
-  const input = raw ?? JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: tool, tool_input: toolInput });
-  const childEnv = { ...process.env, ...env };
+  const input = raw ?? JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: tool, tool_input: toolInput, cwd });
+  const childEnv = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), ...env };
   if (!('CLAUDE_CODE_SUBAGENT_MODEL_FORCE' in env)) delete childEnv.CLAUDE_CODE_SUBAGENT_MODEL_FORCE;
   const r = spawnSync(process.execPath, [script], { input, encoding: 'utf8', env: childEnv });
   assert.equal(r.status, 0, r.stderr);
@@ -1465,6 +1465,38 @@ test('the helper model gate refuses a helper with no model named and allows a na
   assert.match(helperGateReply(task, { env: { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '' } }), /name a model/);
   assert.equal(helperGateReply({ command: 'ls' }, { tool: 'Bash' }), '', 'other tools are never touched');
   assert.equal(helperGateReply(null, { raw: 'not json' }), '', 'bad input allows the call');
+});
+
+const agentFile = (dir, name, model) => {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${name}-file.md`), `---\nname: ${name}\ndescription: sample\n${model === undefined ? '' : `model: ${model}\n`}---\n\nBody.\n`);
+};
+
+test('the helper model gate allows an agent type whose own definition names a model', () => {
+  const home = tempHome();
+  const userAgents = path.join(home, '.claude', 'agents');
+  agentFile(userAgents, 'reader', 'haiku');
+  agentFile(path.join(userAgents, 'nested'), 'deep-reader', '"sonnet"');
+  agentFile(userAgents, 'copycat', 'inherit');
+  agentFile(userAgents, 'plain');
+  const call = (type, opts = {}) => helperGateReply({ description: 'd', prompt: 'p', subagent_type: type }, { home, ...opts });
+  assert.equal(call('reader'), '', 'a user agent with model: haiku runs as defined');
+  assert.equal(call('deep-reader'), '', 'agent folders are scanned recursively and quotes are dropped');
+  assert.match(call('copycat'), /name a model/, 'model: inherit still needs a named model');
+  assert.match(call('plain'), /name a model/, 'a definition with no model still needs a named model');
+  assert.match(call('reader-file'), /name a model/, 'the type is the frontmatter name, not the file name');
+  assert.match(call('general-purpose'), /name a model/, 'a built-in type has no definition to read');
+  assert.match(call('some-plugin:reviewer'), /name a model/, 'a plugin type has no definition to read');
+
+  const repo = path.join(home, 'repo');
+  const sub = path.join(repo, 'pkg', 'app');
+  fs.mkdirSync(path.join(repo, '.git'), { recursive: true });
+  fs.mkdirSync(sub, { recursive: true });
+  agentFile(path.join(repo, '.claude', 'agents'), 'project-helper', 'sonnet');
+  agentFile(path.join(sub, '.claude', 'agents'), 'reader', 'inherit');
+  assert.equal(call('project-helper', { cwd: sub }), '', 'project agents are found from cwd up to the repository root');
+  assert.match(call('project-helper'), /name a model/, 'a project agent outside cwd is not used');
+  assert.match(call('reader', { cwd: sub }), /name a model/, 'the closest definition wins over the user one');
 });
 
 test('the helper model gate is on by default and installs beside existing PreToolUse hooks', () => {
