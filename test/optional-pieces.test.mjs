@@ -615,7 +615,7 @@ test('the playbook names every skill the installer offers, once: as a phase owne
   const rest = section.slice(section.indexOf('**Skills that own no phase.**'));
   assert.ok(rest.length > 0 && section.includes('**Skills that own no phase.**'), 'the phases section has a table of skills that own no phase');
   const table = rest.slice(rest.indexOf('\n| Skill |'), rest.indexOf('\n\n', rest.indexOf('\n| Skill |')));
-  const noPhase = table.split('\n').filter((l) => l.startsWith('| ') && !l.startsWith('| Skill |') && !l.startsWith('| ---')).map((l) => cells(l)[0].replace(/ \(owner starts it\)$/, ''));
+  const noPhase = table.split('\n').filter((l) => l.startsWith('| ') && !l.startsWith('| Skill |') && !l.startsWith('| ---')).map((l) => cells(l)[0].replace(/ \((owner starts it|when installed)\)$/, ''));
   const named = (name, where) => new RegExp(`(^|[^\\w-])${name}([^\\w-]|$)`).test(where);
   const offered = skills.questions.find((q) => q.key === 'SKILLS').choices.flatMap((c) => [c.value, ...(c.helpers ?? [])]).filter((n) => n !== 'workflow-playbook');
   for (const name of offered) {
@@ -624,7 +624,11 @@ test('the playbook names every skill the installer offers, once: as a phase owne
   }
   // shot-prompts ships with the playbook, so it is installed with it and never offered on its own.
   const bundled = ['shot-prompts'];
-  for (const name of noPhase) assert.ok(offered.includes(name) || bundled.includes(name), `${name} in the playbook is a skill the installer offers`);
+  // A skill this setup does not install is named only with "(when installed)", so the playbook works without it.
+  const optional = table.split('\n').filter((l) => / \(when installed\) \|/.test(l)).map((l) => cells(l)[0].replace(/ \(when installed\)$/, ''));
+  assert.deepEqual(optional, ['create-system-design']);
+  for (const name of optional) assert.ok(!offered.includes(name), `${name} is offered, so it needs no "(when installed)"`);
+  for (const name of noPhase) assert.ok(offered.includes(name) || bundled.includes(name) || optional.includes(name), `${name} in the playbook is a skill the installer offers`);
 });
 
 test('the playbook loads Kun lightly: the route file at session start, the other files only when a check names them', () => {

@@ -73,6 +73,7 @@ Why: one supervisor that checks every phase against the same method catches drif
 
 | Skill | Use it when |
 | --- | --- |
+| create-system-design (when installed) | The system design item (rule 1.6) needs a one-page system design: what it does, who uses it, the architecture, data in and out, and security |
 | find-docs | A plan or code names a library, framework or service: fetch its current docs first, never work from memory (phases 3, 5 and 7) |
 | to-questionnaire (owner starts it) | A gap only someone else can fill, such as a colleague, a vendor or real users: turn it into a short questionnaire for that person, including the real-user try-out (phase 5) |
 | teach (owner starts it) | The owner asks to learn a new skill or concept |
@@ -133,6 +134,8 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
    Why: work built early may show a stage that has since changed. The showcase shows the effort behind the result. Calendar time includes nights and waiting periods, so it makes the work look longer than it was.
 6. **Some items are always on the list.** Breakdown (phase 6) adds these items whenever they apply, before any other build item:
    - **System design first.** The first build item settles the contracts, the data model and the hard-to-reverse decisions. Front end and back end work start only after it.
+     It starts with two or three known ways to build this kind of system in one table, always including the plainest one, from official documentation and published architecture write-ups, starting from the owner's own system design reference when they keep one.
+     Pick part by part, cheapest to run first, and record each hard-to-reverse pick as a decision record.
    - **An evaluation item for any AI part.** Test how well the AI part does its job on real examples before any pilot.
    - **A handover item.** When real people will run or use it, an item names who runs it and how they learn it, and the day the measure from the last requirements round (rule 3.2) is checked again, blocked by the last build item.
    - Finished items stay on the list, marked done, never deleted.
