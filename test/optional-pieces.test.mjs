@@ -597,6 +597,14 @@ test('the playbook sets the review stakes once per project at capture: full run 
   assert.match(rule, /an agent never lowers them on its own/);
 });
 
+test('the capture line sets once per project whether paperwork merges on green checks, and only the owner picks it', () => {
+  const text = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
+  const rule = text.slice(text.indexOf('8. **Set the review stakes once per project, at capture.**'), text.indexOf('## 3. Evidence and research'));
+  assert.match(rule, /\*\*Merges:\*\* .*Paperwork merges when its checks pass \(notes, research, decision records, documents, prototypes\), or every merge waits for the owner's word/);
+  assert.match(rule, /Product code, sign-in, real data, a public repository and anything hard to undo always wait for the owner's word/);
+  assert.match(rule, /This choice is the owner's alone.*Until the owner picks, every merge waits/s);
+});
+
 test('the playbook names every skill the installer offers, once: as a phase owner, as the supervisor or in its table of skills that own no phase', () => {
   const text = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
   const section = text.slice(text.indexOf('## Phases'), text.indexOf('## 1. Stage gates'));
@@ -607,7 +615,7 @@ test('the playbook names every skill the installer offers, once: as a phase owne
   const rest = section.slice(section.indexOf('**Skills that own no phase.**'));
   assert.ok(rest.length > 0 && section.includes('**Skills that own no phase.**'), 'the phases section has a table of skills that own no phase');
   const table = rest.slice(rest.indexOf('\n| Skill |'), rest.indexOf('\n\n', rest.indexOf('\n| Skill |')));
-  const noPhase = table.split('\n').filter((l) => l.startsWith('| ') && !l.startsWith('| Skill |') && !l.startsWith('| ---')).map((l) => cells(l)[0].replace(/ \(owner starts it\)$/, ''));
+  const noPhase = table.split('\n').filter((l) => l.startsWith('| ') && !l.startsWith('| Skill |') && !l.startsWith('| ---')).map((l) => cells(l)[0].replace(/ \((owner starts it|when installed)\)$/, ''));
   const named = (name, where) => new RegExp(`(^|[^\\w-])${name}([^\\w-]|$)`).test(where);
   const offered = skills.questions.find((q) => q.key === 'SKILLS').choices.flatMap((c) => [c.value, ...(c.helpers ?? [])]).filter((n) => n !== 'workflow-playbook');
   for (const name of offered) {
@@ -616,7 +624,21 @@ test('the playbook names every skill the installer offers, once: as a phase owne
   }
   // shot-prompts ships with the playbook, so it is installed with it and never offered on its own.
   const bundled = ['shot-prompts'];
-  for (const name of noPhase) assert.ok(offered.includes(name) || bundled.includes(name), `${name} in the playbook is a skill the installer offers`);
+  // A skill this setup does not install is named only with "(when installed)", so the playbook works without it.
+  const optional = table.split('\n').filter((l) => / \(when installed\) \|/.test(l)).map((l) => cells(l)[0].replace(/ \(when installed\)$/, ''));
+  assert.deepEqual(optional, ['create-system-design']);
+  for (const name of optional) assert.ok(!offered.includes(name), `${name} is offered, so it needs no "(when installed)"`);
+  for (const name of noPhase) assert.ok(offered.includes(name) || bundled.includes(name) || optional.includes(name), `${name} in the playbook is a skill the installer offers`);
+});
+
+test('the playbook loads Kun lightly: the route file at session start, the other files only when a check names them', () => {
+  const text = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
+  const line = text.split('\n').find((l) => l.startsWith('- Load Kun lightly.'));
+  assert.ok(line, 'the Kun paragraph has the light-load line');
+  assert.match(line, /At session start read `ENTRY\.md` only/);
+  assert.match(line, /Open the tools list \(`TOOLS\.md`\) at capture and at improve/);
+  assert.match(line, /Open the opinions file \(`OPINIONS\.md`\) only when a check needs Kun's view on a named question/);
+  assert.match(line, /Never load the voice file \(`VOICE\.md`\) for this work/);
 });
 
 test('the playbook gives every phase one /kun check, in phase order', () => {

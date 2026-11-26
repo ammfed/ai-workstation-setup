@@ -7,7 +7,7 @@ Why: writing down the steps and prompts makes a direction that took many rounds 
 
 ### Checkpoint 1: a liked wireframe direction
 
-1. **Walk it as the people who use it.** Give each role a name and walk through its full journey in the prototype. Click only what that person would click. Sort the findings by type (gap, distraction, inconsistency), count them, and save a screenshot of each.
+1. **Walk it as the people who use it.** Give each role a name and walk through its full journey in the prototype. Click only what that person would click. Sort the findings by type (gap, distraction, inconsistency), count them, and save a screenshot of each. This walk is a check before real users try the prototype, not a user test.
    Prompt: "Walk through the prototype as each role, from start to end. List every finding by type, with counts and screenshots. Change nothing yet."
 2. **Find the causes.** Group the findings into a few root causes and rank them by harm. Common causes include links that lose track of who the person is, tasks that stop at the decision with no after state, journeys with no first or last step, to-do lists that disagree, one thing in two places, and items that open the wrong record. Confirm each symptom in the prototype before naming its cause.
    Prompt: "From the walk, identify the root causes and rank them by harm. Confirm each symptom before naming its cause."

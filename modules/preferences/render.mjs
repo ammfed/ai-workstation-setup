@@ -22,7 +22,7 @@ const STE_RULES = [
 const TEST_FIRST_RULE =
   'Build product code test-first at the seams the spec names (tdd, codebase-design skills when installed). Prototypes, docs and config are not test-first.';
 const KUN_RULE =
-  'At the start of real work (a feature, a bug, a refactor, a plan, research or an explainer), run /kun once (the kun skill, when installed) and follow the route its ENTRY.md gives for that kind of work. ' +
+  'At the start of real work (a feature, a bug, a refactor, a plan, research or an explainer), run /kun once (the kun skill, when installed) and follow the route its ENTRY.md gives for that kind of work. At that start read ENTRY.md only; open its other files only when a check names them. ' +
   'Later checks in the same session reuse that load; run it again only in a new session or after compaction. ' +
   'Skip it for small clear tasks (a typo, a version bump, a config tweak), status replies and helper subagents.';
 // Written to worker briefs only when a vault is configured; sessions get the same lines from the
@@ -357,7 +357,8 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, reviewCheck
   add('core', 'Safety', [
     "Never put secrets, tokens, passwords or personal data in files, commits, pull requests, pages or logs. Secrets come from environment variables or the tool's own sign-in.",
     merge === 'explicit' &&
-      'Merge a pull request only when the user explicitly says to merge that pull request. Approving the work is not a merge instruction.',
+      'Merge a pull request only when the user explicitly says to merge that pull request. Approving the work is not a merge instruction. ' +
+        'The one exception: paperwork (notes, research, decision records, documents, prototypes) in a project where the user chose at capture that it merges on green checks (workflow-playbook rule 2.8). Product code, sign-in, real data, a public repository and anything hard to undo still wait, and each such merge is told in one line.',
     merge === 'green' &&
       'You may merge your own pull requests once every check passes. Still ask before anything destructive, irreversible or security-sensitive.',
     get('PREFS_VERIFY_CAUSE') &&
@@ -568,8 +569,8 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, reviewCheck
       'Take a software project (building or changing an app, a tool or a codebase) through six steps, each with its skill when installed: ' +
         '1 Plan: write the idea down, judge fit and timing, and say so in one line. If the effort takes more than one session, start a map at once without being asked and show it. When the user types /wayfinder, wayfinder tracks the map as tickets. ' +
         '2 Decide: settle the open decisions in rounds of questions and record the answers (grilling, with domain-modeling for the glossary and decision records). ' +
-        '3 Prototype: write a spec that names the test seams, with a throwaway prototype when the look or flow needs judging, and get it approved before building (prototype). Only the user starts to-spec, by typing /to-spec; until then write the spec yourself and offer /to-spec in one line. ' +
-        '4 Breakdown: cut a spec too big for one change into tickets with their blocking edges. Only the user starts to-tickets, by typing /to-tickets; until then cut the tickets yourself and offer /to-tickets in one line. ' +
+        '3 Prototype: write a spec that names the test seams, with a throwaway prototype when the look or flow needs judging, and get it approved before building (prototype). Only the user starts to-spec, by typing /to-spec; until then open its skill file and follow it as the procedure. ' +
+        '4 Breakdown: cut a spec too big for one change into tickets with their blocking edges. Only the user starts to-tickets, by typing /to-tickets; until then open its skill file and follow it as the procedure, with the fleet\'s work queue as the tracker. ' +
         '5 Build: one builder builds the whole spec test-first (tdd, codebase-design). ' +
         '6 Ship: validate, open a pull request, and merge once approved (no-mistakes).',
     get('PREFS_ROUTE') &&

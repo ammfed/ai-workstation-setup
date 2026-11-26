@@ -7,7 +7,7 @@ description: A working method for long projects run by one owner with AI agents.
 
 These rules come from a long project that was restarted several times. Every restart had the same cause: work moved ahead of the owner's decisions, or research went into the product without a purpose. Each rule below fixes one of those failures, or a later one: the owner was left with a blank page and no clear next step.
 
-- The owner is the person who decides: the goal, taste, dates, money, people, and every merge. Agents and workers own the rest: how the work is built, the shape of the code they build and keep building, and the routine steps on the way (rule 7.4).
+- The owner is the person who decides: the goal, taste, dates, money, people, and every merge, apart from the paperwork merges the owner allowed for one project (rule 2.8). Agents and workers own the rest: how the work is built, the shape of the code they build and keep building, and the routine steps on the way (rule 7.4).
 - Each rule has a "Why" line. Keep the reason in mind when a case does not fit the words.
 
 ## Phases, from an idea to shipped and improved
@@ -20,7 +20,7 @@ Every piece of work runs through some of these ten phases, in this order. Each p
 | 2. Requirements | Decide | Turn a vague goal into requirements the owner agrees with | A skill, in rounds with the owner | grilling, with domain-modeling in a repo | Requirements, and a glossary in a repo | The owner agrees to the last round (gate) |
 | 3. Does it already exist | Decide | Find products, tools or people that already do this | A research worker, beside phase 2 | research | A report and one card: build, reuse or stop | The card is answered in the next requirements round |
 | 4. Vision | Decide | Fix the destination and the test for which later ideas to accept | A skill, with the owner | vision | A vision file, once per project | The owner approves it. This closes the early phases gate |
-| 5. Prototype | Prototype | Settle the look and the flow, then write the spec | Workers build, the owner judges | prototype with section 10, then to-spec (owner starts it) | The approved prototype link and the spec | The owner approves the checkpoint page (gate) |
+| 5. Prototype | Prototype | Settle the look and the flow, three to five real users try it, then write the spec | Workers build, the owner judges | prototype with section 10, then to-spec (owner starts it) | The approved prototype link and the spec | The owner approves the checkpoint page (gate) |
 | 6. Breakdown | Breakdown | Cut the spec into items, one worker each | The coordinator | to-tickets (owner starts it) | Items with blockers, including the fixed items (rule 1.6) | Each item starts as soon as its blockers clear |
 | 7. Build | Build | Build each item, test-first where it pays | Workers | tdd, codebase-design | A pull request with a labelled preview | Green checks file the review item |
 | 8. Review | Ship | The owner's review of what will ship, after the checks | The owner | a review page (section 4) | Keep, Change or Discard answers | The owner says to merge |
@@ -29,13 +29,18 @@ Every piece of work runs through some of these ten phases, in this order. Each p
 
 Phases 2 to 4 are the early phases. They run before anything is built, and the early phases gate blocks phase 5 (rule 1.1).
 
-**Skills only the owner can start.** wayfinder, to-spec, to-tickets, to-questionnaire and teach start only when the owner types `/wayfinder`, `/to-spec`, `/to-tickets`, `/to-questionnaire` or `/teach`. An agent cannot start them. Until the owner types the command, the coordinator does that phase itself with the same output (the map, the spec, items with blockers, the questionnaire) and offers the command in one line.
+**Real users try the prototype before the spec.** In phase 5, once the look and the flow are settled, three to five real users try the prototype, guided by a short questionnaire. The checkpoint page shows what the users did beside the owner's Keep, Change or Discard. The agents' role walk (checkpoints.md, step 1) stays as a check before the users see it, and it is a check, not a user test. When no real user can be reached, the owner says so, and the page records it as an open risk.
+
+Why: a spec written before real users try the prototype builds the owner's guess of their journey, and an agent walking the prototype as a user cannot show what a real user does.
+
+**Skills only the owner can start.** wayfinder, to-spec, to-tickets, to-questionnaire and teach start only when the owner types `/wayfinder`, `/to-spec`, `/to-tickets`, `/to-questionnaire` or `/teach`. Until then the coordinator opens the skill's file and follows it as the procedure, and the fleet's work queue is the tracker.
 
 Why: a phase that waits for a skill no agent can start stalls with nobody doing it.
 
 **Kun supervises every phase.** The kun skill (`/kun`) supervises the whole life cycle.
 
 - Run `/kun` once per session, at the start of real work. Name the kind of work and follow the route Kun's `ENTRY.md` gives for it (research, planning, reproduction, guardrails, implementation, validation).
+- Load Kun lightly. At session start read `ENTRY.md` only, even where the kun skill says to read all of its files. Open the tools list (`TOOLS.md`) at capture and at improve, where the check table names it. Open the opinions file (`OPINIONS.md`) only when a check needs Kun's view on a named question. Never load the voice file (`VOICE.md`) for this work.
 - At the start of each phase and again before its gate, check the phase's row below against that load.
 - Run `/kun` again only in a new session or after compaction.
 - A check is a pass the agent runs, not a page and not a question to the owner.
@@ -49,7 +54,7 @@ Why: a phase that waits for a skill no agent can start stalls with nobody doing 
 - A fleet tool's own mechanics (how it starts, tracks and lands workers) stay its own. The owner's rules reach its workers through the briefs.
 - If `/kun` cannot load, say so in the status and go on with this playbook alone.
 
-Why: one supervisor that checks every phase against the same method catches drift early, and a supervisor that stops the work when it is offline costs more than it saves.
+Why: one supervisor that checks every phase against the same method catches drift early, and a supervisor that stops the work when it is offline costs more than it saves. Kun's four files together are tens of thousands of tokens, while the route sits in `ENTRY.md` alone.
 
 | Phase | The /kun check |
 | --- | --- |
@@ -68,8 +73,9 @@ Why: one supervisor that checks every phase against the same method catches drif
 
 | Skill | Use it when |
 | --- | --- |
+| create-system-design (when installed) | The system design item (rule 1.6) needs a one-page system design: what it does, who uses it, the architecture, data in and out, and security |
 | find-docs | A plan or code names a library, framework or service: fetch its current docs first, never work from memory (phases 3, 5 and 7) |
-| to-questionnaire (owner starts it) | A gap only someone else can fill, such as a colleague, a vendor or real users: turn it into a short questionnaire for that person, including the real-user try-out (rule 1.6) |
+| to-questionnaire (owner starts it) | A gap only someone else can fill, such as a colleague, a vendor or real users: turn it into a short questionnaire for that person, including the real-user try-out (phase 5) |
 | teach (owner starts it) | The owner asks to learn a new skill or concept |
 | composio-cli | The work needs an outside app the owner has connected, such as email, a calendar or a tracker |
 | motion-designer | A video plan or review that needs motion decisions: timing, easing, staging and follow-through, used beside the video tool (video.md, stage 1, rule 4) |
@@ -128,15 +134,22 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
    Why: work built early may show a stage that has since changed. The showcase shows the effort behind the result. Calendar time includes nights and waiting periods, so it makes the work look longer than it was.
 6. **Some items are always on the list.** Breakdown (phase 6) adds these items whenever they apply, before any other build item:
    - **System design first.** The first build item settles the contracts, the data model and the hard-to-reverse decisions. Front end and back end work start only after it.
-   - **Outside approvals as held items.** Any approval someone else owns (security, IT, a client) becomes its own held item at once, so the wait shows early.
-   - **An evaluation item for any AI part.** Test how well the AI part does its job on real examples before any pilot.
-   - **A real-user try-out.** When real people will use the result, they try the prototype, guided by a short questionnaire. The results come back as a card.
-   - **A handover item.** When real people will run or use it, an item names who runs it and how they learn it, blocked by the last build item.
+     It starts with two or three known ways to build this kind of system in one table, always including the plainest one, from official documentation and published architecture write-ups, starting from the owner's own system design reference when they keep one.
+     Pick part by part, cheapest to run first, and record each hard-to-reverse pick as a decision record.
+   - **An evaluation item for any AI part.** The AI part gets an eval set in the repo (`evals/`): at least 20 real examples with expected results, checked by code where possible.
+     An AI judge is used only after it agrees with the owner's own labels on those examples.
+     The set reruns on every prompt or model change and before any pilot, and every failure the owner finds becomes a new example.
+   - **A handover item.** When real people will run or use it, an item blocked by the last build item hands it over so someone else can run it. It names five things:
+     - the named owner on the client side;
+     - a one-page how-to for the three most common tasks;
+     - how a user reports a problem, and where the report lands (rule 9.5);
+     - who restarts it, and where its record is, when the owner is away;
+     - the day of the first use check, when the measure from the last requirements round (rule 3.2) is checked again.
    - Finished items stay on the list, marked done, never deleted.
    - Dates belong to the owner. Agents never set or move a date; they only flag one that has passed.
    - Plans show the order of the work, never days, hours or estimates. This is about plans only. The journey showcase in rule 1.5 records hours already spent, so it stays.
 
-   Why: each of these is easy to forget until it blocks a launch, and a date moved by an agent hides the slip the owner needs to see.
+   Why: each of these is easy to forget until it blocks a launch, and a date moved by an agent hides the slip the owner needs to see. A client has no agents, so a handover that only the agents could run leaves the client with software nobody can keep going.
 
 ## 2. Lead the way
 
@@ -182,17 +195,21 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
    - Ask the owner only the few questions that set the direction, each with a recommendation.
    - Inside a stage, when a choice can be undone, go ahead on the recommendation and fold in the answer when it comes.
    - When it cannot, hold only that branch and keep the rest moving.
-   - Decisions only the owner can make (dates, money, people, taste, anything hard to undo) and every merge never start on their own.
+   - Decisions only the owner can make (dates, money, people, taste, anything hard to undo) and every merge the owner has not allowed for the project (rule 2.8) never start on their own.
 
    Why: waiting on every answer stalls the work, and acting on an answer that cannot be undone takes a decision away from the owner.
-8. **Set the review stakes once per project, at capture.** The capture line says which of two review levels the project gets, and every later change in that project uses it without asking again:
+8. **Set the review stakes once per project, at capture.** The capture line says which of two review levels the project gets and how its merges land, and every later change in that project uses them without asking again:
    - **Full review run:** a public repository, or anything stakeholders or other people will see. Every change goes through the full validation and review run before it reaches them.
    - **Self-review:** private notes and throwaway prototypes. The worker checks its own change against the brief and the checks of section 4, and skips the full run.
    - When unsure, pick the full run.
    - When a project moves up (a prototype becomes the product, private notes are shared), say so in the status and switch it to the full run before the next change ships. A prototype that becomes the product gets the full run in phase 7.
    - The owner may change the stakes at any time; an agent never lowers them on its own.
+   - **Merges:** the capture line also says one of two things. Paperwork merges when its checks pass (notes, research, decision records, documents, prototypes), or every merge waits for the owner's word.
+     Product code, sign-in, real data, a public repository and anything hard to undo always wait for the owner's word.
+     Each automatic merge is told to the owner in one line.
+     This choice is the owner's alone, made as a card the first time the project's capture line is shown. Until the owner picks, every merge waits for the owner's word.
 
-   Why: the full run costs time and usage limits that throwaway work does not repay, and a level set once stops each change from being argued again. Choosing it change by change is a guess an automatic router cannot make well.
+   Why: the full run costs time and usage limits that throwaway work does not repay, and a level set once stops each change from being argued again. Choosing it change by change is a guess an automatic router cannot make well. A merge permission given again for every small paperwork change costs the owner a word each time and protects nothing.
 
 ## 3. Evidence and research
 
@@ -206,8 +223,10 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
    - When work starts from a vague goal, project or problem, build the requirements first by grilling the stakeholders or clients. Do this before any research or building.
    - Beside the first round, a research worker checks whether it already exists: products and tools that already do it, and people in the organisation who already own or run something like it.
    - The answer goes into the next round as one card: build, reuse or stop.
+   - The first requirements round always carries three fixed cards: where will it run, who must approve it (security, IT, the data owner), and which real data may be used and in what form. Each approval becomes a held item that day.
+   - The last requirements round always carries one fixed card: how will the client know it worked. The answer is one measure, its value today, and who reports it.
 
-   Why: research and building that start before the requirements are clear serve a guess, not a need, and the cheapest project is the one someone already runs.
+   Why: research and building that start before the requirements are clear serve a guess, not a need, and the cheapest project is the one someone already runs. An approval found only at breakdown holds up a finished build, while one asked for at the first round waits beside the work. Without a measure and its value today, nobody can show the client that the work helped.
 3. **All research counts.**
    - Fold in every study, trial and lesson, and name the source of each item.
    - List what was not used and why.
@@ -316,7 +335,7 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
    | Review point | Phase | What the page shows | The owner answers |
    | --- | --- | --- | --- |
    | Round page | 2, 3 | What is settled on top, then one question per card, each with a recommendation (rule 5.3) | Yes, a pick, or a note |
-   | Checkpoint page | 5 | Options the owner can flip between, with real screenshots | Keep, Change or Discard. Comments are not agreement (rule 1.2) |
+   | Checkpoint page | 5 | Options the owner can flip between, with real screenshots, and what the real users did when they tried it, or the open risk when none could be reached | Keep, Change or Discard. Comments are not agreement (rule 1.2) |
    | Preview page | 8 | The build running. The first line says which code it runs and which data: sample data, or real data the owner has already allowed | Keep, Change or Discard, then the word to merge |
    | Outcomes page | The end of each phase | What was found, what was decided and by whom, what it means, what is still open | Next, or a note |
 
@@ -437,7 +456,7 @@ Why: a request to keep the code with a few tweaks was once read as a light edit,
 
 ## 9. Improve
 
-This section is phase 10. It keeps the way of working, and this playbook, current.
+This section is phase 10. It keeps the way of working, and this playbook, current, and it sends what real use teaches back into the work (rule 9.5).
 
 1. **Record each method lesson when it happens.**
    - When the owner corrects the way of working, write the lesson down in one line with what triggered it.
@@ -465,6 +484,11 @@ This section is phase 10. It keeps the way of working, and this playbook, curren
    - Search for the old wording afterwards, and confirm that no copy still carries it.
 
    Why: a copy left behind keeps giving the old rule, and the agents that read it go on working the old way.
+5. **What users and real use teach reopens the work.**
+   - Sort every try-out result, every failure found in real use and every report from a real user into one of three: fix it inside the requirement, reopen the requirement in the next requirements round, or run one narrow study (rule 3.6).
+   - The sorting goes on the outcomes page the phase already has. It adds no new page.
+
+   Why: a lesson from real use that changes only the method leaves the product built on a requirement the users have already shown wrong.
 
 ## 10. From a weak prototype to an aligned rules list
 

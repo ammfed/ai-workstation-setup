@@ -193,11 +193,20 @@ test('ownership: the vendor sentence goes into worker briefs for code agents kee
   assert.doesNotMatch(renderBriefInclude((key) => (key === 'PREFS_OWNERSHIP' ? false : ctx.get(key))), /Room to work/);
 });
 
+test('the explicit merge rule lets only paperwork merge on green checks, and only in a project where the user chose it at capture', async () => {
+  const safety = sectionOf((await renderHomes()).core, 'Safety');
+  assert.match(safety, /Merge a pull request only when the user explicitly says to merge that pull request\./);
+  assert.match(safety, /The one exception: paperwork \(notes, research, decision records, documents, prototypes\) in a project where the user chose at capture that it merges on green checks \(workflow-playbook rule 2\.8\)\./);
+  assert.match(safety, /Product code, sign-in, real data, a public repository and anything hard to undo still wait,/);
+  assert.doesNotMatch(sectionOf((await renderHomes({ PREFS_MERGE: 'green' })).core, 'Safety'), /The one exception: paperwork/);
+});
+
 test('the /kun rule is on by default, in sessions and worker briefs, and can be turned off', async () => {
   const building = sectionOf((await renderHomes()).core, 'Before you start');
   assert.match(building, /At the start of real work \(a feature, a bug, a refactor, a plan, research or an explainer\), run \/kun once/);
   assert.match(building, /Later checks in the same session reuse that load; run it again only in a new session or after compaction\./);
   assert.match(building, /Skip it for small clear tasks/);
+  assert.match(building, /At that start read ENTRY\.md only; open its other files only when a check names them\./);
   assert.doesNotMatch(await render({ PREFS_KUN: 'no' }), /run \/kun once/);
   const ctx = await answer({ PREFS_TARGETS: 'claude,firstmate' });
   assert.equal(ctx.get('PREFS_KUN'), true);
@@ -481,8 +490,8 @@ test('the route names each skill only the user can start only with the note that
   const building = sectionOf((await renderHomes({ PREFS_ROUTE: 'yes' }))['running-workers'], 'Building something new');
   const notes = {
     wayfinder: 'When the user types /wayfinder, wayfinder tracks',
-    'to-spec': 'Only the user starts to-spec, by typing /to-spec; until then write the spec yourself and offer /to-spec in one line.',
-    'to-tickets': 'Only the user starts to-tickets, by typing /to-tickets; until then cut the tickets yourself and offer /to-tickets in one line.',
+    'to-spec': 'Only the user starts to-spec, by typing /to-spec; until then open its skill file and follow it as the procedure.',
+    'to-tickets': "Only the user starts to-tickets, by typing /to-tickets; until then open its skill file and follow it as the procedure, with the fleet's work queue as the tracker.",
   };
   for (const [name, note] of Object.entries(notes)) {
     const count = (text) => (text.match(new RegExp(`(?<![\\w-])/?${name}(?![\\w-])`, 'g')) ?? []).length;
