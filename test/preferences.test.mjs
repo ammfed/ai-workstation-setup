@@ -394,10 +394,10 @@ test('every project reply ends with where the work is, and it closes the reply t
 
 test('the build cap is 3 by default, can be switched off, and one rule says a new build waits in the queue above it', async () => {
   assert.equal((await answer()).get('PREFS_BUILD_CAP'), '3');
-  assert.match((await renderHomes()).core, /Builds in progress are capped at 3\. When 3 builds are already in progress, a new build waits in the queue and starts when one finishes\./);
+  assert.match((await renderHomes()).core, /Builds in progress are capped at 3\. A new build above that waits in the queue\./);
   for (const off of ['', '0']) assert.doesNotMatch(await render({ PREFS_BUILD_CAP: off }), /capped at/, `"${off}"`);
   for (const bad of ['-2', 'many', '2.5']) assert.doesNotMatch(await render({ PREFS_BUILD_CAP: bad }), /capped at/, bad);
-  assert.match((await renderHomes({ PREFS_BUILD_CAP: '5' })).core, /capped at 5\. When 5 builds/);
+  assert.match((await renderHomes({ PREFS_BUILD_CAP: '5' })).core, /capped at 5\. A new build above that/);
   const skill = fs.readFileSync(path.join(repoRoot, 'templates', 'skills', 'workflow-playbook', 'SKILL.md'), 'utf8');
   assert.match(skill, /Check the build cap at capture[\s\S]*queue the new build[\s\S]*no limit/);
   assert.match(fs.readFileSync(path.join(repoRoot, 'docs', 'working-preferences.md'), 'utf8'), /`PREFS_BUILD_CAP` \| 3 \|/);

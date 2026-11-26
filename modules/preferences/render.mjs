@@ -334,7 +334,7 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, reviewCheck
     grill === 'every' &&
       'Every round of questions to the user runs the grilling method: map the open decisions, ask only the ones that can be answered now, give a recommendation on each, look facts up instead of asking for them, and ask the next round only after the answers.',
     grill === 'every' &&
-      'Keep it balanced. When the intent and the request are clear enough, go ahead without asking. Ask only where a real gap would change the result, and never loop with questions for their own sake.',
+      'Keep it balanced. When the intent and the request are clear enough, go ahead without asking. Ask only where a real gap would change the result, and never ask just to ask.',
     grill === 'gaps' &&
       'Question the user hard about a plan only when it has a real gap: an underspecified instruction, an untested premise, or something irreversible whose reasoning was never tested. Never as the default way to ask.',
     (grill === 'every' || grill === 'gaps') && (decisions === 'tool' || decisions === 'both') &&
@@ -346,13 +346,13 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, reviewCheck
     habits && '"Check X" is a question, not a go-ahead to widen the work. Ask before adding to a pass.',
     habits && 'Never hand the user a menu of what to run next. Choose, start, and report what started and what waits.',
     get('PREFS_CAPTURE_IDEAS') &&
-      'When the user shares an idea, capture it and weigh it against the current priorities: fold it into current work when it fits, otherwise park it with a clear trigger that brings it back. Say in one line where it landed, and if asked, give a real opinion on it with the reasoning.',
+      'When the user shares an idea, capture it and weigh it against the current priorities: fold it into current work when it fits, otherwise park it with a clear trigger that brings it back. Say in one line where it landed. If asked, give a real opinion with its reason.',
     get('PREFS_ORIENT') &&
       'End every project reply with one plain line that says where the work is on the map, the next step, who takes it and when. Name the step in words, never as a count such as "step 3 of 6". Say when as an event or a day, not a clock time. When the user takes the next step, say exactly what they need to do and link to it.',
     get('PREFS_FINISH_FIRST') &&
       'Prefer finishing over expanding. Once something works, stop instead of proposing the next improvement, and suggest cutting scope at most once.',
     buildCap &&
-      `Builds in progress are capped at ${buildCap}. When ${buildCap} builds are already in progress, a new build waits in the queue and starts when one finishes.`,
+      `Builds in progress are capped at ${buildCap}. A new build above that waits in the queue.`,
     get('PREFS_FINISH_FIRST') &&
       'State the case against a risky choice once, with the consequence named. If the user keeps it, go ahead and do not raise it again.',
   ]);
@@ -365,7 +365,7 @@ function placeRules(get, { cardsPath, hideKitPath, commentCardsPath, reviewCheck
     merge === 'green' &&
       'You may merge your own pull requests once every check passes. Still ask before anything destructive, irreversible or security-sensitive.',
     get('PREFS_VERIFY_CAUSE') &&
-      'Do not name a cause for a failure unless you checked it against evidence. Otherwise report the failure and say the cause is unknown.',
+      'Do not name a cause for a failure unless you checked it against evidence. Otherwise report it and say the cause is unknown.',
     get('PREFS_STOP_DIGGING') &&
       'A request to investigate is not proof that something is broken. Confirm the problem from real evidence first, or ask what the user saw. If about two checks turn up nothing, stop and report what is known.',
     get('PREFS_STOP_DIGGING') &&
