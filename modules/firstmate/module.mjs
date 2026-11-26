@@ -446,7 +446,7 @@ export default {
       const tokens = stowTokens(ctx.get('FIRSTMATE_STOW_REMINDER_TOKENS'));
       const script = path.join(claudeDir(ctx), 'hooks', 'context-reminder.mjs');
       const command = `node "${script}" ${tokens} "${STOW_TEXT}"`;
-      const register = (where) => setHook(ctx, 'UserPromptSubmit', 'context-reminder.mjs', command, path.join(where, '.claude', 'settings.local.json'));
+      const register = (where) => setHook(ctx, 'UserPromptSubmit', 'context-reminder.mjs', command, { file: path.join(where, '.claude', 'settings.local.json') });
       await ctx.step('stow reminder', async () => {
         await ctx.writeFile(script, ctx.template('claude-code/bin/context-reminder.mjs'), { onConflict: 'ask' });
         register(dir);

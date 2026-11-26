@@ -468,6 +468,7 @@ This section is phase 10. It keeps the way of working, and this playbook, curren
    - The improve item is a dated, repeating item that the owner approves once. It also follows every merge (phase 9).
    - Each run looks back over the finished work or the last day: what slowed the work, which of the owner's corrections came more than once, which check failed most, which command failed the same way in more than one session, and which installed tool, plugin or MCP server no session used.
    - Sort each finding: a mechanical slip becomes a script check, and a judgement call becomes a reviewer check or a written rule.
+   - When the same correction is recorded a second time, the fix must be a hook, a template or a script. A written rule is allowed only when no mechanism can do it.
    - A fact about how a repository works (the command that runs its tests there, a step that must come first) becomes one line in its AGENTS.md once more than one session has hit it. The line comes out when a later session shows it wrong.
    - An unused tool, plugin or MCP server becomes a proposal to remove it. Remove it between sessions, never in the middle of one.
    - Each proposal goes to the owner as a card. Approved ones land as a check, a rule or a playbook change.
